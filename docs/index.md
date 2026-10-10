@@ -28,6 +28,7 @@ Auto-generated at export time; do not edit by hand.
 - `docs/figures/framework.png`
 
 ## guides/benchmark
+- `docs/guides/benchmark/connect-remote-agent.guide.md`
 - `docs/guides/benchmark/run-experiment.guide.md`
 - `docs/guides/benchmark/run-human-browser-console.guide.md`
 

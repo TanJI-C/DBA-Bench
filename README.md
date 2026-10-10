@@ -99,6 +99,10 @@ LLM agents return JSON actions:
 OpenAI-compatible and Anthropic-native function calling are both supported; credentials live in
 `config/llm_config.json` (start from `config/llm_config.example.json`).
 
+Agents that run outside the benchmark process, in any language, use the `remote` agent mode:
+the benchmark relays the same tool plane over HTTP and still executes every action itself —
+see the [remote agent guide](docs/guides/benchmark/connect-remote-agent.guide.md).
+
 ## Built-in baselines
 
 Reproductions of published database-troubleshooting agents, sharing the same tool plane and scenarios:

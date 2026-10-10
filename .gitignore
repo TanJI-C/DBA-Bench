@@ -70,3 +70,6 @@ temp/
 *.tmp
 
 .tiup
+
+# TPC-DS query text is fetched by the user (TPC copyright) and never committed
+data/workloads/tpcds/queries/
