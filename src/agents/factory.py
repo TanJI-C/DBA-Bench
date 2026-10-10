@@ -104,6 +104,11 @@ def build_benchmark_agent(
         from src.agents.browser_human import BrowserHumanAgent
 
         return BrowserHumanAgent(**settings)
+    if agent_name == "remote":
+        from src.agents.remote_agent import RemoteAgent
+
+        _require_exact_keys(settings, {"endpoint"}, "Remote agent")
+        return RemoteAgent(endpoint=settings["endpoint"])
     if agent_name == "llm":
         context_compaction = ContextCompactionConfig.from_settings(
             {"context_compaction": settings["context_compaction"]}
@@ -172,7 +177,9 @@ def build_benchmark_agent(
             max_evolution_depth=int(settings["max_evolution_depth"]),
             top_k=int(settings["top_k"]),
         )
-    raise ValueError(f"Unsupported agent_name={agent_name!r}; choose llm, dbot, or dbaiops")
+    raise ValueError(
+        f"Unsupported agent_name={agent_name!r}; choose llm, dbot, dbaiops, human, or remote"
+    )
 
 
 def build_experiment_agent(
