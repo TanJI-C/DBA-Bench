@@ -41,9 +41,6 @@ DBA-Bench 让 Agent 在真实数据库环境里完成运维任务，并由数据
 python3 -m venv .venv && source .venv/bin/activate
 pip install -U pip && pip install -e .
 
-# 一次性准备：TPC-DS 查询原文受版权保护不随仓库分发，需自行获取并放到
-# data/workloads/tpcds/queries/query_0.sql（见 docs/getting-started.md §7）
-
 # 零凭证 mock demo：脚本 Agent 修复一个 PostgreSQL 容器（需要 Docker）
 python examples/run_mock_llm_demo.py
 

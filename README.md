@@ -57,9 +57,9 @@ Each ScenarioCase is a code-backed contract with registered cases, evaluator ide
 
 ## Quick start
 
-Prerequisites: **Python 3.10+**, **Docker** (the mock demo still boots a real `postgres:16`
-container), and the TPC-DS query stream — a copyrighted one-time fetch, see
-[docs/getting-started.md](docs/getting-started.md) §7.
+Prerequisites: **Python 3.10+** and **Docker** (the mock demo boots a real `postgres:16`
+container). All scenario data ships with the repository; only the optional TPC-DS demo needs
+a separate download (see [docs/getting-started.md](docs/getting-started.md) §7).
 For the full environment walkthrough — Python, Docker setup, registry mirrors, LLM credentials,
 embedding and judge models — see **[docs/getting-started.md](docs/getting-started.md)**.
 
@@ -68,16 +68,13 @@ embedding and judge models — see **[docs/getting-started.md](docs/getting-star
 python3 -m venv .venv && source .venv/bin/activate
 pip install -U pip && pip install -e .
 
-# 2) One-time: place the TPC-DS query stream at
-#    data/workloads/tpcds/queries/query_0.sql (docs/getting-started.md §7)
-
-# 3) Zero-credential mock demo: a scripted agent heals a PostgreSQL container
+# 2) Zero-credential mock demo: a scripted agent heals a PostgreSQL container
 python examples/run_mock_llm_demo.py
 
-# 4) TiDB demo (Docker Compose: PD + TiKV + TiDB + Prometheus)
+# 3) TiDB demo (Docker Compose: PD + TiKV + TiDB + Prometheus)
 python examples/run_tidb_demo.py
 
-# 5) Tests (unit tests run anywhere; scenario tests deploy containers)
+# 4) Tests (unit tests run anywhere; scenario tests deploy containers)
 pytest tests/
 ```
 
@@ -139,13 +136,6 @@ aiopsbench experiment run  experiments/pg_smoke.example.yaml
 
 Persistent (long-horizon) episodes use `scenario_kind: persistent` — see the
 [persistent scenario guide](docs/guides/persistent-scenario/implement-persistent-scenario.guide.md).
-
-## Results
-
-📊 **Evaluation results are being compiled.** The complete per-model DP/OP/SP breakdown across all
-241 cases (231 ScenarioCases + 10 persistent episodes) will be released together with the first
-public dataset snapshot. For detailed results in the meantime, see the
-[paper](https://arxiv.org/abs/2607.22165).
 
 ## Extend it
 
