@@ -1,0 +1,35 @@
+# Instance driver contract for pg_warehouse_batch_reporting (pg5 / OLAP).
+#
+# This file is NOT part of the core persistent-scenario spec (the frozen loader rejects
+# unknown top-level keys by design). It is the OLAP driver assembly input: provisioning
+# constants, queue discipline defaults and the measured PG runtime options. Values
+# follow the three-path difficulty calibration.
+fact_table: wh.batch_sales
+history_batch:
+  batch_id: 0
+  history_copy_count: 12           # 12 fiscal copies of store+catalog+web sales = 60,496,032 rows
+batches:
+- batch_id: 1
+  stage_table: wh.stage_batch_a
+  row_count: 12000000
+  skew_dimension: item             # 150 medium-hot items carry 2/3 of the batch
+- batch_id: 2
+  stage_table: wh.stage_batch_b
+  row_count: 12000000
+  skew_dimension: customer         # 50 hot customers carry 60% of the batch
+heartbeat:
+  interval_seconds: 90
+  latency_budget_seconds: 30
+  query_ids: [q3, q42, q52]        # light-tier TPC-DS material, read-only reuse
+queue:
+  healthy_max_workers: 2
+  report_worker_ceiling: 6         # pool size; the control table governs actual concurrency
+  work_mb: 4
+  report_attempt_timeout_seconds: 2400  # healthy-run measured: 900s timeout clip, 2196.9s delivered; inside the attempt envelope
+  max_attempts: 3
+backup:
+  pass_count: 4                    # ~36 GB of reads at the redesigned scale: a real I/O competitor at 4 GB cgroup
+ingest:
+  deadline_offset_seconds: 600
+runtime_options:                   # measured configuration; budgets assume it
+  shared_buffers: 512MB

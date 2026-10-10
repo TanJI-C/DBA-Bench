@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-bc05",
+  "product_version": "v8.1.0",
+  "knowledge_mode": "hierarchical",
+  "source_kind": "repository_curated",
+  "official_source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "files": [
+    "lightning_checkpoint_identity_and_resume.md",
+    "lightning_physical_import_capacity_and_protection.md",
+    "lightning_checkpoint_admission_and_terminal_acceptance.md"
+  ]
+}

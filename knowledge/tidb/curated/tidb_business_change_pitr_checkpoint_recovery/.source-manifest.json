@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-k08",
+  "source_lock": ".source-lock.json",
+  "files": [
+    {
+      "path": "k08_checkpoint_identity_and_retry.md",
+      "kind": "markdown",
+      "size": 2020,
+      "sha256": "7cbdfe79096fcd371981ccaf8c0d65a3b6d9fe92d7c1428d7cd095d97a443c30"
+    },
+    {
+      "path": "k08_pitr_chain_and_log_reachability.md",
+      "kind": "markdown",
+      "size": 2001,
+      "sha256": "babdfdb2d417fa498ba69c261cf527478a136d6f18b1a72cf1cee0edb875b03e"
+    },
+    {
+      "path": "k08_safe_recovery_and_acceptance.md",
+      "kind": "markdown",
+      "size": 1982,
+      "sha256": "c4992795f5e3ddd0db6de91e63536c54fb6baebbf20fda471f0b63aef37a5d11"
+    }
+  ]
+}

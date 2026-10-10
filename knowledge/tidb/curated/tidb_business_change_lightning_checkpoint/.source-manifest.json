@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-bc05",
+  "source_lock": ".source-lock.json",
+  "files": [
+    {
+      "path": "lightning_checkpoint_admission_and_terminal_acceptance.md",
+      "sha256": "ad78f7383730f57c50ff91f96e11ef653a39698083b392eb284ed451e2a2fc69"
+    },
+    {
+      "path": "lightning_checkpoint_identity_and_resume.md",
+      "sha256": "b94bea09613fab97a0d9c0c975a72894af66259c37763dd2f0258975ababcb68"
+    },
+    {
+      "path": "lightning_physical_import_capacity_and_protection.md",
+      "sha256": "ad57417e870fac5918e13fbbf81b833c3c7963060778063eb9e77ae55c789c2e"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "workload_name": "tidb",
+  "data_file": "data/users.csv",
+  "init_sql": "init.sql",
+  "tables": [
+    "demo_users",
+    "demo_orders",
+    "demo_products"
+  ]
+}

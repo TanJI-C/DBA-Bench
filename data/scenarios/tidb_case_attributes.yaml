@@ -1,0 +1,484 @@
+schema_version: 1
+annotation_version: tidb-case-attributes-v1
+annotation_status: provisional
+cases:
+  - scenario_id: tidb_business_change_batched_dml_ddl
+    case_id: retention_archive_online_index
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_query_perf_optimistic_write_conflict
+    case_id: settlement_retry_completion
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_query_perf_statistics_drift
+    case_id: distribution_shift_stale_statistics
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_query_perf_index_merge_selection_failure
+    case_id: dual_single_column_index_or_predicate
+    category: query_perf
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: snapshot
+  - scenario_id: tidb_query_perf_index_order_correlation
+    case_id: object_listing_composite_index_correlation
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_query_perf_noncovering_index_tail_latency
+    case_id: noncovering_index_tail_latency
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_query_perf_case_when_in_cartesian_semi_join
+    case_id: case_when_in_cartesian_semi_join
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_query_perf_like_escape_range
+    case_id: literal_underscore_like_range
+    category: query_perf
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_system_failure_lock_contention
+    case_id: admission_events_row_lock_deadlock
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_pending_offline
+    case_id: online_unsafe_recovery_failed_stores
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_mdl_blocking
+    case_id: long_transaction_mdl_blocks_online_ddl
+    category: system_failure
+    difficulty: easy
+    diagnostic_depth: deep
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_deadlock
+    case_id: wallet_pair_reverse_order_deadlock
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_sf01
+    case_id: pd_mixed_disk_eviction
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_pd_metadata_recovery
+    case_id: pd_all_metadata_lost_restore_original_cluster
+    category: system_failure
+    difficulty: easy
+    diagnostic_depth: deep
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_br_permission
+    case_id: br_s3_credentials_denied
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_clustered_index_consistency
+    case_id: odku_mutable_clustered_pk_index_drift
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_resource_governance_br_slo_adaptive_throttling
+    case_id: br_backup_frontend_slo
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_ru_budget_calibration
+    case_id: mixed_oltp_olap_ru_budget_calibration
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_ru_budget_calibration_frozen_history
+    case_id: ru_budget_history_calibration
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_resource_governance_runaway_query
+    case_id: runaway_query_protected_batch
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_connection_balancing
+    case_id: multi_tidb_connection_balance_and_drain
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_placement_policy
+    case_id: compliance_table_zone_migration
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_business_change_rolling_upgrade
+    case_id: rolling_upgrade_6_5_to_7_5
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_lightning_checkpoint
+    case_id: lightning_checkpoint_scale_out
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_resource_governance_lightning_budget
+    case_id: lightning_import_budget
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_rg06
+    case_id: ticdc_checkpoint_sink_budget
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_empty_region_merge_budget
+    case_id: empty_region_merge_budget
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_pd_api_security
+    case_id: pd_api_access_hardening
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_resource_governance_sql_binding
+    case_id: deterministic_or_binding_approval
+    category: resource_governance
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_auto_analyze_drift
+    case_id: auto_analyze_configuration_drift
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_business_change_cdc_dc_migration
+    case_id: cdc_dc_migration_reverse_cutover
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_business_change_pitr_checkpoint_recovery
+    case_id: resume_failed_pitr_without_breaking_chain
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_health_check_gc_safepoint_pin
+    case_id: abandoned_changefeed_gc_safepoint_pin
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_business_change_large_table_batch_dml
+    case_id: large_table_batch_update_and_index
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: deep
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_dr_auto_sync_failover
+    case_id: planned_dual_dc_failover
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_dr_auto_sync_failover
+    case_id: unplanned_dual_dc_failover
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_health_check_syncpoint_consistency
+    case_id: syncpoint_consistency_under_writes
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_empty_region_leader_skew
+    case_id: regional_job_empty_region_skew_review
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_empty_region_leader_skew_frozen_history
+    case_id: empty_region_leader_history_review
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_health_check_backup_recoverability
+    case_id: backup_chain_repair_and_restore
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_placement_policy
+    case_id: single_store_voters_pending
+    category: health_check
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_long_transaction_mvcc
+    case_id: daily_reconciliation_snapshot_transaction
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_ticdc_replication_trend
+    case_id: ticdc_replication_capacity_review
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_health_check_ticdc_replication_trend_frozen_history
+    case_id: ticdc_replication_history_investigation
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_health_check_lightning_preflight
+    case_id: lightning_preflight_admission_review
+    category: health_check
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_dm_replace
+    case_id: failed_ddl_safe_replace
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_table_recovery
+    case_id: dropped_table_gc_recovery
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_x86_arm64_migration
+    case_id: offline_x86_to_arm64_online_migration
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_online_ddl_pause_resume
+    case_id: paused_unique_index_backfill
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_batched_dml_ddl
+    case_id: settlement_archive_online_index
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_rolling_upgrade
+    case_id: rolling_upgrade_7_5_to_8_1
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_lightning_checkpoint
+    case_id: lightning_checkpoint_partition_resume
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_cdc_dc_migration
+    case_id: cdc_dc_migration_reverse_direction
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: cross_window
+  - scenario_id: tidb_business_change_large_table_batch_dml
+    case_id: large_table_settlement_rebucket
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: deep
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_dm_replace
+    case_id: failed_ddl_safe_replace_billing
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: deep
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_table_recovery
+    case_id: dropped_payment_events_gc_recovery
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_x86_arm64_migration
+    case_id: offline_x86_to_arm64_billing_migration
+    category: business_change
+    difficulty: easy
+    diagnostic_depth: direct
+    environmental_complexity: low
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_online_ddl_pause_resume
+    case_id: paused_unique_index_backfill_billing
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_system_failure_gc_mvcc_recovery
+    case_id: recover_mvcc_after_async_commit_lock
+    category: system_failure
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence
+  - scenario_id: tidb_business_change_timezone_ddl_backpressure
+    case_id: dr_cutover_timezone_ddl_and_sink_backpressure
+    category: business_change
+    difficulty: hard
+    diagnostic_depth: deep
+    environmental_complexity: high
+    evidence_modality: multiple
+    temporal_requirement: causal_sequence

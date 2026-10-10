@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AiOpsBench - Dataset 状态</title>
+    <link rel="stylesheet" href="/portal.css?v=7">
+    <link rel="stylesheet" href="/datasets.css?v=1">
+</head>
+<body>
+    <div data-portal-slot></div>
+    <main class="dataset-page">
+        <header class="dataset-toolbar">
+            <div>
+                <label for="dataset-select">Dataset</label>
+                <select id="dataset-select"><option value="">选择 dataset_id</option></select>
+            </div>
+            <button id="dataset-refresh" class="icon-button" type="button" title="刷新 Dataset 状态" aria-label="刷新 Dataset 状态">↻</button>
+        </header>
+
+        <section class="dataset-summary" aria-live="polite">
+            <div><span>状态</span><strong id="summary-state">--</strong></div>
+            <div><span>Runs</span><strong id="summary-runs">--</strong></div>
+            <div><span>Valid</span><strong id="summary-valid">--</strong></div>
+            <div><span>Execution failures</span><strong id="summary-failures">--</strong></div>
+            <div><span>Safe pass rate</span><strong id="summary-safe-pass">--</strong></div>
+            <div><span>Metric contract</span><strong id="summary-contract">--</strong></div>
+        </section>
+
+        <section class="dataset-section">
+            <div class="section-heading">
+                <h1>运行矩阵</h1>
+                <div class="status-legend" aria-label="状态图例">
+                    <span class="legend-item succeeded">succeeded</span>
+                    <span class="legend-item running">running</span>
+                    <span class="legend-item pending">pending</span>
+                    <span class="legend-item failed">failed</span>
+                    <span class="legend-item mixed">mixed</span>
+                </div>
+            </div>
+            <div class="matrix-scroll" tabindex="0">
+                <table class="matrix-table" id="matrix-table">
+                    <thead id="matrix-head"></thead>
+                    <tbody id="matrix-body"></tbody>
+                </table>
+                <div class="empty-state" id="matrix-empty">请选择一个 dataset_id</div>
+            </div>
+        </section>
+
+        <section class="dataset-section">
+            <div class="section-heading aggregate-heading">
+                <h2>Scenario × Baseline 聚合</h2>
+                <div class="pin-control">
+                    <button id="pin-menu-button" type="button" aria-expanded="false" aria-controls="pin-menu">固定列</button>
+                    <div id="pin-menu" class="pin-menu" hidden></div>
+                </div>
+            </div>
+            <div class="aggregate-scroll" tabindex="0">
+                <table class="aggregate-table" id="aggregate-table">
+                    <thead id="aggregate-head"></thead>
+                    <tbody id="aggregate-body"></tbody>
+                </table>
+                <div class="empty-state" id="aggregate-empty">没有聚合记录</div>
+            </div>
+        </section>
+    </main>
+
+    <dialog id="run-dialog" class="run-dialog">
+        <header class="dialog-header">
+            <div>
+                <strong id="dialog-title">Run detail</strong>
+                <span id="dialog-meta"></span>
+            </div>
+            <button id="dialog-close" class="icon-button" type="button" title="关闭" aria-label="关闭">×</button>
+        </header>
+        <div class="dialog-run-select">
+            <label for="detail-run-select">Run</label>
+            <select id="detail-run-select"></select>
+        </div>
+        <div class="json-grid">
+            <section>
+                <h3>run.json</h3>
+                <pre id="run-json"></pre>
+            </section>
+            <section>
+                <h3 id="evaluator-title">evaluator.json</h3>
+                <pre id="evaluator-json"></pre>
+            </section>
+        </div>
+    </dialog>
+
+    <script src="/datasets.js?v=1"></script>
+    <script src="/portal.js?v=7" defer></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+schema_version: 1
+manifest_version: tidb-k03-kb-v1
+scenario_id: tidb_system_failure_pd_metadata_recovery
+case_id: pd_all_metadata_lost_restore_original_cluster
+product_version: v8.1.0
+official_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+runtime_images:
+  pd: pingcap/pd@sha256:78f5de9dc59abd02c99056294fb51f29da39ed932eb92cb2570ad57fe0774e80
+  tikv: pingcap/tikv@sha256:0b9d00f2b4f60cd3f91b55720a737136643e17bfb4de82a3c30ca532430374a5
+  tidb: pingcap/tidb@sha256:ee98d7d09ea2dcdc76dd683de3c3cdd63f052b33a91f5645ab75609df3648501
+sources:
+  - source_id: aiopsbench-k03:C22#pd-loss-identity
+    materialized_path: knowledge/tidb/curated/tidb_system_failure_pd_metadata_recovery/C22.md
+    sha256: 964b68dbd4706dc10336a19b27261d0bfc96460dd1c10158746296a1d2428d08
+    materialized_sha256: d144d0ed90c615ec42f7f4528655882eb4c899ca8717808d8f8b08c80d79f3e7
+    fetched_at: 2026-07-29
+    product_scope: TiDB distributed systems incident and PD identity evidence
+    allowed_sections:
+      - cluster identity mismatch
+      - complete PD metadata loss
+      - preserved TiKV data
+    claims:
+      - A rebuilt PD endpoint can be healthy while exposing a new cluster identity.
+      - TiKV logs and Store inventory are required to distinguish control-plane health from original-cluster recovery.
+  - source_id: aiopsbench-k03:C48#member-replacement-boundary
+    materialized_path: knowledge/tidb/curated/tidb_system_failure_pd_metadata_recovery/C48.md
+    sha256: 4be9b374af6080cce0278645b2bd34b2747dd3f3ce7129e136d1d7c27a57364a
+    materialized_sha256: 7fe1ab0a8b15bbb126aac156dbdfc8e014d684d03a5ba86565b9c90038257a4d
+    fetched_at: 2026-07-29
+    product_scope: PD member replacement and control-plane safety
+    allowed_sections:
+      - old member identity
+      - new member identity
+      - quorum and Store/Region validation
+    claims:
+      - Member replacement is not equivalent to full metadata-loss recovery.
+      - Preserved TiKV data must not be rewritten while the control plane is rebuilt.
+  - source_id: tidb-docs-8.1:pd-recover.md
+    local_path: knowledge/tidb_src/pd-recover.md
+    materialized_path: knowledge/tidb/curated/tidb_system_failure_pd_metadata_recovery/pd-recover.md
+    sha256: d64823f241d1f02cdcf1ce37e20df3acfa61683deac389d45d1a3b74f1982f45
+    fetched_at: 2026-08-18
+    product_scope: TiDB 8.1 self-managed PD Recover
+    allowed_sections:
+      - Method 1: Recover a PD cluster using a surviving PD node
+      - Method 2: Entirely rebuild a PD cluster
+      - Step 1: Get cluster ID
+      - Step 2: Get allocated ID
+      - Step 3: Use pd-recover
+    claims:
+      - Complete PD metadata loss uses the entirely-rebuild branch.
+      - The original cluster ID must come from historical component evidence.
+      - alloc-id must be above the largest allocated ID.
+      - pd-recover does not modify TSO and clock conditions must be checked.
+      - Database processes must be stopped before recovery and the whole cluster must be verified after restart.
+hops:
+  - hop_id: H1
+    knowledge_question: How do empty PD data directories differ from one surviving PD member?
+    expected_concept: complete PD metadata loss versus surviving-member recovery
+    required_environment_binding: all three PD data inventories, PD members, preserved TiKV data and cluster-ID mismatch logs
+    allowed_source_scope: [aiopsbench-k03:C22#pd-loss-identity, aiopsbench-k03:C48#member-replacement-boundary, tidb-docs-8.1:pd-recover.md]
+  - hop_id: H2
+    knowledge_question: Which versioned recovery branch applies when every PD data directory is empty?
+    expected_concept: entirely rebuild PD and run pd-recover with the original identity
+    required_environment_binding: v8.1.0 binary, three rebuilt PD members, stopped TiDB/TiKV services
+    allowed_source_scope: [tidb-docs-8.1:pd-recover.md]
+  - hop_id: H3
+    knowledge_question: Which cluster ID is authoritative when current PD and preserved TiKV disagree?
+    expected_concept: original cluster ID from historical PD/TiDB/TiKV evidence
+    required_environment_binding: current rebuilt ID, historical identity snapshot and TiKV log local/remote IDs
+    allowed_source_scope: [tidb-docs-8.1:pd-recover.md, aiopsbench-k03:C22#pd-loss-identity]
+  - hop_id: H4
+    knowledge_question: How should alloc-id be selected?
+    expected_concept: strict boundary above maximum observed allocator high-water
+    required_environment_binding: max_store_id, max_region_id, max_log_id and selected recovery alloc-id
+    allowed_source_scope: [tidb-docs-8.1:pd-recover.md]
+  - hop_id: H5
+    knowledge_question: What does pd-recover not repair?
+    expected_concept: TSO remains dependent on clock/NTP preconditions and post-recovery monotonicity
+    required_environment_binding: clock_status offsets, pre-fault TSO and two post-recovery TSO samples
+    allowed_source_scope: [tidb-docs-8.1:pd-recover.md]
+  - hop_id: H6
+    knowledge_question: What proves that the original cluster, rather than a healthy empty PD endpoint, is serving data?
+    expected_concept: original PD quorum, Store/Region rejoin, preserved business truth and new write
+    required_environment_binding: Store IDs, Region inventory, PD config, orders/order_items checksums and live_events row
+    allowed_source_scope: [tidb-docs-8.1:pd-recover.md, aiopsbench-k03:C48#member-replacement-boundary]
+  - hop_id: H7
+    knowledge_question: Which action boundaries must remain protected during recovery?
+    expected_concept: no force-new-cluster, no TiKV data mutation, one recovery execution and narrow business write scope
+    required_environment_binding: action history, service ordering, recovery parameters and SQL write targets
+    allowed_source_scope: [aiopsbench-k03:C48#member-replacement-boundary]
+materialization:
+  source_file: knowledge/tidb/curated/tidb_system_failure_pd_metadata_recovery/tidb81_k03_chunks.jsonl
+  source_sha256: 5dbf1a69de168168e9187560ff004cefee9c93f16e8f21b56fff828544242589
+  backend: sqlite
+  knowledge_mode: hierarchical
+  persist_dir: data/knowledge_bases/tidb81_curated_k03_extended
+  collection: tidb81_k03_extended
+  build_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical
+    --source-file knowledge/tidb/curated/tidb_system_failure_pd_metadata_recovery/tidb81_k03_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_curated_k03_extended --collection tidb81_k03_extended --no-progress

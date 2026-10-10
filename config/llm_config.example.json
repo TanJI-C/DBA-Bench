@@ -1,0 +1,18 @@
+{
+  "your-openai-compatible-model": {
+    "url": "https://api.openai.com/v1/chat/completions",
+    "api_key": "REPLACE_ME",
+    "context_window_tokens": 272000
+  },
+  "your-anthropic-model": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "api_key": "REPLACE_ME",
+    "provider": "anthropic",
+    "context_window_tokens": 200000
+  },
+  "local-qwen3-4b": {
+    "url": "http://127.0.0.1:8000/v1",
+    "api_key": "REPLACE_ME",
+    "context_window_tokens": 32768
+  }
+}

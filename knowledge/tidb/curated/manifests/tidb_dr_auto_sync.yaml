@@ -1,0 +1,23 @@
+schema_version: 1
+corpus_id: tidb-dr-auto-sync-8.1
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  General TiDB 8.1 DR Auto-Sync state, placement, fencing, unsafe-recovery,
+  business-boundary, and validation semantics.
+provenance:
+  tidb_release: v8.1.0
+  docs_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_dr_auto_sync/.source-lock.json
+sources:
+  - path: knowledge/tidb/curated/tidb_dr_auto_sync/dr_auto_sync_state_machine_and_roles.md
+    pinned_references:
+      - knowledge/tidb_src/two-data-centers-in-one-city-deployment.md
+  - path: knowledge/tidb/curated/tidb_dr_auto_sync/endpoint_fencing_and_admission_evidence.md
+    pinned_references:
+      - knowledge/tidb_src/two-data-centers-in-one-city-deployment.md
+      - knowledge/tidb_src/information-schema/information-schema-tikv-region-status.md
+  - path: knowledge/tidb/curated/tidb_dr_auto_sync/online_unsafe_recovery_state_and_validation.md
+    pinned_references:
+      - knowledge/tidb_src/online-unsafe-recovery.md
+

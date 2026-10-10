@@ -1,0 +1,12 @@
+schema_version: 1
+# baseline_id -> presentation group. Data mirrors the historical run manifests;
+# new baselines must be registered here before their runs can be aggregated.
+groups:
+  gpt55: Frontier LLMs
+  opus48: Frontier LLMs
+  glm: Frontier LLMs
+  q37max: Frontier LLMs
+  dsv4: Open-weight LLMs
+  qcnext: Open-weight LLMs
+  dbot-gpt55: DB-specific architectures
+  dbaiops-gpt55: DB-specific architectures

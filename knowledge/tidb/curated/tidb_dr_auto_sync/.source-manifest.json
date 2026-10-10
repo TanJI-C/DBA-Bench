@@ -1,0 +1,11 @@
+{
+  "manifest_version": "tidb-dr-auto-sync-v1",
+  "source_files": [
+    "dr_auto_sync_state_machine_and_roles.md",
+    "endpoint_fencing_and_admission_evidence.md",
+    "online_unsafe_recovery_state_and_validation.md"
+  ],
+  "target_version": "8.1",
+  "source_kind": "repository_internal_curated"
+}
+

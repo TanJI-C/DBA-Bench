@@ -1,0 +1,2 @@
+[pd-client]
+pd-server-timeout = 60

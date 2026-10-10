@@ -1,0 +1,11 @@
+{
+  "knowledge_id": "pd-metadata-recovery",
+  "scope": "TiDB 8.1 self-managed PD recovery",
+  "official_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "community_fetched_at": "2026-07-29",
+  "sources": {
+    "C22.html": "964b68dbd4706dc10336a19b27261d0bfc96460dd1c10158746296a1d2428d08",
+    "C48.html": "4be9b374af6080cce0278645b2bd34b2747dd3f3ce7129e136d1d7c27a57364a",
+    "pd-recover.md": "d64823f241d1f02cdcf1ce37e20df3acfa61683deac389d45d1a3b74f1982f45"
+  }
+}

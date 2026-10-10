@@ -1,0 +1,220 @@
+# Instance 5: tidb_oltp_online_topology_change — online scale-out, placement
+# repair, connection drain and old-store retirement while trade keeps running.
+#
+# All timeline and budget values are PROVISIONAL candidates from the tidb5
+# portfolio contract (100-minute timeline). The instance stays
+# development_provisional / measure-only until the real three-path calibration.
+# Hardening is conservative: mechanisms only (decoy near-neighbor
+# store, drain-window link-delay overlap); no SO budget, deliverable deadline or
+# timeout constant moved.
+#
+# The reserved 4th TiKV (tikv-3, role tikv-reserve) exists in the deployed
+# topology as a deferred instance; the contract allows exactly one reserved
+# node. tikv-4 is a regular store that is Up from deployment start and shares
+# tikv-2's fault-domain label (zone3): the same-signature healthy near-neighbor
+# that forces repair-target/scope discrimination against the work order.
+# Placement labels are controlled single-host fault domains; the deployment
+# wiring must label by node identity (tikv-0..tikv-2 -> zone1..zone3,
+# tikv-4 -> zone3, tikv-3 deferred -> zone4), not by service position.
+protocol_version: persistent-scenario-v2
+scenario_id: tidb_oltp_online_topology_change
+family_id: tidb_oltp_portfolio
+citation_tag: TB-PS-05
+system: tidb
+mode: timeline
+warmup_seconds: 300
+input_stop_seconds: 5700
+agent_stop_seconds: 5850
+horizon_seconds: 6000
+inspection_interval_seconds: 300
+calibration:
+  status: development_provisional
+  evidence_id: tidb5_oltp_topology_design_20260918
+environment:
+  workload: tidb_oltp_topology
+  scale: 1
+  base_image: tidb-v8.1.0-portfolio
+  nodes:
+  - {node_id: pd-0, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: pd-1, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: pd-2, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: tikv-0, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tikv-1, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tikv-2, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tikv-3, role: tikv-reserve, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  # Decoy near-neighbor: shares tikv-2's fault-domain label and store
+  # signature but is NOT named by the work order; retiring it leaves the
+  # store_retired deliverable (tikv/tikv-2) honestly undelivered.
+  - {node_id: tikv-4, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tidb-0, role: tidb, resources: {worker_physical_cores: 1, worker_memory_mb: 1024, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+  - {node_id: tidb-1, role: tidb, resources: {worker_physical_cores: 1, worker_memory_mb: 1024, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+services:
+- objective_id: trade_good_fraction
+  load_class: oltp
+  service_id: trade
+  deadline_seconds: 10.0        # provisional
+  # Calibrated: the declared maintenance envelope
+  # (store throttle + live region drain + placement migration) dominates the
+  # whole-window trade SLA under real-time sampling. The two compressed
+  # reference samples 0.7654 / 0.7638 (0.16pp spread) were the original freeze
+  # basis and are no longer representative — real-time samples are strictly
+  # lower: int5 deterministic reference path 0.301, best LLM pilot 0.2897
+  # (near-complete repair), other pilots 0.5071 (partial repair).
+  # 0.25 = worst honest complete sample 0.2897 minus ~4pp margin, per the
+  # calibration freeze convention; zero/wrong rejection is still carried by
+  # the maintenance truth checks, not by this budget.
+  min_success_fraction: 0.25
+- objective_id: maintenance_delivery_checklist
+  load_class: olap
+  service_id: maintenance
+  olap_mode: deliverable_checklist
+  deliverables:
+  - {deliverable_id: mo_store_scaleout, deadline_seconds: 2700, requires_freshness: false}   # from work-order publication
+  - {deliverable_id: mo_placement_satisfied, deadline_seconds: 3000, requires_freshness: false}
+  - {deliverable_id: mo_tidb_drain, deadline_seconds: 3300, requires_freshness: false}
+  - {deliverable_id: mo_store_retired, deadline_seconds: 5100, requires_freshness: false}
+required_state:
+- check_id: trade_continuity
+  kind: continuity
+  service_id: trade
+  window_seconds: 300
+  min_success_fraction: 0.90
+- check_id: maintenance_final_state_truth
+  kind: verifier
+  verifier_id: maintenance_final_state
+  params: {reserve_tikv: tikv/tikv-3, retire_tikv: tikv/tikv-2, drain_backend: tidb/tidb-1, placement_table: ops.maintenance_tracking, placement_expected_constraint: "[+zone=zone4]"}
+- check_id: replica_safety_truth
+  kind: verifier
+  verifier_id: replica_safety_after_change
+  params: {max_missing_peer_regions: 0, max_down_peer_regions: 0}
+integrity_checks:
+- check_id: commerce_conservation
+  verifier_id: commerce_ledger_conservation
+  params: {}
+- check_id: orders_idempotency_unique
+  verifier_id: orders_idempotency_uniqueness
+  params: {}
+- check_id: unknown_commit_dedup_truth
+  verifier_id: unknown_commit_dedup
+  params: {}
+safety_policy:
+  allowed_action_classes:
+  - sql_read
+  - sql_write_control_table
+  - sql_write_business
+  - terminate_workload_session
+  - config_change
+  - store_maintenance
+  - service_maintenance
+  - router_maintenance
+  - placement_maintenance
+  protected_objects:
+  - {name_pattern: shop.orders}
+  - {name_pattern: shop.payments}
+  - {name_pattern: shop.inventory}
+  - {name_pattern: ops.maintenance_orders}
+  read_only_action_classes:
+  - sql_read
+  authorized_guc_names: []      # provisional pending TIDB-REQ-001 scope vocabulary
+  guc_floor: {}
+diagnosis_contract:
+  incidents:
+  - incident_id: placement_drift_and_stale_connections
+    statement: >-
+      变更计划发布的放置策略把 tracked 表的副本全部约束到预留节点所在的 zone（单 store），
+      副本数永远无法满足，副本迁移受阻、SHOW PLACEMENT 卡在非调度完成态；连接池偏置把
+      客户端连接集中到待摘流 TiDB，路由摘除不会自动迁移已有连接，必须治理连接生命周期
+      才能完成摘流与退役交付。
+    conditions:
+    - condition_id: placement_constraint_unsatisfiable
+      aliases:
+      - 放置策略把表副本钉在只有单 store 的 zone，副本数无法满足，迁移受阻无法收敛
+      - SHOW PLACEMENT 长期处于 pending/inapplicable：约束可匹配但副本数不可满足
+      contradictions:
+      - PD 调度器全部宕机
+    - condition_id: stale_connections_block_drain
+      aliases:
+      - drain 只阻止新连接，已有连接停留在待摘流 TiDB 上，必须通过连接生命周期治理完成摘流
+      - 仅改路由不迁走旧连接，摘流交付无法完成
+      contradictions:
+      - 客户端连接数天然为零
+    - condition_id: migration_rate_pressure
+      aliases:
+      - 迁移链路降速与交易峰值叠加，调度过激会伤害延迟，完全暂停调度又无法完成维护
+      contradictions:
+      - 无副本迁移发生
+events:
+- event_id: maintenance_order_1
+  capability_id: maintenance_work_order
+  occurrence: 1
+  entity: change-plan-2026-09
+  start_seconds: 60
+  activation_timeout_seconds: 30
+  response_deadline_seconds: 600
+  trigger: alert
+  payload:
+    order_id: MO-2026-001
+    reserve_tikv: tikv/tikv-3
+    retire_tikv: tikv/tikv-2
+    drain_backend: tidb/tidb-1
+    deliverable_ids:
+      store_scaleout: mo_store_scaleout
+      placement_satisfied: mo_placement_satisfied
+      tidb_drain: mo_tidb_drain
+      store_retired: mo_store_retired
+    deadlines: {store_scaleout: 2700, placement_satisfied: 3000, tidb_drain: 3300, store_retired: 5100}
+- event_id: reserve_store_arrival_1
+  capability_id: reserve_store_arrival
+  occurrence: 1
+  entity: change-plan-2026-09
+  start_seconds: 900
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 600
+  trigger: silent
+  payload:
+    target: tikv/tikv-3
+    policy_name: maintenance_learner
+    followers: 2
+    constraints: "[+zone=zone4]"   # runbook bug: pins every replica to the reserve zone (one store), replica count unsatisfiable
+    tracked_table: ops.maintenance_tracking
+- event_id: trade_peak_1
+  capability_id: trade_peak
+  occurrence: 1
+  entity: promo_schedule_peak
+  start_seconds: 1800
+  activation_timeout_seconds: 30
+  response_deadline_seconds: 300
+  trigger: silent
+  payload: {tier: promo_peak}
+- event_id: connection_pool_bias_1
+  capability_id: connection_pool_bias
+  occurrence: 1
+  entity: client-fleet
+  start_seconds: 2700
+  activation_timeout_seconds: 30
+  response_deadline_seconds: 300
+  trigger: silent
+  payload:
+    config_version: 2
+    connect_bias: tidb/tidb-1
+    max_connection_lifetime_seconds: 900
+    request_timeout_ms: 3000
+    max_retries: 3
+    retry_backoff_ms: 100
+    retry_jitter_ms: 50
+    lock_wait_timeout_seconds: 8
+- event_id: migration_link_delay_1
+  capability_id: migration_link_delay
+  occurrence: 1
+  entity: storage-window-reserve
+  start_seconds: 3100
+  activation_timeout_seconds: 30
+  response_deadline_seconds: 300
+  trigger: silent
+  payload: {target: tikv/tikv-3, max_bytes_per_sec: 524288}  # provisional: bounded, cleanup restores
+  # Coupling: the delay starts inside the drain delivery window (the
+  # bias concentrates connections on tidb/tidb-1 at 2700 and the drain
+  # deliverable falls due at publication+3300), while the placement
+  # deliverable deadline (publication+3000) stays untouched. Strength is
+  # unchanged; replica migration into the reserve store competes with the
+  # drain window for the same maintenance capacity.

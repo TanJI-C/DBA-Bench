@@ -1,0 +1,96 @@
+# DM online-ddl support for gh-ost and pt-osc
+
+## Knowledge Metadata
+
+- Knowledge Type: `data_pipeline`
+- Source Corpus: TiDB 8.1 official English documentation
+- Source Repository: `https://github.com/pingcap/docs`
+- Source Commit: `d9124e84872b8f9915123444ab4402f9a36c33c9`
+- Source File: `knowledge/tidb_src/migrate-with-pt-ghost.md`
+- Source Title: `Continuous Replication from Databases that Use gh-ost or pt-osc`
+- Source Heading Path: `Continuous Replication from Databases that Use gh-ost or pt-osc | Continuous Replication from Databases that Use gh-ost or pt-osc > Enable online-ddl on DM | Continuous Replication from Databases that Use gh-ost or pt-osc > Workflow after enabling online-ddl | Continuous Replication from Databases that Use gh-ost or pt-osc > See also`
+- Source Line Ranges: `5-67`
+- Source Scope: `self_managed`
+- Primary Component: `dm`
+- Related Components: `shared`, `tidb`
+- Topic Tags: `online-ddl`, `gh-ost`, `pt-osc`, `mysql-to-tidb`, `incremental-replication`, `task-configuration`, `ghost-table`, `shard-merge`, `rename`
+- Documentation Version: `8.1`
+- Chunk ID: `tidb81_data_pipeline_0052_5244469b1f`
+- Source ID: `tidb-docs-8.1:migrate-with-pt-ghost.md#continuous-replication-from-databases-that-use-gh-ost-or-pt-osc`
+- Review Status: `ai_classified`
+- Source Extraction: `matched_markdown_sections`
+- Official Content SHA256: `80b296fa9f047cd39aac419bfdc87d804e48d2827bc0a88b7a6cf395dbae7b4c`
+
+## Source Links
+
+- Official Documentation: https://docs.pingcap.com/tidb/stable/migrate-with-pt-ghost#continuous-replication-from-databases-that-use-gh-ost-or-pt-osc
+- Pinned GitHub Source: https://github.com/pingcap/docs/blob/d9124e84872b8f9915123444ab4402f9a36c33c9/migrate-with-pt-ghost.md
+
+## Retrieval Guidance
+
+- Use When: Use this chunk when the question is about configuring DM to replicate MySQL to TiDB when upstream uses gh-ost or pt-osc, especially the `online-ddl` setting and how DM handles ghost tables and RENAME operations.
+- Retrieval Keywords: DM, online-ddl, online-ddl: true, gh-ost, pt-osc, MySQL to TiDB, task configuration file, ghost table, RENAME operation, shard merge, sharded tables, incremental replication, skip creating the ghost table downstream, replicate data only from the ghost table, record DDLs applied to the ghost table
+- Follow-up Guidance: The source also points to Working details for DM with online DDL tools and migration guides for small datasets, large datasets, and sharded dataset migration scenarios.
+- Classification Note: This is classified under the DM data pipeline because the content explains DM task configuration and replication workflow changes for online DDL tools during MySQL-to-TiDB migration in self-managed deployments.
+
+## Official Source Content
+
+# Continuous Replication from Databases that Use gh-ost or pt-osc
+
+In production scenarios, table locking during DDL execution can block the reads from or writes to the database to a certain extent. Therefore, online DDL tools are often used to execute DDLs to minimize the impact on reads and writes. Common DDL tools are [gh-ost](https://github.com/github/gh-ost) and [pt-osc](https://www.percona.com/doc/percona-toolkit/3.0/pt-online-schema-change.html).
+
+When using DM to migrate data from MySQL to TiDB, you can enable `online-ddl` to allow collaboration of DM and gh-ost or pt-osc.
+
+For the detailed replication instructions, refer to the following documents by scenarios:
+
+- [Migrate Small Datasets from MySQL to TiDB](https://docs.pingcap.com/tidb/stable/migrate-small-mysql-to-tidb)
+- [Migrate Large Datasets from MySQL to TiDB](https://docs.pingcap.com/tidb/stable/migrate-large-mysql-to-tidb)
+- [Migrate and Merge MySQL Shards of Small Datasets to TiDB](https://docs.pingcap.com/tidb/stable/migrate-small-mysql-shards-to-tidb)
+- [Migrate and Merge MySQL Shards of Large Datasets to TiDB](https://docs.pingcap.com/tidb/stable/migrate-large-mysql-shards-to-tidb)
+## Enable online-ddl on DM
+
+In the task configuration file of DM, set the global parameter `online-ddl` to `true`, as shown below:
+
+```yaml
+# ----------- Global configuration -----------
+## ********* Basic configuration *********
+name: test                      # The name of the task. Should be globally unique.
+task-mode: all                  # The task mode. Can be set to `full`, `incremental`, or `all`.
+shard-mode: "pessimistic"       # The shard merge mode. Optional modes are `pessimistic` and `optimistic`. The `pessimistic` mode is used by default. After understanding the principles and restrictions of the "optimistic" mode, you can set it to the "optimistic" mode.
+meta-schema: "dm_meta"          # The downstream database that stores the `meta` information.
+online-ddl: true                # Enable online-ddl support on DM to support automatic processing of "gh-ost" and "pt-osc" for the upstream database.
+```
+## Workflow after enabling online-ddl
+
+After online-ddl is enabled on DM, the DDL statements generated by DM replicating gh-ost or pt-osc will change.
+
+The workflow of gh-ost or pt-osc:
+
+- Create a ghost table according to the table schema of the DDL real table.
+
+- Apply DDLs on the ghost table.
+
+- Replicate the data of the DDL real table to the ghost table.
+
+- After the data are consistent between the two tables, use the rename statement to replace the real table with the ghost table.
+
+The workflow of DM:
+
+- Skip creating the ghost table downstream.
+
+- Record DDLs applied to the ghost table.
+
+- Replicate data only from the ghost table.
+
+- Apply DDLs recorded downstream.
+
+![dm-online-ddl](/media/dm/dm-online-ddl.png)
+
+The change in the workflow brings the following advantages:
+
+- The downstream TiDB does not need to create and replicate the ghost table, saving the storage space and network transmission overhead.
+
+- When you migrate and merge data from sharded tables, the RENAME operation is ignored for each sharded ghost table to ensure the correctness of the replication.
+## See also
+
+[Working details for DM with online DDL tools](https://docs.pingcap.com/tidb/stable/dm/feature-online-ddl#working-details-for-dm-with-online-ddl-tools)

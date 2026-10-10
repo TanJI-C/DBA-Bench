@@ -1,0 +1,217 @@
+# Target spec for tidb_htap_tiflash_isolation (tidb5-portfolio, instance 3)
+# in interface v1 shapes.
+#
+# Loads through the frozen core loader `load_persistent_scenario`. HTAP shared mode:
+# trading and analytics share one logical dataset; analytics queries are intended to run
+# on the TiFlash replica. There is NO independent freshness objective: TiFlash reads are
+# strong-consistency reads, and the contract forbids inferring stale results from
+# replica lag; analysis delivery obligations bind to their own job contracts. Setting
+# scope vocabulary (GLOBAL/SESSION) is expressed through instance verifiers.
+# Numeric budgets follow the three-path difficulty calibration.
+protocol_version: persistent-scenario-v2
+scenario_id: tidb_htap_tiflash_isolation
+family_id: tidb_htap_isolation
+citation_tag: TB-PS-02
+system: tidb
+mode: timeline
+warmup_seconds: 300
+input_stop_seconds: 5100
+agent_stop_seconds: 5400
+horizon_seconds: 5400
+inspection_interval_seconds: 300
+calibration:
+  status: development_provisional
+  evidence_id: tidb5_htap_design_20260918
+environment:
+  workload: htap_tiflash            # routed by the TiDB WorkloadProvider
+  scale: 1
+  base_image: pingcap/tidb@sha256:ee98d7d09ea2dcdc76dd683de3c3cdd63f052b33a91f5645ab75609df3648501
+  nodes:
+  - node_id: pd-0
+    role: pd
+    resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}
+  - node_id: pd-1
+    role: pd
+    resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}
+  - node_id: pd-2
+    role: pd
+    resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}
+  - node_id: tikv-0
+    role: tikv
+    resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}
+  - node_id: tikv-1
+    role: tikv
+    resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}
+  - node_id: tikv-2
+    role: tikv
+    resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}
+  - node_id: tidb-0
+    role: tidb
+    resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}
+  - node_id: tidb-1
+    role: tidb
+    resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}
+  - node_id: tiflash-0
+    role: tiflash
+    resources: {worker_physical_cores: 2, worker_memory_mb: 4096, container_cpu_limit: 2.0, container_memory_mb: 4096}
+    docker_caps: []
+
+services:
+# Trading side of the HTAP contract.
+- objective_id: trade_orders
+  load_class: oltp
+  service_id: htap_trade_service
+  deadline_seconds: 5
+  min_success_fraction: 0.98
+# Required analysis deliveries bound to the shared dataset.
+- objective_id: analysis_deliverables
+  load_class: olap
+  service_id: htap_analysis_service
+  olap_mode: deliverable_checklist
+  deliverables:
+  - {deliverable_id: region_analysis_early, deadline_seconds: 900, requires_freshness: false, max_freshness_lag_seconds: null, input_batch_binding: null}
+  - {deliverable_id: region_analysis_peak, deadline_seconds: 900, requires_freshness: false, max_freshness_lag_seconds: null, input_batch_binding: null}
+  - {deliverable_id: region_analysis_final, deadline_seconds: 900, requires_freshness: false, max_freshness_lag_seconds: null, input_batch_binding: null}
+# The onboarded tenant's own heavy analysis is a separate delivery
+# duty on the tenant service; its template pins the column-store replica, so a missing
+# placement attachment surfaces as recurring routing failures here.
+- objective_id: tenant_analysis_deliverables
+  load_class: olap
+  service_id: htap_tenant_service
+  olap_mode: deliverable_checklist
+  deliverables:
+  - {deliverable_id: tenant_region_heavy_analysis, deadline_seconds: 900, requires_freshness: false, max_freshness_lag_seconds: null, input_batch_binding: null}
+# Operations dashboard: frozen budget over the high-frequency refresh task class.
+- objective_id: dashboard_refresh
+  load_class: olap
+  service_id: htap_dashboard_service
+  olap_mode: task_class_budget
+  deadline_seconds: 20
+  min_on_time_correct_fraction: 0.90
+  calibration_evidence_id: tidb5_htap_dashboard_dev_20260918
+# HTAP composition: both sides must hold simultaneously.
+- objective_id: htap_isolation
+  load_class: htap
+  service_id: htap_shared_service
+  htap_mode: shared
+  transaction_objective_id: trade_orders
+  analysis_objective_id: analysis_deliverables
+
+integrity_checks:
+- check_id: trade_orders_conserved
+  verifier_id: htap_trade_orders_conserved
+  params:
+    orders_table: htap.orders
+    history_rows: 800000
+- check_id: analysis_results_match_truth
+  verifier_id: htap_analysis_result_truth
+  params:
+    deliverables:
+    - {deliverable_id: region_analysis_early, report_id: region_analysis}
+    - {deliverable_id: region_analysis_peak, report_id: region_analysis}
+    - {deliverable_id: region_analysis_final, report_id: region_analysis}
+    - {deliverable_id: tenant_region_heavy_analysis, report_id: tenant_region_heavy_analysis}
+
+required_state:
+- check_id: analytics_config_continuity
+  kind: verifier
+  verifier_id: htap_analytics_config_continuity
+  params:
+    config_table: htap.analytics_config
+    # Routing continuity: the published template must keep the
+    # column-store replica reachable; the known-bad tikv_only release cannot stand.
+    require_routing_healthy: true
+- check_id: tiflash_replica_present
+  kind: verifier
+  verifier_id: htap_tiflash_replica_present
+  params:
+    schema: htap
+    table: orders
+- check_id: tenant_replica_attached
+  kind: verifier
+  verifier_id: htap_tenant_replica_attached
+  params:
+    schema: htap
+    table: tenant_orders
+
+safety_policy:
+  # SP boundary: protected-object patterns cannot distinguish
+  # diagnosis reads from tampering, and the honest repair paths must read AND write
+  # the public control plane (routing publication surface htap.analytics_config,
+  # tenant placement DDL). The SP layer is action-class authorization, GUC
+  # authorization, trusted-ledger tamper detection, and the truth verifiers:
+  # fabricated results, dropped replicas and wrong-route releases are rejected
+  # honestly by digest, replica and continuity evidence.
+  allowed_action_classes: [read, session_control, config_control, cancel_attempt, maintenance]
+  protected_objects: []
+  read_only_action_classes: [read]
+  authorized_guc_names: [tidb_isolation_read_engines, tidb_allow_mpp, tidb_mem_quota_query]
+  guc_floor: {}
+
+diagnosis_contract:
+  incidents: []   # no mandated incident explanation: DiagnosisPass is N/A
+
+events:
+- event_id: baseline_region_analysis
+  capability_id: tidb5_htap_baseline_analysis
+  occurrence: 1
+  entity: analysis_baseline
+  payload: {}
+  start_seconds: 0
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 600
+  trigger: silent   # the capability commits region_analysis_early at the baseline snapshot; deadline = calibrated analysis offset from submission
+- event_id: analytics_route_error_release
+  capability_id: tidb5_htap_engine_route_release
+  occurrence: 1
+  entity: analytics_pool
+  payload: {engine_preference: tikv_only}
+  start_seconds: 900
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 600
+  trigger: silent   # external config release, visible via htap.analytics_config, no mailbox task
+- event_id: trade_peak_and_heavy_analysis
+  capability_id: tidb5_htap_peak_and_analysis
+  occurrence: 1
+  entity: peak_window
+  payload: {trade_multiplier: 2}
+  start_seconds: 1680
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 900
+  trigger: alert
+- event_id: tiflash_node_degradation
+  capability_id: tidb5_htap_tiflash_degradation
+  occurrence: 1
+  entity: tiflash-0
+  payload: {cpu_limit: 0.5}
+  start_seconds: 2400
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 600
+  trigger: alert   # the throttle opens the node's maintenance window (onboarding defers replica attachments inside it)
+- event_id: tenant_onboarding_repeat
+  capability_id: tidb5_htap_tenant_onboarding
+  occurrence: 1
+  entity: tenant_new
+  payload: {}
+  start_seconds: 3480
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 600
+  trigger: silent   # tenant table created inside the maintenance window; replica attachment deferred (audited), tenant template published, tenant service starts
+- event_id: trade_peak_recovery_overlap
+  capability_id: tidb5_htap_peak_and_analysis
+  occurrence: 2
+  entity: peak_recovery_window
+  payload: {trade_multiplier: 2, submit_analysis: false, tenant_analysis: true}
+  start_seconds: 4020
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 900
+  trigger: alert   # the trading peak re-arms across the recovery window and carries the tenant's heavy analysis
+- event_id: tiflash_node_recovery
+  capability_id: tidb5_htap_tiflash_recovery
+  occurrence: 1
+  entity: tiflash-0
+  payload: {}
+  start_seconds: 4200
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 600
+  trigger: silent   # node rejoin (CPU restore + restart) - replicas rebuild with real catch-up lag; deferred tenant placements are NOT flushed

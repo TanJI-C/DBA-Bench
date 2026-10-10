@@ -1,0 +1,6 @@
+{
+  "manifest_version": "tidb-pd-recovery-kb-v2",
+  "materialized_corpus": "tidb81_pd_recovery_chunks.jsonl",
+  "records": 8,
+  "source_files": ["C22.md", "C48.md", "pd-recover.md"]
+}

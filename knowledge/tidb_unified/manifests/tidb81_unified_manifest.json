@@ -1,0 +1,37 @@
+{
+  "corpus_id": "tidb81-unified-kb",
+  "layers": {
+    "processed": {
+      "path": "knowledge/tidb_unified/mappings/tidb81_chunks.jsonl",
+      "provenance_path": "knowledge/tidb_unified/provenance/tidb81_provenance.jsonl",
+      "record_count": 3571,
+      "sha256": "f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5"
+    },
+    "serving": {
+      "agent_projection": [
+        "rank",
+        "score",
+        "title",
+        "version",
+        "kb_type",
+        "component",
+        "source_scope",
+        "content"
+      ],
+      "path": "knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl",
+      "record_count": 3571,
+      "sha256": "e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a"
+    }
+  },
+  "official_source": {
+    "path": "knowledge/tidb/mappings/tidb81_chunks.jsonl",
+    "sha256": "e8e18a0deee0cae98827e35c28375f22f902111393391056ef3cee1b7692ec41"
+  },
+  "provenance_sha256": "420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866",
+  "schema_version": 1,
+  "source_kinds": {
+    "curated": 56,
+    "official": 3515
+  },
+  "target_version": "8.1"
+}

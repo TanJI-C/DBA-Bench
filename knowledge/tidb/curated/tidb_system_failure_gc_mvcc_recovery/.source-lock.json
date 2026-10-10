@@ -1,0 +1,36 @@
+{
+  "schema_version": 2,
+  "corpus_id": "tidb81-curated-mvcc-recovery",
+  "source_kind": "repository_curated",
+  "created_at": "2026-08-22",
+  "provenance": {
+    "tidb_release": "v8.1.0",
+    "tikv_release": "v8.1.0",
+    "tikv_source_commit": "ba73b0d92d94463d74543550d0efe61fa6a6f416",
+    "tikv_image": "pingcap/tikv@sha256:0b9d00f2b4f60cd3f91b55720a737136643e17bfb4de82a3c30ca532430374a5",
+    "tikv_ctl_release": "8.1.0",
+    "references": [
+      {
+        "path": "k01_lock_codec_and_recovery.md",
+        "pinned_urls": [
+          "https://github.com/tikv/tikv/blob/ba73b0d92d94463d74543550d0efe61fa6a6f416/components/txn_types/src/lock.rs",
+          "https://github.com/tikv/tikv/blob/ba73b0d92d94463d74543550d0efe61fa6a6f416/src/server/debug.rs"
+        ]
+      },
+      {
+        "path": "k01_gc_phases_and_scope.md",
+        "pinned_urls": [
+          "https://github.com/pingcap/tidb/blob/v8.1.0/docs/garbage-collection-overview.md",
+          "https://github.com/pingcap/tidb/blob/v8.1.0/docs/garbage-collection-configuration.md"
+        ]
+      },
+      {
+        "path": "k01_observability_contract.md",
+        "pinned_urls": [
+          "https://github.com/pingcap/tidb/blob/v8.1.0/docs/transaction-overview.md",
+          "https://github.com/tikv/pd/blob/v8.1.0/docs/api.md"
+        ]
+      }
+    ]
+  }
+}

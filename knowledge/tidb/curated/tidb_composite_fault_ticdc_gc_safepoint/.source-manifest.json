@@ -1,0 +1,30 @@
+{
+  "corpus_id": "tidb81-curated-ticdc-gc-safepoint",
+  "file_count": 4,
+  "files": [
+    {
+      "kind": "markdown",
+      "path": "tidb81_ticdc_gc_recovery_verification.md",
+      "sha256": "533f60810c08cc62b826a67d7c35ae3401961b852801d2238c72ac7a09caca37",
+      "size": 1351
+    },
+    {
+      "kind": "markdown",
+      "path": "tidb81_ticdc_mvcc_recovery_scope.md",
+      "sha256": "3d3112c89aeb71a1d1cd579bff73457c208998d336ba323af5b7b482c93c8c8b",
+      "size": 1236
+    },
+    {
+      "kind": "markdown",
+      "path": "tidb81_ticdc_progress_and_restart.md",
+      "sha256": "ac448372922b59a8b960dde953adc1ba8947c678c7d8fb6d6755faa1f2c37401",
+      "size": 1322
+    },
+    {
+      "kind": "markdown",
+      "path": "tidb81_ticdc_service_safepoint_ownership.md",
+      "sha256": "0e778de977db9628956fa74c5707f224776ee067baec0e18fe1a439a35413525",
+      "size": 1533
+    }
+  ]
+}

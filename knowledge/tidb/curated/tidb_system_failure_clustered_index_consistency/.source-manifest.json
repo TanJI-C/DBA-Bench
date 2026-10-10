@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-k12",
+  "source_lock": ".source-lock.json",
+  "source_lock_sha256": "69796af950fec7d875e5f054a33a8c2d5893426751c19eca307fa85017f80c29",
+  "files": [
+    {
+      "path": "k12_clustered_handle_and_odku.md",
+      "sha256": "cfc5f4a0f271bc2fd6e09cd7c237dbcd2c2b002b9a97afa8eb483f68af2fd4f5"
+    },
+    {
+      "path": "k12_error_scope_and_release.md",
+      "sha256": "81abc0eddcca426fd3e6c23d18f46bcfe6b83e42e38aabdf963213105154da7a"
+    },
+    {
+      "path": "k12_repair_and_safety_contract.md",
+      "sha256": "3976d84f3d2a979dc2d2ba2e5695c7bcb8f8d9f11ff916a3c6a3ac07ebd97296"
+    },
+    {
+      "path": "tidb81_k12_chunks.jsonl",
+      "sha256": "399c2e6d4342a5bf7a9982949afeecd6aefe6d6ade1ead92b40cafdbd1043433"
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+/* Shared sortable / filterable table styles (TableTools). */
+
+th.tt-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+th.tt-sortable:hover {
+    color: var(--accent, #7ab8ff);
+}
+th.tt-sorted {
+    color: var(--accent, #7ab8ff);
+}
+.tt-arrow {
+    display: inline-block;
+    width: 1em;
+    margin-left: 2px;
+    font-size: 0.78em;
+    text-align: center;
+}
+.tt-filter-btn {
+    margin-left: 4px;
+    padding: 0 4px;
+    border: 1px solid rgba(127, 140, 160, 0.45);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.72em;
+    line-height: 1.4;
+    cursor: pointer;
+}
+.tt-filter-btn:hover,
+.tt-filter-btn.tt-filter-active {
+    border-color: var(--accent, #4a9eff);
+    color: var(--accent, #4a9eff);
+}
+.tt-filter-btn.tt-filter-active {
+    background: rgba(74, 158, 255, 0.14);
+}
+.tt-filter-panel {
+    position: fixed;
+    z-index: 1000;
+    min-width: 200px;
+    max-width: 340px;
+    padding: 6px;
+    border: 1px solid rgba(127, 140, 160, 0.4);
+    border-radius: 8px;
+    background: #1c2431;
+    color: #d8e2f0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    font-size: 13px;
+}
+.tt-filter-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 6px;
+    border-bottom: 1px solid rgba(127, 140, 160, 0.3);
+}
+.tt-filter-head span:first-child {
+    flex: 1;
+    color: #93a4bc;
+}
+.tt-filter-head button {
+    padding: 1px 8px;
+    border: 1px solid rgba(127, 140, 160, 0.45);
+    border-radius: 4px;
+    background: transparent;
+    color: #cfe0f5;
+    cursor: pointer;
+}
+.tt-filter-head button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.tt-filter-head button:not(:disabled):hover {
+    border-color: var(--accent, #4a9eff);
+    color: var(--accent, #4a9eff);
+}
+.tt-filter-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-top: 4px;
+}
+.tt-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.tt-filter-item:hover {
+    background: rgba(74, 158, 255, 0.12);
+}
+.tt-filter-item input {
+    margin: 0;
+    flex: none;
+}
+.tt-filter-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tt-filter-item .tt-filter-count {
+    margin-left: auto;
+    color: #76879e;
+    font-size: 0.86em;
+}

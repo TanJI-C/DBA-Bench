@@ -1,0 +1,19 @@
+{
+  "corpus_id": "tidb81-curated-k08",
+  "format_version": 1,
+  "scenario_id": "tidb_business_change_pitr_checkpoint_recovery",
+  "case_id": "resume_failed_pitr_without_breaking_chain",
+  "tidb_release": "v8.1.0",
+  "docs_source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "source_kind": "repository_curated",
+  "official_sources": {
+    "knowledge/tidb_src/br/br-checkpoint-restore.md": "93fb95aac63b3060981eb42a3bd280e0e0fcf1619b8b8179e5e9961faa45f7bb",
+    "knowledge/tidb_src/br/br-pitr-guide.md": "1e1df14cc78cb42161c8b122916d2ac283d0bedf094fcbb6690dd78a98aec700",
+    "knowledge/tidb_src/br/br-log-architecture.md": "1a880812e05ae51af09a9d9d61035946f859cb00c9c6e82950af8d2a61124f17",
+    "knowledge/tidb_src/br/br-snapshot-architecture.md": "e68d181f113909ac900493cd322e1473789c5209f78fc94c9d7c17427b1b8289",
+    "knowledge/tidb_src/br/backup-and-restore-design.md": "23e63ed78763305d95f3bdabdf036966bd2e685470ddb58d9ce59e38ae5f8d06"
+
+
+  },
+  "note": "Curated facts are version-bound to the pinned TiDB 8.1 documentation snapshot; dynamic restore identities and timestamps must come from the current run."
+}

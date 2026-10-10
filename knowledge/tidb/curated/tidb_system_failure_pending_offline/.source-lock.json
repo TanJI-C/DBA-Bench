@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-sf07",
+  "scenario_id": "tidb_system_failure_pending_offline",
+  "case_id": "online_unsafe_recovery_failed_stores",
+  "source_kind": "repository_curated",
+  "created_at": "2026-08-19",
+  "provenance": {
+    "tidb_release": "v8.1.0",
+    "official_source": "knowledge/tidb_src/online-unsafe-recovery.md",
+    "official_source_sha256": "c20ab0b4a943d6497d6ecf4f974faebe3fc14a3412a2c480b552c7a03624fe6d"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-timezone-ddl",
+  "scenario_id": "tidb_composite_fault_timezone_ddl_backpressure",
+  "case_id": "dr_cutover_timezone_ddl_and_sink_backpressure",
+  "tidb_release": "v8.1.0",
+  "ticdc_release": "v8.1.0",
+  "downstream_release": "mysql-8.4",
+  "source_kind": "repository_curated",
+  "official_source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "official_sources": {
+    "knowledge/tidb_src/ticdc/ticdc-open-api.md": "3a47032066b24b1d711faf9a2d935b603951aa6c36bcc5fe468ce4f06eb9daa1",
+    "knowledge/tidb_src/ticdc/ticdc-ddl.md": "70db4da39632dc73563f33d9bc3ddae3e9764f38df113eba1e74f3ed8ab1bbee",
+    "knowledge/tidb_src/ticdc/ticdc-upstream-downstream-check.md": "eeb61bfbb78931d53f4dbc2e6ebd7b2ef44b9b5476f892f20fa3ef6237d86f46",
+    "knowledge/tidb_src/data-type-date-and-time.md": "a10b4169f1c48229c7d5eea5a5616eac103e2a6e50483f1a7e3f8d20b42e9a4b",
+    "knowledge/tidb_src/configure-time-zone.md": "be8f2857e75a52ce24cd45254fc397ca81da098e64996603970d96c980587fca",
+    "knowledge/tidb_src/ticdc/ticdc-integrity-check.md": "c5f1d2a22d83a742973662e7dc68e811e710e2c0d7d9dc158ab4acac34f5ddb4",
+    "knowledge/tidb_src/ticdc/monitor-ticdc.md": "7baeccc0db60c99f87e7fb4c263bffeece08a73253e7c24e1642d3cc179007be",
+    "knowledge/tidb_src/ticdc/ticdc-sink-to-mysql.md": "a7e7d05bb2d1bcd012bae24cf969e63b45f098b35db9f1b71ba318d28b7746c3"
+  },
+  "community_sources": {
+    "community/C02.html": "f2e53621df0b2c44c16668c4033435b1f8912c63129ed29e78145ada8682d84",
+    "community/C29.html": "87eee1ca9ce289f2e06bcf489f022c3fd394521e4ea41edf12a324394dfe205",
+    "community/C34.html": "3e395f6e86e27f759b95699573e50da5b41812e045ccfbe35ffa87ca5697a7f3",
+    "community/O26.html": "12a554304fbac36919e7c8942d087aaae7c19a7c71c1f0e804f73dbcc9400d88",
+    "community/O51.html": "18186d971508b5acb6e9265132d9186f8e8c498b06f7c5ac9c37a6e67921ff9f"
+  },
+  "note": "Curated records are version-bound operational context. They contain no active Case identifiers, live CommitTs, or evaluator conclusions."
+}

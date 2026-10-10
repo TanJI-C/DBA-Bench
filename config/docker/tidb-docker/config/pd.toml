@@ -1,0 +1,10 @@
+lease = 10
+tick-interval = "1s"
+election-interval = "30s"
+
+[replication]
+max-replicas = 3
+
+[schedule]
+leader-schedule-limit = 4
+region-schedule-limit = 8

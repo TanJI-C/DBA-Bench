@@ -1,0 +1,85 @@
+schema_version: 1
+corpus_id: tidb81-curated-hc08
+scenario_id: tidb_health_check_placement_policy
+case_id: single_store_voters_pending
+product_version: v8.1.0
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB placement inheritance, constraint semantics, asynchronous scheduling,
+  single-Store capacity evidence, and scoped review acceptance for HC08.
+provenance:
+  tidb_release: v8.1.0
+  official_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_health_check_placement_policy/.source-lock.json
+  source_lock_sha256: b56ab3e0f56457e92d9f611d6b611ee57f715e6e44bbaf2475f530877cdd385a
+    O43.html: b8f146cbf5a22e9728be7fec31cf42ddc56ad20d97fe4df75827e52222ef35
+    R24.md: ab8d579aa17731955280a58d93fad4e021c7d7cb9b68a442f658aa2caf8ea409
+    R25.md: 5c2b4475a496a52ef65659bd28b9dc5a3236e38336ba39cd4cf716c6ca16738
+  source_files:
+    knowledge/tidb_src/placement-rules-in-sql.md: a05ddf13ae3db696ac6d351ff6986e26e93c215da2a71d0ccac14fdf0b9f3ac6
+    knowledge/tidb/operation/tidb81_operation_0191_d7305521a4.md: 57b73660d09a387f9251bc077f20f5479c7c556e69f06eba3f0a7b9818de4e91
+hops:
+  - hop_id: H1
+    knowledge_question: Which review item maps to the current physical object?
+    expected_concept: Join the live review to service, table, and partition catalogs; exclude historical and approved rows.
+    required_environment_binding: review status, service name, table identity, table policy, partition policies
+    allowed_source_scope: [aiopsbench-tidb-hc08:scope#review-binding]
+  - hop_id: H2
+    knowledge_question: Why can a table reset leave a partition placement exception?
+    expected_concept: Explicit partition binding takes precedence over a table binding and survives table DEFAULT reset.
+    required_environment_binding: information_schema.tables and information_schema.partitions for the same target
+    allowed_source_scope: [aiopsbench-tidb-hc08:inheritance#partition-precedence]
+  - hop_id: H3
+    knowledge_question: How should policy fields and dictionary constraints be interpreted?
+    expected_concept: FOLLOWERS counts followers plus a leader; topology fields use labels; dictionary constraints assign counts.
+    required_environment_binding: full placement policy definition and available placement labels
+    allowed_source_scope: [aiopsbench-tidb-hc08:policy#field-semantics]
+  - hop_id: H4
+    knowledge_question: How can an accepted policy be technically unsatisfiable?
+    expected_concept: Requested replicas or label domains exceed the current TiKV Store and Region-peer capacity.
+    required_environment_binding: Store list, Store labels, Region peers, policy fields, placement state
+    allowed_source_scope: [aiopsbench-tidb-hc08:capacity#store-mismatch]
+  - hop_id: H5
+    knowledge_question: What does a placement scheduling state prove?
+    expected_concept: SQL admission and asynchronous scheduling states are not final convergence.
+    required_environment_binding: SHOW PLACEMENT plus operator/scheduler observations and a post-action re-read
+    allowed_source_scope: [aiopsbench-tidb-hc08:progress#async-state]
+  - hop_id: H6
+    knowledge_question: What is the smallest safe repair for an inherited-placement review?
+    expected_concept: Reset the mapped table and all explicit target partition bindings to DEFAULT; preserve shared state.
+    required_environment_binding: current review scope, table/partition bindings, protected neighbors and control-plane state
+    allowed_source_scope: [aiopsbench-tidb-hc08:repair#default-scope]
+  - hop_id: H7
+    knowledge_question: What proves that the routine review is complete?
+    expected_concept: Target placement converged, exact review closed, protected state and business truth unchanged.
+    required_environment_binding: final table/partition catalog, SHOW PLACEMENT, review row, business CRC
+    allowed_source_scope: [aiopsbench-tidb-hc08:acceptance#closed-loop]
+materialization:
+  raw_source_file: knowledge/tidb/curated/tidb_health_check_placement_policy/tidb81_hc08_chunks.jsonl
+  raw_source_sha256: 55fa2314c1df3349127ec4bd806ace3abb3ffa8be79bf63f80102bb968f94e44
+  processed_source_file: knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
+  processed_source_sha256: f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5
+  serving_source_file: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+  serving_source_sha256: e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a
+  unified_manifest: knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
+  backend: unified-default
+  knowledge_mode: hierarchical
+  persist_dir: data/knowledge_bases/tidb81_unified_docs
+  collection: tidb81_unified_docs
+  build_command: >-
+    conda run -n aiops python scripts/merge_tidb_curated_knowledge.py &&
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_docs
+    --collection tidb81_unified_docs --no-progress
+  chroma_build_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend chroma
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_chroma
+    --collection tidb81_unified_docs --embedding-model Qwen/Qwen3-Embedding-4B
+    --embedding-device cuda --embedding-batch-size 4 --embedding-workers 1 --no-progress
+  no_fallback: true
+  stale_source_policy: fail

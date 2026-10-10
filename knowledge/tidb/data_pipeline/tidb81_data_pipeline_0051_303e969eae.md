@@ -1,0 +1,133 @@
+# DM migration to downstream TiDB tables with extra columns
+
+## Knowledge Metadata
+
+- Knowledge Type: `data_pipeline`
+- Source Corpus: TiDB 8.1 official English documentation
+- Source Repository: `https://github.com/pingcap/docs`
+- Source Commit: `d9124e84872b8f9915123444ab4402f9a36c33c9`
+- Source File: `knowledge/tidb_src/migrate-with-more-columns-downstream.md`
+- Source Title: `Migrate Data to a Downstream TiDB Table with More Columns`
+- Source Heading Path: `Migrate Data to a Downstream TiDB Table with More Columns | Migrate Data to a Downstream TiDB Table with More Columns > Use DM to migrate data to a downstream TiDB table with more columns`
+- Source Line Ranges: `5-110`
+- Source Scope: `self_managed`
+- Primary Component: `dm`
+- Related Components: `tidb`, `tiup`
+- Topic Tags: `schema-mismatch`, `binlog-replication`, `table-schema`, `dmctl`, `task-resume`, `status-check`, `sharded-tables`
+- Documentation Version: `8.1`
+- Chunk ID: `tidb81_data_pipeline_0051_303e969eae`
+- Source ID: `tidb-docs-8.1:migrate-with-more-columns-downstream.md#migrate-data-to-a-downstream-tidb-table-with-more-columns`
+- Review Status: `reviewed`
+- Source Extraction: `matched_markdown_sections`
+- Official Content SHA256: `f50afbf4ca4cf84b73fb81dc4fa42eb4245af9403358cd2b3c30c1417b0257ec`
+
+## Source Links
+
+- Official Documentation: https://docs.pingcap.com/tidb/stable/migrate-with-more-columns-downstream#migrate-data-to-a-downstream-tidb-table-with-more-columns
+- Pinned GitHub Source: https://github.com/pingcap/docs/blob/d9124e84872b8f9915123444ab4402f9a36c33c9/migrate-with-more-columns-downstream.md
+
+## Retrieval Guidance
+
+- Use When: Use this chunk when DM replication to a downstream TiDB table with extra columns fails with a column-count mismatch while parsing upstream binlog events.
+- Retrieval Keywords: DM, downstream TiDB table with more columns, binlog-schema update, Column count doesn't match value count, ErrCode 36027, sync-unit, gen insert sqls failed, schema mismatch, upstream table schema, downstream table schema, resume-task, query-status, tiup dmctl --master-addr, sharded tables, Manage Table Schemas of Tables to be Migrated
+- Follow-up Guidance: The content says to set the table schema that corresponds to the upstream binlog event data by using `binlog-schema update`, then use `resume-task` and `query-status` to verify the task is running correctly.
+- Classification Note: This is classified as a self-managed DM data pipeline schema-mismatch case because the official content focuses on binlog replication errors and dmctl commands for table schema handling, task resume, and status checking.
+
+## Official Source Content
+
+# Migrate Data to a Downstream TiDB Table with More Columns
+
+This document provides the additional steps to be taken when you migrate data to a downstream TiDB table with more columns than the corresponding upstream table. For regular migration steps, see the following migration scenarios:
+
+- [Migrate Small Datasets from MySQL to TiDB](https://docs.pingcap.com/tidb/stable/migrate-small-mysql-to-tidb)
+- [Migrate Large Datasets from MySQL to TiDB](https://docs.pingcap.com/tidb/stable/migrate-large-mysql-to-tidb)
+- [Migrate and Merge MySQL Shards of Small Datasets to TiDB](https://docs.pingcap.com/tidb/stable/migrate-small-mysql-shards-to-tidb)
+- [Migrate and Merge MySQL Shards of Large Datasets to TiDB](https://docs.pingcap.com/tidb/stable/migrate-large-mysql-shards-to-tidb)
+## Use DM to migrate data to a downstream TiDB table with more columns
+
+When replicating the upstream binlog, DM tries to use the current table schema of the downstream to parse the binlog and generate the corresponding DML statements. If the column number of the table in the upstream binlog does not match the column number in the downstream table schema, the following error occurs:
+
+```json
+"errors": [
+    {
+        "ErrCode": 36027,
+        "ErrClass": "sync-unit",
+        "ErrScope": "internal",
+        "ErrLevel": "high",
+        "Message": "startLocation: [position: (mysql-bin.000001, 2022), gtid-set:09bec856-ba95-11ea-850a-58f2b4af5188:1-9 ], endLocation: [ position: (mysql-bin.000001, 2022), gtid-set: 09bec856-ba95-11ea-850a-58f2b4af5188:1-9]: gen insert sqls failed, schema: log, table: messages: Column count doesn't match value count: 3 (columns) vs 2 (values)",
+        "RawCause": "",
+        "Workaround": ""
+    }
+]
+```
+
+The following is an example upstream table schema:
+
+```sql
+# Upstream table schema
+CREATE TABLE `messages` (
+  `id` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+```
+
+The following is an example downstream table schema:
+
+```sql
+# Downstream table schema
+CREATE TABLE `messages` (
+  `id` int(11) NOT NULL,
+  `message` varchar(255) DEFAULT NULL, # This is the additional column that only exists in the downstream table.
+  PRIMARY KEY (`id`)
+)
+```
+
+When DM tries to use the downstream table schema to parse the binlog event generated by the upstream, DM reports the above `Column count doesn't match` error.
+
+In such cases, you can use the `binlog-schema` command to set a table schema for the table to be migrated from the data source. The specified table schema needs to correspond to the binlog event data to be replicated by DM. If you are migrating sharded tables, for each sharded table, you need to set a table schema in DM to parse binlog event data. The steps are as follows:
+
+1. Create a SQL file in DM and add the `CREATE TABLE` statement that corresponds to the upstream table schema to the file. For example, save the following table schema to `log.messages.sql`. For DM v6.0 or later versions, you can update the table schema by adding the `--from-source` or `--from-target` flag without creating a SQL file. For details, see [Manage Table Schemas of Tables to be Migrated](https://docs.pingcap.com/tidb/stable/dm/dm-manage-schema).
+
+    ```sql
+    # Upstream table schema
+    CREATE TABLE `messages` (
+    `id` int(11) NOT NULL,
+    PRIMARY KEY (`id`)
+    )
+    ```
+
+2. Use the `binlog-schema` command to set the table schema for the table to be migrated from the data source. At this time, the data migration task should be in the Paused state due to the above `Column count doesn't match` error.
+
+    ```
+    tiup dmctl --master-addr ${advertise-addr} binlog-schema update -s ${source-id} ${task-name} ${database-name} ${table-name} ${schema-file}
+    ```
+
+    The descriptions of parameters in this command are as follows:
+
+    |Parameter |Description|
+    |:-- |:---|
+    |`-master-addr` |Specifies `${advertise-addr}` of any DM-master node in the cluster where dmctl is to be connected. `${advertise-addr}` indicates the address that DM-master advertises to the outside world.|
+    |`binlog-schema set`| Manually set the schema information.|
+    |`-s` | Specifies the source. `${source-id}` indicates the source ID of MySQL data.|
+    |`${task-name}`| Specifies the name of the migration task defined in the `task.yaml` configuration file of the data migration task.|
+    |`${database-name}`| Specifies the database. `${database-name}` indicates the name of the upstream database. |
+    |`${table-name}`| Specifies the name of the upstream table. |
+    |`${schema-file}`| Specifies the table schema file to be set.|
+
+    For example:
+
+    ```
+    tiup dmctl --master-addr 172.16.10.71:8261 binlog-schema update -s mysql-01 task-test -d log -t message log.message.sql
+    ```
+
+3. Use the `resume-task` command to resume the migration task in the Paused state.
+
+    ```
+    tiup dmctl --master-addr ${advertise-addr} resume-task ${task-name}
+    ```
+
+4. Use the `query-status` command to confirm that the data migration task is running correctly.
+
+    ```
+    tiup dmctl --master-addr ${advertise-addr} query-status ${task-name}
+    ```

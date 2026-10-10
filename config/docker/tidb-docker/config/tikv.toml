@@ -1,0 +1,8 @@
+[storage]
+reserve-space = "0MB"
+
+[rocksdb]
+max-open-files = 256
+
+[raftdb]
+max-open-files = 256

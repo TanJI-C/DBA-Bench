@@ -1,0 +1,50 @@
+schema_version: 1
+corpus_id: tidb81-curated-sf07
+scenario_id: tidb_system_failure_pending_offline
+case_id: online_unsafe_recovery_failed_stores
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound SF07 facts for TiDB v8.1 Online Unsafe Recovery, complete failed Store
+  identity, asynchronous Finished state, affected record/index scope, lossy RPO, and safety
+  boundaries.
+provenance:
+  tidb_release: v8.1.0
+  official_source: knowledge/tidb_src/online-unsafe-recovery.md
+  source_lock: knowledge/tidb/curated/tidb_system_failure_pending_offline/.source-lock.json
+  source_lock_sha256: 67858a7a0640af652d61213ad3e7ea37e621aaa064dfbc0b1623cb8ad9a04efc
+sources:
+  - path: knowledge/tidb/curated/tidb_system_failure_pending_offline/sf07_online_unsafe_recovery.md
+    sha256: 31d18d9c7a2d46aa000fe32ba9f1867401edd127f8671b3c69265605bc0ad27d
+    pinned_references:
+      - knowledge/tidb_src/online-unsafe-recovery.md
+      - https://docs.pingcap.com/tidb/stable/online-unsafe-recovery
+  - path: knowledge/tidb/curated/tidb_system_failure_pending_offline/sf07_scope_and_rpo_contract.md
+    sha256: 873dade7f2e68a8ccd069e4c1a25a3a4a177ff939be6e3b93c886e99c2960f6a
+    pinned_references:
+      - knowledge/tidb_src/online-unsafe-recovery.md
+      - docs/scenarios/tidb/system_failure/tidb_system_failure_pending_offline.contract.md
+  - path: knowledge/tidb/curated/tidb_system_failure_pending_offline/sf07_observability_and_safety_contract.md
+    sha256: 79ba2573c542096e9746d275a53d9e604551df2a3f8c62b18afddd86d131913b
+    pinned_references:
+      - docs/standards/evaluation/dp-op-sp.standard.md
+      - docs/scenarios/tidb/system_failure/tidb_system_failure_pending_offline.contract.md
+materialized:
+  status: ready
+  corpus_id: tidb81-unified-kb
+  processed_path: knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
+  serving_path: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+  provenance_path: knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
+  manifest_path: knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
+  processed_sha256: f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5
+  serving_sha256: e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a
+  provenance_sha256: 420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866
+  reason: This Case source is merged into the shared official-plus-curated corpus; no Case-private index is permitted.
+build:
+  backends: [sqlite, chroma]
+  collection_name: tidb81_unified_docs
+  sqlite_path: data/knowledge_bases/tidb81_unified_docs
+  chroma_path: data/knowledge_bases/tidb81_unified_chroma
+  command: conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend <sqlite|chroma> --knowledge-mode hierarchical --source-file knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl --collection tidb81_unified_docs
+  no_fallback: true
+  stale_source_policy: fail

@@ -1,0 +1,30 @@
+experiment_id: pg_system_failure_parallel_example
+
+benchmark:
+  systems: [postgresql]
+  categories: [query_perf, system_failure]
+  scenarios:
+    - pg_system_failure_deadlock
+    - pg_system_failure_connection_storm
+    - pg_system_failure_lock_contention
+
+agents:
+  - id: mock
+    mode: mock
+    max_turns: 30
+
+repetitions: 1
+seeds: [11]
+
+runtime:
+  # concurrency is an upper bound. Host-exclusive scenarios still run alone.
+  concurrency: 2
+  timeout_seconds: 1800
+  port_base: 16432
+  container_prefix: aiopsbench-pg-par
+  # Create every fault image serially first. Parallel execution only accepts use.
+  fault_snapshot: use
+  llm_config: config/llm_config.json
+  isolation:
+    # Worker capacity is derived from the selected scenario cases.
+    numa_policy: separate

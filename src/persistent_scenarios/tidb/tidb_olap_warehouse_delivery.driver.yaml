@@ -1,0 +1,78 @@
+# Instance driver contract for tidb_olap_warehouse_delivery (tidb5-portfolio / OLAP).
+#
+# This file is NOT part of the core persistent-scenario spec (the frozen loader rejects
+# unknown top-level keys by design). It is the OLAP driver assembly input: provisioning
+# constants, queue discipline defaults and the measured v8.1.0 runtime options. Values
+# follow the three-path difficulty calibration.
+fact_table: wh.orders
+history_batch:
+  batch_id: 0
+  history_row_count: 1000000        # LOAD DATA ~7.6k rows/s measured (v8.1.0, 4GB TiKV)
+batches:
+- batch_id: 1
+  stage_table: wh.stage_batch_a
+  row_count: 400000                 # LOAD DATA ~12.7k rows/s; single-transaction publish ~12.2k rows/s
+  skew_dimension: region
+  skew_regions: [1, 2, 3]
+  skew_share: 0.66
+  reports_held_at_provision: true   # batch A's report class is gated until the correction wave completes and an operator releases it
+- batch_id: 2
+  stage_table: wh.stage_batch_b
+  row_count: 400000
+  skew_dimension: region
+  skew_regions: [8, 9, 10]
+  skew_share: 0.60
+correction_wave:                    # upstream re-delivery (t=26)
+  corrected_row_modulus: 8          # corrected subset: order_id % 8 == 0
+  price_factor: 1.06
+  cost_factor: 0.97
+  republish: DELETE batch + INSERT ... SELECT single transaction   # same atomicity as the ingest path
+  registry_marker: wh.batch_registry.republished_at
+maintenance_analyze:                # release-window decoy (t=40)
+  form: ANALYZE TABLE (FULL)        # sequential over the wave-rewritten stage tables
+  tables: [wh.stage_batch_a, wh.stage_batch_b]
+  audit: wh.config_audit (started/finished rows)
+heartbeat:
+  interval_seconds: 60
+  latency_budget_seconds: 30
+  query_ids: [region_recent, channel_recent, item_recent]
+queue:
+  healthy_max_workers: 2
+  report_worker_ceiling: 6          # pool size; the control table governs actual concurrency
+  report_memory_quota_mb: 512       # session tidb_mem_quota_query; released changes are audited
+  report_attempt_timeout_seconds: 900
+  max_attempts: 3
+  report_hold_filter: wh.batch_registry.reports_held   # report claims skip held batches
+ingest:
+  deadline_offset_seconds: 600
+import_path:                        # measured v8.1.0 evidence
+  staging_load: LOAD DATA LOCAL INFILE   # 12.7k rows/s; requires local_infile
+  publish: INSERT ... SELECT single transaction  # batch atomicity proven by poisoned-PK probe
+runtime_options:                    # measured cluster assumptions; budgets assume it
+  tikv_memory_mb: 8192              # memory trail: 2GB TiKV OOM-killed on large-batch LOAD
+                                    # DATA (exit 137); 4GB TiKV nodes (two of three) were
+                                    # cgroup-OOM-killed by the smoke write
+                                    # storm (five 1M+ row imports + four fact-table
+                                    # TRUNCATEs in 40 minutes) - 8GB holds the whole set
+  tidb_memory_mb: 4096              # memory trail: 1GB TiDB kernel-OOM-killed twice
+                                    # (800k single-txn DELETE; 400k LOAD DATA tail); 2GB nodes
+                                    # carry the delivery timeline but hit 8176 in the
+                                    # back-to-back-reset smoke shape (publish + 2 report
+                                    # workers + ANALYZE overlap; 1M history reload after a
+                                    # TRUNCATE) - the healthy configuration must deliver
+                                    # reliably, so the warehouse deployment budgets 4GB
+  auto_analyze_ratio: 0.5           # 400k/1.4m = 29% stays below: the event window sees stale stats
+statistics_maintenance:
+  analyze_form: "ANALYZE TABLE wh.orders WITH 0.05 SAMPLERATE"  # 7-13s idle / 16.4s under
+                                    # load / 31.7s inside the full repair window
+                                    # (three-path smoke, fresh cluster); FULL ANALYZE
+                                    # was killed (8176) right after a publish wave, and even
+                                    # the sampled form needs the report memory quota capped
+                                    # (config report_memory_quota_mb=256) in that window -
+                                    # two 512MB report workers + the backfill publish +
+                                    # unbounded ANALYZE exceed the 2GB TiDB instance limit
+  repair_session_quota_mb: 512      # the scripted maintenance session quota; spills instead
+                                    # of being 8176-killed (measured)
+  stats_delta_flush_lag_seconds: 60 # mysql.stats_meta.modify_count/count flush is lazy (>60s
+                                    # measured): final-state sampling is late enough; in-window
+                                    # modify_count reads can still be 0 after a publish

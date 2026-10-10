@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-rg04",
+  "source_lock": ".source-lock.json",
+  "files": [
+    {
+      "path": "rg04_policy_semantics.md",
+      "sha256": "aad9435b32ffd1e593a81facf7b78e1d3a32c68caf4d10d7ac58a84d91056357"
+    },
+    {
+      "path": "rg04_inheritance_and_progress.md",
+      "sha256": "336ab7a8df4b4eccb1ac006b3f0d2717344163343dbe243558e53a7f97c0d7f2"
+    },
+    {
+      "path": "rg04_physical_validation.md",
+      "sha256": "61fa46e125f10319685da14d08f776f37628ce015604f828081fdbe38b3cfbe4"
+    },
+    {
+      "path": "tidb81_rg04_chunks.jsonl",
+      "sha256": "d071c94f0f4929b2b42144bd6b78fde4564a2cb5292a235bdbdd2fcdbbcf1729"
+    }
+  ]
+}

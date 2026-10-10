@@ -1,0 +1,74 @@
+# Bug fixes for PD TiFlash TiCDC and TiDB Binlog in 5.3.0
+
+## Knowledge Metadata
+
+- Knowledge Type: `release`
+- Source Corpus: TiDB 8.1 official English documentation
+- Source Repository: `https://github.com/pingcap/docs`
+- Source Commit: `d9124e84872b8f9915123444ab4402f9a36c33c9`
+- Source File: `knowledge/tidb_src/releases/release-5.3.0.md`
+- Source Title: `TiDB 5.3 Release Notes`
+- Source Heading Path: `TiDB 5.3 Release Notes > Bug Fixes`
+- Source Line Ranges: `375-411`
+- Source Scope: `self_managed`
+- Primary Component: `shared`
+- Related Components: `pd`, `tiflash`, `ticdc`, `tidb`
+- Topic Tags: `bug-fixes`, `scheduling`, `leader-election`, `replication`, `kafka`, `avro`, `open-protocol`, `binlog`, `log-search`
+- Documentation Version: `8.1`
+- Chunk ID: `tidb81_release_0260_dd91ba7b57`
+- Source ID: `tidb-docs-8.1:releases/release-5.3.0.md#bug-fixes`
+- Review Status: `ai_classified`
+- Source Extraction: `matched_markdown_sections`
+- Official Content SHA256: `66577aa690069e14e3015e5a789a85dafe03944c472c27e6abb5796162e6b581`
+
+## Source Links
+
+- Official Documentation: https://docs.pingcap.com/tidb/stable/releases/release-5.3.0#bug-fixes
+- Pinned GitHub Source: https://github.com/pingcap/docs/blob/d9124e84872b8f9915123444ab4402f9a36c33c9/releases/release-5.3.0.md
+
+## Retrieval Guidance
+
+- Use When: Use this chunk when searching TiDB 5.3.0 bug fixes for PD scheduling and leader election, TiFlash startup, replication wait index, log search, collation and expression parsing, TiCDC Kafka or protocol encoding behavior, or TiDB Binlog checkpoint updates.
+- Retrieval Keywords: PD incorrectly delete the peers with data and in pending status, PD does not fix down peers in time, scatter range scheduler cannot schedule empty Regions, key manager cost too much CPU, hot Region scheduler data race, slow leader election stuck Region syncer, TiFlash Store Size statistics, library nsl, wait index, default timeout of 5 minutes, log search large log volume, searching old historical logs, Block schema mismatch, Can't compare Decimal types, 3rd arguments of function substringUTF8 must be constants, TiCDC upstream TiDB instance unexpectedly exits, duplicate requests to the same Region, max-message-size, writing a Kafka message, force-replicate, scanning stock data, Open Protocol format, Avro format, TiDB Binlog checkpoint cannot be updated
+- Follow-up Guidance: 
+- Classification Note: This is a release-notes bug-fix summary covering self-managed PD, TiFlash, TiCDC, and TiDB Binlog issues under TiDB 5.3 Release Notes > Bug Fixes.
+
+## Official Source Content
+
+- Fix the issue that PD incorrectly delete the peers with data and in pending status because the number of peers exceeds the number of configured peers [#4045](https://github.com/tikv/pd/issues/4045)
+    - Fix the issue that PD does not fix down peers in time [#4077](https://github.com/tikv/pd/issues/4077)
+    - Fix the issue that the scatter range scheduler cannot schedule empty Regions [#4118](https://github.com/tikv/pd/pull/4118)
+    - Fix the issue that the key manager cost too much CPU [#4071](https://github.com/tikv/pd/issues/4071)
+    - Fix the data race issue that might occur when setting configurations of hot Region scheduler [#4159](https://github.com/tikv/pd/issues/4159)
+    - Fix slow leader election caused by stuck Region syncer [#3936](https://github.com/tikv/pd/issues/3936)
+
++ TiFlash
+
+    - Fix the issue of inaccurate TiFlash Store Size statistics
+    - Fix the issue that TiFlash fails to start up on some platforms due to the absence of library `nsl`
+    - Block the infinite wait of `wait index` when writing pressure is heavy (a default timeout of 5 minutes is added), which prevents TiFlash from waiting too long for data replication to provide services
+    - Fix the slow and no result issues of the log search when the log volume is large
+    - Fix the issue that only the most recent logs can be searched when searching old historical logs
+    - Fix the possible wrong result when a new collation is enabled
+    - Fix the possible parsing errors when an SQL statement contains extremely long nested expressions
+    - Fix the possible `Block schema mismatch` error of the Exchange operator
+    - Fix the possible `Can't compare` error when comparing Decimal types
+    - Fix the `3rd arguments of function substringUTF8 must be constants` error of the `left/substring` function
+
++ Tools
+
+    + TiCDC
+
+        - Fix the issue that TiCDC replication task might terminate when the upstream TiDB instance unexpectedly exits [#3061](https://github.com/pingcap/tiflow/issues/3061)
+        - Fix the issue that TiCDC process might panic when TiKV sends duplicate requests to the same Region [#2386](https://github.com/pingcap/tiflow/issues/2386)
+        - Fix unnecessary CPU consumption when verifying downstream TiDB/MySQL availability [#3073](https://github.com/pingcap/tiflow/issues/3073)
+        - Fix the issue that the volume of Kafka messages generated by TiCDC is not constrained by `max-message-size` [#2962](https://github.com/pingcap/tiflow/issues/2962)
+        - Fix the issue that TiCDC sync task might pause when an error occurs during writing a Kafka message [#2978](https://github.com/pingcap/tiflow/issues/2978)
+        - Fix the issue that some partitioned tables without valid indexes might be ignored when `force-replicate` is enabled [#2834](https://github.com/pingcap/tiflow/issues/2834)
+        - Fix the issue that scanning stock data might fail due to TiKV performing GC when scanning stock data takes too long [#2470](https://github.com/pingcap/tiflow/issues/2470)
+        - Fix a possible panic issue when encoding some types of columns into Open Protocol format [#2758](https://github.com/pingcap/tiflow/issues/2758)
+        - Fix a possible panic issue when encoding some types of columns into Avro format [#2648](https://github.com/pingcap/tiflow/issues/2648)
+
+    + TiDB Binlog
+
+        - Fix the issue that when most tables are filtered out, checkpoint cannot be updated under some special load [#1075](https://github.com/pingcap/tidb-binlog/pull/1075)

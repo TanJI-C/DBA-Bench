@@ -1,0 +1,16 @@
+{
+  "workload_name": "tidb-mf-qp04-benchops_mf_qp04",
+  "init_sql": "init.sql",
+  "database": "benchops_mf_qp04",
+  "tables": [
+    "mf_qp04_order_events_a",
+    "mf_qp04_order_events_b",
+    "mf_qp04_order_events_control_a",
+    "mf_qp04_order_events_control_b",
+    "mf_qp04_order_events_noise_a",
+    "mf_qp04_order_events_noise_b"
+  ],
+  "rows_per_table": 2000,
+  "maintenance_table": "mf_qp04_compaction_buffer",
+  "maintenance_rows": 20000
+}

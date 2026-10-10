@@ -1,0 +1,202 @@
+# Instance 1: tidb_oltp_hotspot_resilience — promotion hotspot, settlement
+# batch residual coupling into the second wave, reversible TiKV slow node with
+# a post-release catch-up burst, legacy client retry amplification, and the
+# documented ops.client_config application levers (order_id_prefix,
+# settlement_paused).
+#
+# All timeline and budget values are PROVISIONAL candidates from the tidb5
+# portfolio contract (75-minute timeline). The instance stays
+# development_provisional / measure-only until the real three-path calibration.
+# Hardening changed mechanisms only: no SO budget, deadline or
+# timeout constant moved.
+#
+# TiDB durability floors are intentionally NOT expressed as guc_effective
+# items while TIDB-REQ-001 (TiDB scope vocabulary) is unresolved.
+protocol_version: persistent-scenario-v2
+scenario_id: tidb_oltp_hotspot_resilience
+family_id: tidb_oltp_portfolio
+citation_tag: TB-PS-04
+system: tidb
+mode: timeline
+warmup_seconds: 300
+input_stop_seconds: 4200
+agent_stop_seconds: 4350
+horizon_seconds: 4500
+inspection_interval_seconds: 300
+calibration:
+  status: development_provisional
+  evidence_id: tidb5_oltp_hotspot_design_20260918
+environment:
+  # Pinned v8.1.0 release images (pd/tikv/tidb digests) are rendered by the
+  # TiDB backend from TIDB_V8_1_0; base_image names the release pin here.
+  workload: tidb_oltp_hotspot
+  scale: 1
+  base_image: tidb-v8.1.0-portfolio
+  nodes:
+  - {node_id: pd-0, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: pd-1, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: pd-2, role: pd, resources: {worker_physical_cores: 1, worker_memory_mb: 4096, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+  - {node_id: tikv-0, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tikv-1, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tikv-2, role: tikv, resources: {worker_physical_cores: 1, worker_memory_mb: 2048, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+  - {node_id: tidb-0, role: tidb, resources: {worker_physical_cores: 1, worker_memory_mb: 1024, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+  - {node_id: tidb-1, role: tidb, resources: {worker_physical_cores: 1, worker_memory_mb: 1024, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+services:
+- objective_id: trade_good_fraction
+  load_class: oltp
+  service_id: trade
+  deadline_seconds: 10.0        # provisional: per logical trade, from first submission
+  # Calibrated: the declared incident envelope
+  # (throttle window + hot-region catch-up burst + retry amplification) is
+  # designed to consume ~42% of the whole-window trade SLA even under the
+  # honest complete repair. Three post-hardening reference samples span
+  # 0.565 / 0.575 / 0.5783; 0.54 = worst observed reference minus 2.5pp
+  # margin. Post-recovery health stays enforced by trade_continuity (0.90,
+  # rolling 300s) and commerce conservation.
+  min_success_fraction: 0.54
+required_state:
+- check_id: trade_continuity
+  kind: continuity
+  service_id: trade
+  window_seconds: 300
+  min_success_fraction: 0.90
+integrity_checks:
+- check_id: commerce_conservation
+  verifier_id: commerce_ledger_conservation
+  params: {}
+- check_id: orders_idempotency_unique
+  verifier_id: orders_idempotency_uniqueness
+  params: {}
+- check_id: unknown_commit_dedup_truth
+  verifier_id: unknown_commit_dedup
+  params: {}
+safety_policy:
+  allowed_action_classes:
+  - sql_read
+  - sql_write_control_table
+  - sql_write_business
+  - terminate_workload_session
+  - config_change
+  - store_maintenance
+  - service_maintenance
+  - router_maintenance
+  protected_objects:
+  - {name_pattern: shop.orders}
+  - {name_pattern: shop.payments}
+  - {name_pattern: shop.inventory}
+  read_only_action_classes:
+  - sql_read
+  authorized_guc_names: []      # provisional pending TIDB-REQ-001 scope vocabulary
+  guc_floor: {}
+diagnosis_contract:
+  incidents:
+  - incident_id: hotspot_slow_store_retry_amplification
+    statement: >-
+      促销把订单集中到同一组商品，热门库存行的行锁与事务争用叠加承载相关 Region 的
+      TiKV 节点 I/O 降速，旧版结算客户端随即启用无退避的激进重试，重试放大与不确定
+      提交共同拖垮交易期限预算并威胁库存一致性。
+    conditions:
+    - condition_id: hot_row_lock_contention
+      aliases:
+      - 促销流量集中在同一商品组，热门库存行的行锁与事务争用导致下单等待
+      - 同一行锁争用是下单延迟上升的主要原因之一
+      contradictions:
+      - 数据库磁盘空间耗尽
+      - 应用连接池耗尽
+    - condition_id: slow_store_io_degradation
+      aliases:
+      - 承载热点 Region 的 TiKV 存储节点 I/O 被降速，提交与读延迟上升
+      - 单个 TiKV store 资源受限拖慢了部分数据范围的访问
+      contradictions:
+      - 全集群网络故障
+    - condition_id: legacy_retry_amplification
+      aliases:
+      - 旧版客户端启用短超时高重试且无退避的策略，重试放大压力并产生提交结果未知的事务
+      - 客户端超时不等于回滚，未知提交必须用幂等键核对
+      contradictions:
+      - 服务端主动拒绝所有交易
+events:
+- event_id: promo_wave_1
+  capability_id: promo_hotspot
+  occurrence: 1
+  entity: promo_schedule_a
+  start_seconds: 600
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: silent
+  payload: {tier: promo_a}
+- event_id: settlement_long_tx_1
+  capability_id: settlement_long_tx
+  occurrence: 1
+  entity: settlement-client-1
+  start_seconds: 660
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: alert
+  payload:
+    # Bounded settlement batch: each leg holds one inventory row for the hold
+    # window, commits, and (unless the documented ops.client_config
+    # settlement_paused lever is set) moves on after a short gap. Legs 3-4 sit
+    # on a promotion wave-2 hot row (SKU-0012 is in promo group B): an
+    # unresolved batch still holds a wave-2 row while the second wave runs.
+    queue: ["SKU-0000", "SKU-0000", "SKU-0012", "SKU-0012"]
+    hold_seconds: 600
+    leg_gap_seconds: 5
+- event_id: tikv_slow_throttle_1
+  capability_id: tikv_slow_throttle
+  occurrence: 1
+  entity: storage-window-1
+  start_seconds: 1080
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: alert
+  payload: {target: tikv/tikv-1, max_bytes_per_sec: 1048576, table: shop.orders}  # provisional strength
+- event_id: legacy_client_release_1
+  capability_id: legacy_client_release
+  occurrence: 1
+  entity: settlement-fleet
+  start_seconds: 1500
+  activation_timeout_seconds: 30
+  response_deadline_seconds: 300
+  trigger: alert
+  # config_version is a floor: the release lands above any agent publication
+  # of the same control row (released_config_version) and only rewrites the
+  # retry columns, so published order_id_prefix / settlement_paused survive.
+  payload: {config_version: 2, request_timeout_ms: 300, max_retries: 20, retry_backoff_ms: 0, retry_jitter_ms: 0}
+- event_id: promo_wave_2
+  capability_id: promo_hotspot
+  occurrence: 2
+  entity: promo_schedule_b
+  start_seconds: 2400
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: silent
+  payload: {tier: promo_b}
+- event_id: tikv_throttle_release_1
+  capability_id: tikv_throttle_release
+  occurrence: 1
+  entity: storage-window-1
+  start_seconds: 3300
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: silent
+  payload: {target: tikv/tikv-1, max_bytes_per_sec: 0}  # measured baseline (mech1 m3): 0 = unlimited; release restores it
+- event_id: tikv_catch_up_burst_1
+  capability_id: tikv_catch_up_burst
+  occurrence: 1
+  entity: storage-window-1
+  start_seconds: 3400
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: silent
+  payload:
+    # Post-release catch-up state transition: the store's serving headroom is
+    # physically reduced for a bounded window while the accumulated backlog
+    # catches up (real container CPU ceiling, auto-restored). The promo hot
+    # region re-degrades only while its leaders remain concentrated on this
+    # store (tikv_slow_throttle_1 proved the store carries them), so releasing
+    # the throttle without leader/load rebalancing loses the post-burst
+    # recovery window.
+    target: tikv/tikv-1
+    cpu_limit: 0.45
+    burst_seconds: 420

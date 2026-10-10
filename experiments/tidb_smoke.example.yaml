@@ -1,0 +1,16 @@
+experiment_id: tidb-smoke
+benchmark:
+  systems: [tidb]
+  categories: [query_perf]
+  scenarios: [tidb_query_perf_index_merge_selection_failure]
+agents:
+  - id: mock
+    mode: mock
+repetitions: 1
+seeds: [11]
+runtime:
+  concurrency: 1
+  timeout_seconds: 1800
+  port_base: 24000
+  container_prefix: aiopsbench-tidb-smoke
+  fault_snapshot: auto

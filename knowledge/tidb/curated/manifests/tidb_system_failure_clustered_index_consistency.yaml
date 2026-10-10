@@ -1,0 +1,149 @@
+schema_version: 1
+corpus_id: tidb81-curated-k12
+scenario_id: tidb_system_failure_clustered_index_consistency
+case_id: odku_mutable_clustered_pk_index_drift
+product_version: v6.5.0-v7.5.0
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB facts for clustered primary-key handle changes, ODKU,
+  8141/8134 consistency evidence, assertion scope, fixed-release coverage,
+  canonical-ledger repair selection, and closed-loop verification.
+provenance:
+  tidb_issue: https://github.com/pingcap/tidb/issues/44565
+  tidb_fix_pr: https://github.com/pingcap/tidb/pull/44566
+  vulnerable_release: v6.5.0
+  fixed_release: v7.5.0
+  source_lock: knowledge/tidb/curated/tidb_system_failure_clustered_index_consistency/.source-lock.json
+  source_lock_sha256: 69796af950fec7d875e5f054a33a8c2d5893426751c19eca307fa85017f80c29
+  curated_source_sha256:
+    k12_clustered_handle_and_odku.md: cfc5f4a0f271bc2fd6e09cd7c237dbcd2c2b002b9a97afa8eb483f68af2fd4f5
+    k12_error_scope_and_release.md: 81abc0eddcca426fd3e6c23d18f46bcfe6b83e42e38aabdf963213105154da7a
+    k12_repair_and_safety_contract.md: 3976d84f3d2a979dc2d2ba2e5695c7bcb8f8d9f11ff916a3c6a3ac07ebd97296
+  chunk_source_sha256: 399c2e6d4342a5bf7a9982949afeecd6aefe6d6ade1ead92b40cafdbd1043433
+sources:
+  - path: knowledge/tidb/curated/tidb_system_failure_clustered_index_consistency/k12_clustered_handle_and_odku.md
+    sha256: cfc5f4a0f271bc2fd6e09cd7c237dbcd2c2b002b9a97afa8eb483f68af2fd4f5
+    pinned_references:
+      - https://github.com/pingcap/tidb/issues/44565
+      - https://github.com/pingcap/tidb/pull/44566
+      - knowledge/tidb_src/clustered-indexes.md
+  - path: knowledge/tidb/curated/tidb_system_failure_clustered_index_consistency/k12_error_scope_and_release.md
+    sha256: 81abc0eddcca426fd3e6c23d18f46bcfe6b83e42e38aabdf963213105154da7a
+    pinned_references:
+      - knowledge/tidb_src/troubleshoot-data-inconsistency-errors.md
+      - knowledge/tidb_src/system-variables.md
+      - https://docs.pingcap.com/tidb/stable/system-variables
+  - path: knowledge/tidb/curated/tidb_system_failure_clustered_index_consistency/k12_repair_and_safety_contract.md
+    sha256: 3976d84f3d2a979dc2d2ba2e5695c7bcb8f8d9f11ff916a3c6a3ac07ebd97296
+    pinned_references:
+      - docs/standards/evaluation/dp-op-sp.standard.md
+      - docs/scenarios/tidb/system_failure/tidb_system_failure_clustered_index_consistency.contract.md
+hops:
+  - hop_id: H1
+    knowledge_question: What relationship connects the ODKU error to the target index evidence?
+    expected_concept: A mutable clustered primary-key handle and a participating secondary index make the ODKU path a row-handle/index-maintenance problem, not a query-cache problem.
+    version_scope: TiDB v6.5.0 clustered-index and ODKU behavior
+    required_environment_binding: target SHOW CREATE TABLE, index catalog, actual ODKU, 8141/8134 and primary/secondary reads
+    decision_changed: root-cause and affected-object selection
+    counterfactual: healthy nonclustered primary-key or no-ODKU neighbor is treated as the same fault
+    allowed_source_scope: [self_managed]
+    visible_evidence: schema DDL, index definitions, write statements, consistency output, forced access paths, and logs
+  - hop_id: H2
+    knowledge_question: Why can an ON UPDATE timestamp change the physical handle during duplicate update?
+    expected_concept: An ON UPDATE timestamp participating in the clustered primary key can change the row handle even when the duplicate-update list omits that column.
+    version_scope: TiDB v6.5.0 timestamp and clustered-handle semantics
+    required_environment_binding: actual old/new state_ts values, account identity, duplicate-update SQL, and repeated write result
+    decision_changed: whether a handle transition must be included in the diagnosis
+    counterfactual: ordinary UPDATE or immutable clustered key is assumed equivalent
+    allowed_source_scope: [self_managed]
+    visible_evidence: SHOW CREATE TABLE, canary history, current handle reads, and ledger event rows
+  - hop_id: H3
+    knowledge_question: What does tidb_txn_assertion_level cover and what does it not repair?
+    expected_concept: OFF/FAST/STRICT and global/session scope must be checked on every live endpoint; STRICT protects future writes or exposes conflicts but cannot repair historical rows.
+    version_scope: TiDB v6.5.0-v7.5.0 transaction assertion variables
+    required_environment_binding: every TiDB endpoint, fresh session, global value, session value, and connection-pool behavior
+    decision_changed: future-write guard and verification scope
+    counterfactual: changing one global value or only one session is treated as complete recovery
+    allowed_source_scope: [self_managed]
+    visible_evidence: global/session variable queries through each endpoint and fresh connections
+  - hop_id: H4
+    knowledge_question: Which release boundary and transaction paths matter for recovery?
+    expected_concept: The vulnerable/fixed release matrix must cover PD, TiKV, and TiDB, and both autocommit and explicit-transaction ODKU canaries must be repeated after upgrade.
+    version_scope: TiDB v6.5.0 vulnerable and v7.5.0 fixed release boundary
+    required_environment_binding: all component versions, upgrade results, endpoint readiness, autocommit path, and explicit transaction path
+    decision_changed: whether writes may resume and which upgrade scope is complete
+    counterfactual: upgrading one TiDB endpoint or checking only a healthy service endpoint is treated as sufficient
+    allowed_source_scope: [self_managed]
+    visible_evidence: cluster release matrix, component inventory, upgrade acknowledgements, and canary results
+  - hop_id: H5
+    knowledge_question: What must happen before any upgrade or repair action?
+    expected_concept: Stop the target ODKU writer and preserve consistency, primary/secondary, ledger, and schema evidence before upgrade or DDL.
+    version_scope: K12 forensic and write-quiescence contract
+    required_environment_binding: target writer, forensic snapshots, ledger state, and action ordering
+    decision_changed: safe repair start boundary
+    counterfactual: fixing the index or upgrading before capturing canonical evidence
+    allowed_source_scope: [self_managed]
+    visible_evidence: action history, ADMIN CHECK TABLE, forced reads, ledger query, and writer state
+  - hop_id: H6
+    knowledge_question: How should the repair family be selected?
+    expected_concept: Rebuild affected indexes only when clustered records are trusted; otherwise logically reconstruct from the append-only ledger and switch within the target table family.
+    version_scope: K12 canonical-truth and repair-family contract
+    required_environment_binding: ledger-to-target comparison, row-handle trust, all affected secondary indexes, and protected neighbors
+    decision_changed: index rebuild versus logical reconstruction
+    counterfactual: assertion-only change or index-only rebuild is treated as historical repair without checking canonical truth
+    allowed_source_scope: [self_managed]
+    visible_evidence: ledger rows, primary/secondary path comparison, index catalog, and rebuild/reconstruction result
+  - hop_id: H7
+    knowledge_question: Which actions are inside the safe repair boundary?
+    expected_concept: Repair is bounded to the target table family and declared canaries; ledger, healthy neighbors, raw TiKV keys, and unapproved services remain protected.
+    version_scope: K12 DP/OP/SP safety contract
+    required_environment_binding: SQL targets, action scope, protected-object baselines, and service operations
+    decision_changed: whether a proposed mutation is authorized
+    counterfactual: unbounded DDL/DML, raw-key mutation, or protected-table change is treated as a valid shortcut
+    allowed_source_scope: [self_managed]
+    visible_evidence: SQL text, action history, protected snapshots, and service target
+  - hop_id: H8
+    knowledge_question: What proves that recovery is complete?
+    expected_concept: Component versions, endpoint assertion scope, schema contract, official consistency, both forced paths, ledger truth, new canaries, and healthy neighbors must form one closed loop.
+    version_scope: TiDB v7.5.0 final acceptance and K12 business contract
+    required_environment_binding: final cluster state, all endpoint variables, target schema/data/indexes, ledger, canaries, and healthy controls
+    decision_changed: final submit boundary
+    counterfactual: one green check, a successful DDL, or a clean endpoint is treated as full recovery
+    allowed_source_scope: [self_managed]
+    visible_evidence: final SQL/check results, release inventory, canary rows, and protected-state comparison
+materialization:
+  formal_processed_corpus: knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
+  formal_serving_corpus: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+  formal_provenance: knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
+  formal_manifest: knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
+  processed_record_count: 3571
+  processed_corpus_sha256: f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5
+  serving_record_count: 3571
+  serving_corpus_sha256: e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a
+  provenance_sha256: 420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866
+  unified_manifest_sha256: 328f3c9d5219f82a42abd79f4e52ee6cac73e6eed786cb427b3b1cfeda027f3c
+  source_kind_counts:
+    official: 3515
+    curated: 56
+  knowledge_base_mode: hierarchical
+  collection: tidb81_unified_docs
+  sqlite_persist_dir: data/knowledge_bases/tidb81_unified_docs
+  chroma_persist_dir: data/knowledge_bases/tidb81_unified_chroma
+  no_private_agent_index: true
+  agent_projection: [rank, score, title, version, kb_type, component, source_scope, content]
+  no_fallback: true
+  stale_source_policy: fail
+build:
+  merge_command: conda run -n aiops python scripts/merge_tidb_curated_knowledge.py
+  sqlite_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical --source-file knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_docs
+    --collection tidb81_unified_docs --no-progress
+  chroma_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend chroma
+    --knowledge-mode hierarchical --source-file knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_chroma
+    --collection tidb81_unified_docs --embedding-model Qwen/Qwen3-Embedding-4B
+    --embedding-device cuda --embedding-batch-size 4 --embedding-workers 1 --no-progress

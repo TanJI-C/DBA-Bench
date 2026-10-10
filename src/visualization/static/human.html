@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>人类工作台 · AiOpsBench</title>
+    <link rel="stylesheet" href="/portal.css" />
+    <link rel="stylesheet" href="/human.css" />
+    <script src="/lib/d3.v7.min.js" defer></script>
+    <script src="/portal.js" defer></script>
+    <script src="/human-charts.js" defer></script>
+    <script src="/human.js" defer></script>
+  </head>
+  <body>
+    <div data-portal-slot></div>
+    <main>
+      <header class="workspace-title">
+        <div>
+          <span class="eyebrow">HUMAN BENCHMARK</span>
+          <h1>数据库运维工作台</h1>
+          <p>选择工具、观察证据、验证修复，最后提交你的判断。</p>
+        </div>
+        <label
+          >会话<select id="sessions">
+            <option value="">选择会话</option>
+          </select></label
+        >
+      </header>
+      <div id="notice" role="alert" hidden></div>
+      <details id="launcher" class="panel" open>
+        <summary>开始一道题</summary>
+        <form id="launch-form" class="launch-grid">
+          <label
+            >数据库<select id="system">
+              <option value="postgresql">PostgreSQL</option>
+              <option value="tidb">TiDB</option>
+            </select></label
+          >
+          <label>场景<select id="scenario" required></select></label
+          ><label>Case<select id="case" required></select></label>
+          <label
+            >参与者编号<input
+              name="participant"
+              placeholder="例如 participant-001"
+              required
+          /></label>
+          <details class="launch-settings">
+            <summary>运行设置</summary>
+            <div class="launch-grid">
+              <label
+                >数据库起始端口<input
+                  name="port_base"
+                  type="number"
+                  value="25432"
+                  required /></label
+              ><label
+                >随机种子<input
+                  name="seed"
+                  type="number"
+                  value="11"
+                  required /></label
+              ><label
+                >PG CPU 集合（选填）<input
+                  name="cpuset_cpus"
+                  placeholder="留空自动分配；也可指定 CPU 集合"
+              /></label>
+            </div>
+            <p>
+              PG 留空时按题目资源需求和机器拓扑自动分配 CPU，并绑定 NUMA
+              内存；手动指定时会校验资源分配。一次运行一道题，准备环境可能需要数分钟。
+            </p>
+          </details>
+          <button class="primary" type="submit">准备环境并开始</button>
+        </form>
+        <div id="jobs" aria-live="polite"></div>
+      </details>
+      <section id="workspace" hidden>
+        <div class="session-bar">
+          <span id="state" class="state"></span><strong id="identity"></strong
+          ><span id="elapsed"></span
+          ><button id="export-session">导出操作记录</button>
+        </div>
+        <details class="panel" open>
+          <summary>题目与告警</summary>
+          <pre id="prompt"></pre>
+        </details>
+        <details class="panel">
+          <summary>工具说明与操作约束</summary>
+          <pre id="system-prompt"></pre>
+        </details>
+        <div class="work-grid">
+          <aside class="panel tools">
+            <h2>工具</h2>
+            <input
+              id="tool-search"
+              type="search"
+              placeholder="搜索工具或描述"
+              aria-label="搜索工具"
+            />
+            <nav id="tool-list" aria-label="工具列表"></nav>
+          </aside>
+          <section class="panel tool-editor">
+            <div class="editor-heading">
+              <h2 id="tool-title"></h2>
+              <span id="tool-kind"></span>
+            </div>
+            <p id="tool-description"></p>
+            <div id="tool-tip" class="tip"></div>
+            <form id="tool-form">
+              <div id="fields"></div>
+              <label
+                >操作目的 / 诊断笔记（选填）<textarea
+                  id="thinking"
+                  rows="2"
+                  placeholder="记录你希望验证的假设"
+                ></textarea>
+              </label>
+              <div class="actions">
+                <button class="primary" id="execute" type="submit">
+                  执行工具</button
+                ><button type="button" id="tool-help">查看完整工具帮助</button>
+              </div>
+            </form>
+            <div id="action-status" aria-live="polite"></div>
+          </section>
+        </div>
+        <section class="panel">
+          <div class="editor-heading">
+            <h2>操作记录与结果</h2>
+            <input
+              id="history-search"
+              type="search"
+              placeholder="筛选工具、SQL、结果"
+              aria-label="筛选操作记录"
+            />
+          </div>
+          <div id="history"></div>
+          <p id="empty-history">
+            还没有调用工具。执行结果会保留在这里，便于前后对照。
+          </p>
+        </section>
+        <section id="evaluation" class="panel" hidden>
+          <h2>评估结果</h2>
+          <div id="verdicts"></div>
+          <pre id="evaluation-detail"></pre>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

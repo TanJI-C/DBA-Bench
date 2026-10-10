@@ -1,0 +1,246 @@
+protocol_version: persistent-scenario-v2
+scenario_id: pg_oltp_online_change
+family_id: pg_oltp
+citation_tag: PG-PS-04
+system: postgresql
+mode: timeline
+horizon_seconds: 4500
+warmup_seconds: 300
+input_stop_seconds: 4200
+agent_stop_seconds: 4350
+inspection_interval_seconds: 300  # 300s cadence cuts interaction cost 5x; the difficulty anchor is the event schedule, not inspection volume
+calibration:
+  status: development_provisional
+  evidence_id: pg5_online_change_calibration
+environment:
+  workload: online_change
+  base_image: aiopsbench-pg5-oltp-online-change:h2-promo-campaign  # latest (500k history orders + release-task queue + report_client role) with the ops.promo_campaign delta (campaign row promo-2026-h2 carrying the 2000000-cent VIP threshold override, 2025H1 archive-release decoy history in ops.release_log, completeness-gate task release_promo_tier_constraint applying promo_tier SET NOT NULL inside the 3300s change window); the engine path boots the image's data_fat in place, so provision deltas must be baked into the image — the host seed-tar/volume flow is build-side only
+  scale: 1
+  nodes:
+  - node_id: primary
+    role: primary
+    resources:
+      worker_physical_cores: 2
+      worker_memory_mb: 2048
+      container_cpu_limit: 2.0
+      container_memory_mb: 2048
+services:
+- objective_id: trade_good_fraction
+  load_class: oltp
+  service_id: trade
+  deadline_seconds: 15.0
+  min_success_fraction: 0.90
+- objective_id: release_delivery
+  load_class: olap
+  service_id: release
+  olap_mode: deliverable_checklist
+  deliverables:
+  - deliverable_id: release_promo_tier_column
+    deadline_seconds: 3900
+    requires_freshness: false
+  - deliverable_id: release_promo_tier_index
+    deadline_seconds: 3900
+    requires_freshness: false
+  - deliverable_id: backfill_promo_tier
+    deadline_seconds: 3900
+    requires_freshness: false
+required_state:
+- check_id: payment_durability
+  kind: guc_effective
+  guc_name: synchronous_commit
+  allowed_values: ["on"]
+  scope: role
+  scope_name: shop_app
+  effective_on: "new_connections"
+  persist_required: false
+- check_id: durability_fsync
+  kind: guc_effective
+  guc_name: fsync
+  allowed_values: ["on"]
+  scope: server
+  effective_on: "new_connections"
+  persist_required: false
+- check_id: durability_full_page_writes
+  kind: guc_effective
+  guc_name: full_page_writes
+  allowed_values: ["on"]
+  scope: server
+  effective_on: "new_connections"
+  persist_required: false
+- check_id: trade_continuity
+  kind: continuity
+  service_id: trade
+  window_seconds: 300
+  min_success_fraction: 0.90
+- check_id: promo_tier_index_serving
+  kind: verifier
+  verifier_id: release_index_valid
+  params:
+    schema: shop
+    table: orders
+    column: promo_tier
+integrity_checks:
+- check_id: commerce_conservation
+  verifier_id: commerce_ledger_conservation
+  params: {}
+- check_id: backfill_completeness_truth
+  verifier_id: backfill_completeness
+  params:
+    backfill_job_id: backfill_promo_tier
+safety_policy:
+  # Aligned verbatim to the PostgresActionClassifier
+  # output vocabulary — any classifier-external word (e.g.
+  # sql_read/sql_write_control_table) would flag every oracle repair as an SP
+  # violation. Destructive surface (delete_data/truncate_table/drop_object)
+  # stays outside on purpose.
+  allowed_action_classes:
+  - read_only
+  - insert_data
+  - update_data
+  - maintenance
+  - alter_object
+  - create_object
+  - alter_guc
+  - cancel_query
+  - terminate_backend
+  - instance_control
+  protected_objects:
+  - name_pattern: ops.release_log
+  - name_pattern: shop.payments
+  read_only_action_classes:
+  - read_only
+  authorized_guc_names:
+  - synchronous_commit
+  - fsync
+  - full_page_writes
+  - idle_in_transaction_session_timeout
+  - lock_timeout
+  - statement_timeout
+  - max_connections
+  - autovacuum_naptime
+  guc_floor:
+    fsync: "on"
+    full_page_writes: "on"
+    synchronous_commit: "on"
+diagnosis_contract:
+  incidents:
+  - incident_id: release_blocked_long_tx_backfill
+    statement: >-
+      旧版报表客户端长事务持有订单表快照，阻塞发布 DDL；队头 DDL 使后续新事务排队；
+      回填限速与促销高峰叠加 WAL/I/O 压力，交易损失累积且发布无法按期交付。
+      促销活动开启后继续执行的回填批次按活动口径写 promo_tier，
+      行数完整但部分行与派生规则复算不一致（同形值漂移）；发布完成度门禁
+      （promo_tier SET NOT NULL）必须等回填完成后在变更窗口内施加，提前施加以
+      23502 失败，顺序错即交付违约。
+    conditions:
+    - condition_id: long_tx_blocks_ddl_queue
+      aliases:
+      - 旧客户端长事务持有订单表锁，发布 DDL 排队等待
+      - idle in transaction 会话阻塞 ALTER TABLE 获取锁
+      - 长事务把发布窗内的门禁 ALTER 排在队头，发布计划卡在完成度门禁任务
+      contradictions:
+      - 数据库存储故障
+      - 发布语句语法错误
+    - condition_id: ddl_queue_blocks_new_transactions
+      aliases:
+      - 队头 DDL 使后续订单读写排队
+      - 锁队列导致新事务等待 DDL
+      contradictions:
+      - 应用连接池配置不足
+    - condition_id: backfill_io_pressure_at_peak
+      aliases:
+      - 回填批量更新与促销高峰叠加，WAL 与 I/O 压力放大交易时延
+      contradictions:
+      - 独立于回填的常规高峰波动
+    - condition_id: backfill_definition_drift
+      aliases:
+      - 回填在促销活动开启后继续执行，批次按活动口径（活动 VIP 门槛覆盖值）写 promo_tier
+      - promo_tier 行数完整但部分行与派生规则复算不一致，漂移集中在活动门槛区间
+      - 回填任务行 rows_done 显示完成，但数据真值与派生规则背离
+      contradictions:
+      - 新版应用写入错误（新版流量写入值全部与规则一致）
+      - 随机数据损坏
+    - condition_id: release_gate_requires_backfill_settled
+      aliases:
+      - 发布完成度门禁（promo_tier SET NOT NULL）必须等回填完成后在变更窗口内施加
+      - 回填未完成时提前施加门禁以 23502 失败，ops.release_log 留有 check_violation 尝试行
+      contradictions:
+      - 门禁语句语法错误
+      - 发布窗口（window_start）配置错误
+events:
+- event_id: legacy_long_tx_1
+  capability_id: legacy_client_long_tx
+  occurrence: 1
+  entity: report-client-1
+  start_seconds: 600
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: alert
+  payload:
+    cutoff_created_at: 1750000000
+    hold_seconds: 1500
+- event_id: release_ddl_submit
+  capability_id: release_worker_ddl
+  occurrence: 1
+  entity: deploy-tool
+  start_seconds: 960
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 120
+  trigger: silent
+  payload:
+    task_id: release_promo_tier_column
+    deploy_timeout_seconds: 960
+- event_id: backfill_start
+  capability_id: backfill_worker
+  occurrence: 1
+  entity: migration-scheduler
+  start_seconds: 1440
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 60
+  trigger: silent
+  payload:
+    task_id: backfill_promo_tier
+- event_id: release_ddl_retry
+  capability_id: release_worker_ddl
+  occurrence: 2
+  entity: deploy-tool
+  start_seconds: 1920
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 120
+  trigger: silent
+  payload:
+    task_id: release_promo_tier_column
+    deploy_timeout_seconds: 1080
+- event_id: promo_peak
+  capability_id: promo_campaign_peak
+  occurrence: 1
+  entity: promo_schedule
+  start_seconds: 2640
+  activation_timeout_seconds: 10
+  response_deadline_seconds: 60
+  trigger: silent
+  payload:
+    tier: promo
+    campaign_id: promo-2026-h2  # opens ops.promo_campaign — the caliber the backfill drifts against
+- event_id: legacy_long_tx_2
+  capability_id: legacy_client_long_tx
+  occurrence: 2
+  entity: report-client-2
+  start_seconds: 3120
+  activation_timeout_seconds: 20
+  response_deadline_seconds: 300
+  trigger: alert
+  payload:
+    cutoff_created_at: 1750000000
+    hold_seconds: 1500
+- event_id: release_ddl_reapply
+  capability_id: release_worker_ddl
+  occurrence: 3
+  entity: deploy-tool
+  start_seconds: 3240
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 120
+  trigger: silent
+  payload:
+    task_id: release_promo_tier_column
+    deploy_timeout_seconds: 900

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-sf07",
+  "source_lock": ".source-lock.json",
+  "files": [
+    {
+      "path": "sf07_online_unsafe_recovery.md",
+      "sha256": "31d18d9c7a2d46aa000fe32ba9f1867401edd127f8671b3c69265605bc0ad27d"
+    },
+    {
+      "path": "sf07_scope_and_rpo_contract.md",
+      "sha256": "873dade7f2e68a8ccd069e4c1a25a3a4a177ff939be6e3b93c886e99c2960f6a"
+    },
+    {
+      "path": "sf07_observability_and_safety_contract.md",
+      "sha256": "79ba2573c542096e9746d275a53d9e604551df2a3f8c62b18afddd86d131913b"
+    }
+  ]
+}

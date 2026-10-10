@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "corpus_id": "tidb81-curated-ticdc-gc-safepoint",
+  "source_kind": "repository_curated",
+  "created_at": "2026-08-22",
+  "provenance": {
+    "tidb_release": "v8.1.0",
+    "tikv_release": "v8.1.0",
+    "pd_release": "v8.1.0",
+    "ticdc_release": "v8.1.0",
+    "references": [
+      {
+        "path": "tidb81_ticdc_progress_and_restart.md",
+        "pinned_urls": [
+          "https://docs.pingcap.com/tidb/stable/ticdc-overview/",
+          "https://github.com/pingcap/tiflow/tree/v8.1.0/cdc"
+        ]
+      },
+      {
+        "path": "tidb81_ticdc_service_safepoint_ownership.md",
+        "pinned_urls": [
+          "https://docs.pingcap.com/tidb/stable/ticdc-open-api/",
+          "https://docs.pingcap.com/tidb/stable/garbage-collection-overview/"
+        ]
+      },
+      {
+        "path": "tidb81_ticdc_mvcc_recovery_scope.md",
+        "pinned_urls": [
+          "https://github.com/tikv/tikv/tree/v8.1.0/src/server",
+          "https://docs.pingcap.com/tidb/stable/transaction-overview/"
+        ]
+      },
+      {
+        "path": "tidb81_ticdc_gc_recovery_verification.md",
+        "pinned_urls": [
+          "https://docs.pingcap.com/tidb/stable/maintain-ticdc/",
+          "https://docs.pingcap.com/tidb/stable/garbage-collection-configuration/"
+        ]
+      }
+    ]
+  }
+}

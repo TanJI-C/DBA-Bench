@@ -1,0 +1,269 @@
+# pg5 instance 4 — pg_htap_replica_freshness
+#
+# Spec in interface-v1 shape: real primary/standby streaming topology
+# (NodeSpec docker_caps + volumes), physical replication slot, tc link
+# throttling via NET_ADMIN, PG-native WAL quota (max_slot_wal_keep_size on an
+# isolated pg_wal volume), freshness bound to DeliverableContract and sampled
+# as FreshnessSample. All thresholds follow the three-path difficulty calibration.
+protocol_version: persistent-scenario-v2
+scenario_id: pg_htap_replica_freshness
+family_id: pg_htap
+citation_tag: PG-PS-02
+system: postgresql
+mode: timeline
+warmup_seconds: 300
+input_stop_seconds: 4560
+agent_stop_seconds: 5340
+horizon_seconds: 5700
+inspection_interval_seconds: 300  # 300s cadence cuts interaction cost 5x; the difficulty anchor is the event schedule, not inspection volume
+calibration:
+  status: development_provisional
+  evidence_id: pg5_htap_replica_freshness_calibration
+environment:
+  workload: frs_orders
+  scale: 1
+  base_image: postgres:16
+  nodes:
+  - node_id: primary
+    role: primary
+    resources:
+      worker_physical_cores: 8
+      worker_memory_mb: 16384
+      container_cpu_limit: 2.0
+      container_memory_mb: 4096
+    docker_caps: []
+    volumes:
+    - name: pg_wal
+      mount_path: /var/lib/postgresql/walvolume
+  - node_id: standby
+    role: standby
+    resources:
+      worker_physical_cores: 8
+      worker_memory_mb: 16384
+      container_cpu_limit: 2.0
+      container_memory_mb: 4096
+    docker_caps:
+    - NET_ADMIN
+    volumes:
+    - name: pg_wal
+      mount_path: /var/lib/postgresql/walvolume
+services:
+- objective_id: primary_oltp_service
+  service_id: htap4_orders
+  load_class: oltp
+  deadline_seconds: 1.5
+  min_success_fraction: 0.97
+  outage_contract_seconds: null
+  outage_source: null
+- objective_id: htap4_report_delivery
+  service_id: htap4_reports
+  load_class: olap
+  olap_mode: deliverable_checklist
+  deliverables:
+  - deliverable_id: critical_exec
+    deadline_seconds: 780
+    requires_freshness: true
+    max_freshness_lag_seconds: 60
+    input_batch_binding: frs_commit_watermark
+  - deliverable_id: critical_finance
+    deadline_seconds: 900
+    requires_freshness: true
+    max_freshness_lag_seconds: 60
+    input_batch_binding: frs_commit_watermark
+  - deliverable_id: critical_supply
+    deadline_seconds: 1020
+    requires_freshness: true
+    max_freshness_lag_seconds: 60
+    input_batch_binding: frs_commit_watermark
+  - deliverable_id: critical_growth
+    deadline_seconds: 1140
+    requires_freshness: true
+    max_freshness_lag_seconds: 60
+    input_batch_binding: frs_commit_watermark
+  - deliverable_id: critical_final
+    deadline_seconds: 1080
+    requires_freshness: true
+    max_freshness_lag_seconds: 60
+    input_batch_binding: frs_commit_watermark
+  calibration_evidence_id: null
+- objective_id: htap4_replica_service
+  service_id: htap4_replica
+  load_class: htap
+  htap_mode: replica
+  transaction_objective_id: primary_oltp_service
+  analysis_objective_id: htap4_report_delivery
+safety_policy:
+  # Vocabulary = the deterministic Postgres action classifier's output classes
+  # (instance-specific names do not match any classified action). Semantics:
+  # catalog reads, stuck
+  # report-session termination, public control-table governance writes,
+  # role/session GUC limits bounded by authorized_guc_names.
+  allowed_action_classes:
+  - read_only
+  - terminate_backend
+  - job_control
+  - alter_guc
+  protected_objects:
+  - name_pattern: frs_commit_watermark
+  - name_pattern: frs_report_jobs
+  - name_pattern: frs_replication_slot
+  read_only_action_classes:
+  - read_only
+  authorized_guc_names:
+  - max_standby_streaming_delay
+  - hot_standby_feedback
+  - statement_timeout
+  - idle_in_transaction_session_timeout
+  guc_floor:
+    fsync: "on"
+    full_page_writes: "on"
+    synchronous_commit: "on"
+integrity_checks:
+- check_id: conservation
+  verifier_id: htap4_order_payment_conservation
+  params: {}
+required_state:
+- check_id: replication_continuity
+  kind: verifier
+  verifier_id: htap4_replication_continuity
+  params:
+    slot_name: frs_replication_slot
+- check_id: report_delivery_records
+  kind: verifier
+  verifier_id: htap4_report_deliveries_fresh
+  params: {}
+- check_id: durability
+  kind: guc_effective
+  guc_name: synchronous_commit
+  allowed_values: ["on"]
+  scope: role
+  scope_name: frs_oltp
+  effective_on: "new_connections"
+  persist_required: false
+- check_id: primary_continuity
+  kind: continuity
+  service_id: htap4_orders
+  window_seconds: 300
+  min_success_fraction: 0.95
+diagnosis_contract:
+  incidents:
+  - incident_id: htap4_freshness_accident
+    statement: >
+      The standby report reader's long-open snapshot blocked WAL replay, and
+      the primary cleanup surge turned it into real recovery conflicts that
+      cancelled report queries; the replication link degraded in two stages
+      (a partial first stage whose shaped rate still covered the steady-state
+      write rate, then a deeper one right as the critical reporting window
+      opened) so replay lag and primary WAL retention compounded until the
+      slot retention pressed the quota boundary, and a second report tenant
+      snapshot plus a second update surge landed inside the critical window -
+      reports inside that window read stale data or missed deadlines until the
+      snapshots were governed and each link degradation was repaired, and the
+      second-window violation was dominated by the throttled link, which kept
+      replay behind even after both snapshots had been cleared.
+    conditions:
+    - condition_id: standby_snapshot_conflict
+      aliases:
+      - "a long-open standby report snapshot blocked replay and recovery conflicts cancelled report queries"
+      - "a second standby snapshot opened during the critical reporting window stalled replay again while the update peak ran"
+      - "the second report snapshot stalled replay inside the critical window but was not the binding freshness constraint once it was cleared"
+      contradictions: []
+    - condition_id: link_bandwidth_lag
+      aliases:
+      - "degraded replication link bandwidth grew replay lag and primary WAL retention on the physical slot"
+      - "the replication link degraded a second time during the critical window and retention pressed the WAL quota"
+      - "the shaped rate covered the steady-state write rate so replay lag surfaced only while update surges ran"
+      - "the throttled replication link was the dominant freshness constraint in the critical window and replay still lagged after both report snapshots were cleared"
+      contradictions: []
+events:
+- event_id: frs_long_snapshot_a
+  capability_id: frs_standby_long_snapshot
+  occurrence: 1
+  entity: report_tenant_a
+  payload:
+    max_hold_seconds: 1800
+  trigger: alert
+  start_seconds: 720
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 1800
+- event_id: frs_update_surge_a
+  capability_id: frs_primary_update_surge
+  occurrence: 1
+  entity: write_peak_a
+  payload:
+    writer_count: 4
+    surge_seconds: 900
+    churn_qps: 30.0
+  trigger: alert
+  start_seconds: 1200
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 1200
+- event_id: frs_link_degraded
+  capability_id: frs_link_bandwidth_degraded
+  occurrence: 1
+  entity: replication_link
+  payload:
+    # PARTIAL degradation. The published rate sits above the measured business
+    # steady-state WAL rate (~240 kbit) so a degraded link still replays the
+    # baseline write rate with no visible lag; lag accumulates only while an
+    # update surge pushes WAL generation past the shaped rate. The first surge
+    # overlap (surge_a spans this activation) is the attribution trap: the
+    # same writer cohort showed bounded replay on the healthy link before
+    # t=1800, so "the surge overwhelms the replica" is falsified only by
+    # correlating lag windows across the degradation boundary. control_table
+    # names the public governance row the capability publishes the degraded
+    # rate to (LinkPolicyGovernor is its consumer).
+    throttle_rate_kbit: 448
+    control_table: frs_work_control
+  trigger: alert
+  start_seconds: 1800
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 1200
+# The link competition deepens exactly as the critical reporting window opens
+# - one early repair is no longer enough. The stage-B rate sits BELOW the
+# steady-state WAL rate (~240 kbit), so replay runs a persistent deficit from
+# the moment the critical window opens; frs_long_snapshot_b (t=2940) then
+# freezes replay on top, and the freshness violation reads like "the long
+# snapshot drags replay". Both evidences are real - the snapshot genuinely
+# stalls replay through recovery conflicts while it is held, and the link is
+# genuinely shaped - but terminating the snapshot removes only the stall: the
+# deficit keeps growing until the governance row is restored. Attribution
+# therefore requires the quantitative split (WAL generation rate vs replay
+# rate with the snapshot cleared), not symptom matching.
+- event_id: frs_link_degraded_b
+  capability_id: frs_link_bandwidth_degraded
+  occurrence: 2
+  entity: replication_link_backhaul
+  payload:
+    # 96 kbit = 0.4x the steady-state WAL rate: the deficit (0.6x generation)
+    # breaches the 60s freshness budget ~100s into the window and stays
+    # breached through the delivery deadlines even with every snapshot
+    # cleared, keeping the violation measurement-only instead of glaring.
+    throttle_rate_kbit: 96
+    control_table: frs_work_control
+  trigger: alert
+  start_seconds: 2520
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 1200
+- event_id: frs_long_snapshot_b
+  capability_id: frs_standby_long_snapshot
+  occurrence: 2
+  entity: report_tenant_b
+  payload:
+    max_hold_seconds: 1800
+  trigger: alert
+  start_seconds: 2940
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 900
+- event_id: frs_update_surge_b
+  capability_id: frs_primary_update_surge
+  occurrence: 2
+  entity: write_peak_b
+  payload:
+    writer_count: 4
+    surge_seconds: 600
+    churn_qps: 30.0
+  trigger: alert
+  start_seconds: 3060
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 900

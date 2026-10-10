@@ -1,0 +1,40 @@
+schema_version: 1
+corpus_id: tidb81-curated-bc05
+product_version: v8.1.0
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB Lightning checkpoint identity, physical-import protection, capacity
+  admission, and terminal acceptance semantics.
+provenance:
+  tidb_release: v8.1.0
+  official_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_business_change_lightning_checkpoint/.source-lock.json
+  source_manifest: knowledge/tidb/curated/tidb_business_change_lightning_checkpoint/.source-manifest.json
+hops:
+  - hop_id: H1
+    knowledge_question: What makes a Lightning checkpoint reusable?
+    expected_concept: The task, source, target schema, backend, driver, and checkpoint namespace must match.
+    required_environment_binding: source file manifest, target SHOW CREATE and indexes, checkpoint storage metadata, partial target ownership
+  - hop_id: H2
+    knowledge_question: Why is source size insufficient for physical-import capacity?
+    expected_concept: Encoded KV, index, sort, replica, compaction, and headroom affect the peak envelope.
+    required_environment_binding: backend configuration, current Store free space, topology labels, Region and capacity observations
+  - hop_id: H3
+    knowledge_question: Which protection and precheck facts must be verified before resume?
+    expected_concept: Backend, parallel-import, target-empty, empty-Region, PITR, and TiCDC boundaries are independent gates.
+    required_environment_binding: live import/protection state and current precheck evidence
+  - hop_id: H4
+    knowledge_question: How should a resumable import select capacity?
+    expected_concept: Current request, generation, reservation, lease, fence, topology, and Store state must align.
+    required_environment_binding: request, capacity plan, reservation, checkpoint manifest, lease journal, resume gate, Store state
+  - hop_id: H5
+    knowledge_question: What proves that the resumed change is complete?
+    expected_concept: Terminal import state, immutable identities, Store health, business truth, checksum, and statistics form one closed loop.
+    required_environment_binding: terminal task/checkpoint rows, source/schema/protection evidence, business aggregates, checksum, stats, active Stores
+materialization:
+  source_file: knowledge/tidb/curated/tidb_business_change_lightning_checkpoint/
+  backend: hierarchical
+  knowledge_mode: hierarchical
+  no_fallback: true
+  stale_source_policy: fail

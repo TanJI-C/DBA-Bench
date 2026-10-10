@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AiOpsBench - 原始 Trace 日志</title>
+    <link rel="stylesheet" href="/portal.css?v=6">
+    <link rel="stylesheet" href="/raw-traces.css?v=1">
+</head>
+<body>
+    <div data-portal-slot></div>
+    <main class="raw-page">
+        <section class="search-band" aria-label="日志筛选">
+            <div class="search-row">
+                <label class="search-box">
+                    <span class="sr-only">搜索日志</span>
+                    <input id="trace-search" type="search" placeholder="搜索文件名、场景、Agent、run_id" autocomplete="off">
+                </label>
+                <select id="scenario-filter" aria-label="场景"><option value="">全部场景</option></select>
+                <select id="agent-filter" aria-label="Agent"><option value="">全部 Agent</option></select>
+                <select id="evaluation-filter" aria-label="评分状态">
+                    <option value="">全部评分状态</option>
+                    <option value="success">成功</option>
+                    <option value="failed">失败</option>
+                    <option value="scored">有评分</option>
+                    <option value="unscored">无评分</option>
+                </select>
+                <select id="sort-filter" aria-label="排序">
+                    <option value="timestamp_desc">最新优先</option>
+                    <option value="timestamp_asc">最旧优先</option>
+                    <option value="score_desc">最高分</option>
+                    <option value="score_asc">最低分</option>
+                    <option value="size_desc">文件最大</option>
+                </select>
+                <button id="refresh-list" class="icon-btn" type="button" title="刷新日志索引" aria-label="刷新日志索引">↻</button>
+            </div>
+            <div class="quick-row" aria-label="快捷筛选">
+                <button type="button" data-days="0">今天</button>
+                <button type="button" data-days="7">最近 7 天</button>
+                <button type="button" data-agent="LLMAgent">仅 LLM</button>
+                <button type="button" data-evaluation="failed">仅失败</button>
+                <button type="button" data-evaluation="unscored">无评分</button>
+                <button id="clear-filters" type="button">清除筛选</button>
+                <span id="result-count" class="result-count"></span>
+            </div>
+        </section>
+
+        <section class="trace-workspace">
+            <aside class="result-pane" aria-label="日志结果">
+                <div id="trace-results" class="trace-results"></div>
+                <button id="load-more" class="load-more hidden" type="button">加载更多</button>
+            </aside>
+
+            <article class="json-pane" aria-label="原始 JSON 查看器">
+                <div id="empty-state" class="empty-state">选择一条日志查看原始 JSON</div>
+                <div id="json-view" class="json-view hidden">
+                    <header class="file-header">
+                        <div class="file-identity">
+                            <h1 id="file-name"></h1>
+                            <div id="file-meta" class="file-meta"></div>
+                        </div>
+                        <div class="file-actions">
+                            <button id="open-trace" type="button">在 Trace Viewer 打开</button>
+                            <button id="copy-json" class="icon-btn" type="button" title="复制 JSON" aria-label="复制 JSON">⧉</button>
+                            <a id="download-json" class="icon-btn" title="下载 JSON" aria-label="下载 JSON" download>⇩</a>
+                        </div>
+                    </header>
+                    <div class="viewer-toolbar">
+                        <div class="segmented" role="group" aria-label="查看模式">
+                            <button id="mode-pretty" class="active" type="button">格式化</button>
+                            <button id="mode-raw" type="button">原始文本</button>
+                        </div>
+                        <label class="find-box">
+                            <span class="sr-only">在当前文件中查找</span>
+                            <input id="find-json" type="search" placeholder="在当前文件中查找">
+                        </label>
+                        <label class="check-control"><input id="wrap-json" type="checkbox"> 自动换行</label>
+                        <span id="copy-status" role="status"></span>
+                    </div>
+                    <div class="code-shell"><pre id="json-code" aria-label="JSON 内容"></pre></div>
+                </div>
+            </article>
+        </section>
+    </main>
+    <script src="/raw-traces.js?v=1"></script>
+    <script src="/portal.js?v=6" defer></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+# Exception: vendored d3 bundle required by the visualization frontend
+!src/visualization/static/lib/
+!src/visualization/static/lib/d3.v7.min.js
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+
+# Logs
+*.log
+logs/
+
+# Runtime-generated data (rebuilt on demand; see docs/getting-started.md)
+data/postgres/
+data/tidb/
+data/logs/
+data/results/
+data/knowledge_bases/
+data/knowledge_processing/
+data/workloads/*/postgres_data/
+data/workloads/tpcds/data/
+data/workloads/tpcds/tpcds-kit/
+
+# Environment variables and credentials
+env.sh
+*.env
+.env.local
+llm_config.json
+
+# ResultSet work files are mutable; manifests, catalogs, and sealed results are tracked.
+results/**/work/
+outputs/
+*.benchmark.json
+
+# Temporary experiment manifests
+experiments/tmp/*.yaml
+experiments/tmp/*.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+.tiup

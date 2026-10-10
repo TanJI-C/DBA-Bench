@@ -1,0 +1,24 @@
+{
+  "corpus_id": "tidb81-curated-mvcc-recovery",
+  "file_count": 3,
+  "files": [
+    {
+      "kind": "markdown",
+      "path": "k01_gc_phases_and_scope.md",
+      "sha256": "e0e5bee3af9fa114cb0439b3cef339d62aa09172aac4c596e5eb46fac2f4ed93",
+      "size": 2530
+    },
+    {
+      "kind": "markdown",
+      "path": "k01_lock_codec_and_recovery.md",
+      "sha256": "f21ac0f673ae5d63aaeee683d31164b3edde3f9c6551ba0aaf5f1ae4cfef4778",
+      "size": 2731
+    },
+    {
+      "kind": "markdown",
+      "path": "k01_observability_contract.md",
+      "sha256": "cb2d7fc1958679c91e038a33d592e5f9aa377a913d071adb16fdfa5fad8a7597",
+      "size": 3357
+    }
+  ]
+}

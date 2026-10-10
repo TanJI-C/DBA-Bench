@@ -1,0 +1,7 @@
+{
+  "corpus_id": "tidb-dr-auto-sync-8.1",
+  "format_version": 1,
+  "tidb_release": "v8.1.0",
+  "docs_source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "source_kind": "repository_curated"
+}

@@ -1,0 +1,12 @@
+{
+  "workload_name": "tidb-mf-qp04-test",
+  "init_sql": "init.sql",
+  "database": "test",
+  "tables": [
+    "t1",
+    "t2"
+  ],
+  "rows_per_table": 2000,
+  "maintenance_table": "maint",
+  "maintenance_rows": 20000
+}

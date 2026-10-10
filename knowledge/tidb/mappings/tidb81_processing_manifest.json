@@ -1,0 +1,18 @@
+{
+  "completed_at": "2026-07-29T21:03:40.207880+00:00",
+  "completed_count": 1427,
+  "document_count": 1443,
+  "enrich_prompt_sha256": "dc40c48a119376e1e6f25b9e5b05e9c74a600d4976261cb9a57ee5d782306f66",
+  "excluded_count": 16,
+  "failed_count": 0,
+  "included_count": 1427,
+  "inventory_sha256": "b27ebed8df3fdf5f1008d327711f0c76dd50709dfb5967936c76d07ad28decfa",
+  "pending_count": 0,
+  "processing_count": 0,
+  "processing_schema_version": "tidb-document-processing-v5",
+  "run_id": "tidb81_processing_v5",
+  "source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+  "split_prompt_sha256": "8b32bd2934acc39ad96c7ab1c0763df1db818fb9440d809b3073cacae8d111e3",
+  "started_at": "2026-07-29T20:28:05.848520+00:00",
+  "temperature": 0
+}

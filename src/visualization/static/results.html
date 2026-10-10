@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AiOpsBench - 实验结果</title>
+    <link rel="stylesheet" href="/portal.css?v=6">
+    <link rel="stylesheet" href="/table-tools.css?v=1">
+    <link rel="stylesheet" href="/results.css?v=9">
+</head>
+<body>
+    <div data-portal-slot></div>
+    <main class="results-page">
+        <header class="results-toolbar">
+            <select id="result-set-select" aria-label="结果集"><option value="">选择结果集</option></select>
+            <div id="result-set-summary" class="results-summary">请选择一个结果集</div>
+            <button id="results-refresh" type="button" title="刷新" aria-label="刷新">↻</button>
+        </header>
+        <div id="results-error" class="results-error" role="alert" hidden></div>
+        <section id="matrix-section" class="matrix-section" hidden></section>
+        <div id="category-blocks" aria-live="polite"></div>
+    </main>
+    <script src="/table-tools.js?v=1"></script>
+    <script src="/results.js?v=15"></script>
+    <script src="/portal.js?v=6" defer></script>
+</body>
+</html>

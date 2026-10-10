@@ -1,0 +1,171 @@
+[
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": ".github/ISSUE_TEMPLATE/change-request.md",
+    "source_sha256": "58cf975cd7bb6f040dfe020ae82595da2914ac2cf0cbb606cde1b396be39b1d2",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": ".github/ISSUE_TEMPLATE/error-report.md",
+    "source_sha256": "6436c44954edf611a6757ee1da4262b21b801311c20a54ccd46c7e013153e069",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": ".github/ISSUE_TEMPLATE/question.md",
+    "source_sha256": "916aea1f16bc0f4e26ab580fb548f3c63c04aa68799add2acbc37ed66e21024a",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": ".github/pull_request_template.md",
+    "source_sha256": "5a972aa42999951256f41622a93e578684408d22c638063ea0930320119ea998",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": "CONTRIBUTING.md",
+    "source_sha256": "2afac1b3e993395619ecff6a403a4d3286352cd7cb8453f12a9ce02890772e92",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": "README.md",
+    "source_sha256": "f70f9ee28b040609a79d0a47171047b3d877556043495f5d9fbb6fa95c701bc6",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "cloud",
+    "exclusion_reason": "navigation_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": "TOC-tidb-cloud.md",
+    "source_sha256": "aaf9b7fbcbae46a10554288c52f2e1c6e5073c900d7f0f5a3e5edbda8d400010",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "navigation_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": "TOC.md",
+    "source_sha256": "06c2e3e911fcf740589cee7f7e3f9f003ec033e682545d0b4cdf53ec29d79a77",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "site_navigation_document",
+    "frontmatter_summary": "TiDB Documentation provides how-to guides and references for using TiDB Cloud and TiDB Self-Managed, including data migration and application building. TiDB Cloud is a fully-managed Database-as-a-Service, offering easy access to the power of a cloud-native, distributed SQL database. TiDB is an open-source distributed SQL database with MySQL compatibility, horizontal scalability, and high availability. Developers can access documentation for application development and explore additional resources such as TiDB Playground, PingCAP Education, and community engagement opportunities.",
+    "frontmatter_title": "PingCAP Documentation",
+    "processing_status": "excluded",
+    "source_file": "_docHome.md",
+    "source_sha256": "0c7481e3322e71cc0bb8ba14f61f20f685f09dd382a5fda0bc8ca740481a80b9",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "site_navigation_document",
+    "frontmatter_summary": "TiDB is an open-source distributed SQL database that supports Hybrid Transactional and Analytical Processing (HTAP) workloads. The guide provides information on features, TiFlash, development, deployment, migration, maintenance, monitoring, tuning, tools, and references. It covers everything from quick start to advanced configurations and tools for TiDB.",
+    "frontmatter_title": "TiDB Introduction",
+    "processing_status": "excluded",
+    "source_file": "_index.md",
+    "source_sha256": "e7fc7ff6076c20340ff8bb3a1e9407fde2e18696a2d6f7183839d80592df9c7c",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "site_generated_dynamic_document",
+    "frontmatter_summary": "Keywords and Reserved Words",
+    "frontmatter_title": "Keywords",
+    "processing_status": "excluded",
+    "source_file": "keywords.md",
+    "source_sha256": "e423c534b1a1a2fb0a3db1c64e83b1de1c656e1324d0d8c9d314d4698c02edc1",
+    "toc_membership": [
+      "TOC-tidb-cloud.md",
+      "TOC.md"
+    ]
+  },
+  {
+    "document_scope": "repository_internal",
+    "exclusion_reason": "repository_maintenance_document",
+    "frontmatter_summary": null,
+    "frontmatter_title": null,
+    "processing_status": "excluded",
+    "source_file": "resources/markdownlint-rules.md",
+    "source_sha256": "ee0df06f8b82bf5d944ff07239fabf6f69ed3b9a1e4c9cf596d7836b105fe352",
+    "toc_membership": []
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "navigation_document",
+    "frontmatter_summary": "Learn the concept of TiCDC Avro Protocol and how to use it.",
+    "frontmatter_title": "TiCDC Avro Protocol",
+    "processing_status": "excluded",
+    "source_file": "ticdc/ticdc-avro-protocol.md",
+    "source_sha256": "1521901ebb9575e189165c87c05f8bb79455b523076d4e832f8eb0d252c873b4",
+    "toc_membership": [
+      "TOC.md"
+    ]
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "navigation_document",
+    "frontmatter_summary": "Learn the concept of TiCDC Open Protocol and how to use it.",
+    "frontmatter_title": "TiCDC Open Protocol",
+    "processing_status": "excluded",
+    "source_file": "ticdc/ticdc-open-protocol.md",
+    "source_sha256": "ee801fb05f428671aebe252f157bf2274d30d94b331adb072fd985d3f7cfdede",
+    "toc_membership": [
+      "TOC.md"
+    ]
+  },
+  {
+    "document_scope": "self_managed",
+    "exclusion_reason": "navigation_document",
+    "frontmatter_summary": "Learn how to use the TiCDC Simple protocol and the data format implementation.",
+    "frontmatter_title": "TiCDC Simple Protocol",
+    "processing_status": "excluded",
+    "source_file": "ticdc/ticdc-simple-protocol.md",
+    "source_sha256": "a136f951850713c457e024e475411ec34f27afdb7793d0fd22a431b0ece693f6",
+    "toc_membership": [
+      "TOC.md"
+    ]
+  },
+  {
+    "document_scope": "cloud",
+    "exclusion_reason": "site_navigation_document",
+    "frontmatter_summary": "TiDB Cloud is a fully-managed Database-as-a-Service (DBaaS) that brings everything great about TiDB to your cloud. It offers guides, samples, and references for learning, trying, developing, maintaining, migrating, monitoring, tuning, securing, billing, integrating, and referencing.",
+    "frontmatter_title": "TiDB Cloud Documentation",
+    "processing_status": "excluded",
+    "source_file": "tidb-cloud/_index.md",
+    "source_sha256": "78a6ff5234d10ca221d3919db19d1ab2321c0bcb3172e78944b7b0e83967821f",
+    "toc_membership": []
+  }
+]

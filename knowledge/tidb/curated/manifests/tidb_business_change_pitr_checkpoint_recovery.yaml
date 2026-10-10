@@ -1,0 +1,79 @@
+schema_version: 1
+corpus_id: tidb81-curated-k08
+scenario_id: tidb_business_change_pitr_checkpoint_recovery
+case_id: resume_failed_pitr_without_breaking_chain
+product_version: v8.1.0
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB 8.1 BR/PITR checkpoint identity, snapshot and log-chain
+  continuity, partial-target compatibility, and safe recovery acceptance.
+provenance:
+  tidb_release: v8.1.0
+  docs_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_business_change_pitr_checkpoint_recovery/.source-lock.json
+  source_manifest: knowledge/tidb/curated/tidb_business_change_pitr_checkpoint_recovery/.source-manifest.json
+  official_source_files:
+    knowledge/tidb_src/br/br-checkpoint-restore.md: 93fb95aac63b3060981eb42a3bd280e0e0fcf1619b8b8179e5e9961faa45f7bb
+    knowledge/tidb_src/br/br-pitr-guide.md: 1e1df14cc78cb42161c8b122916d2ac283d0bedf094fcbb6690dd78a98aec700
+    knowledge/tidb_src/br/br-log-architecture.md: 1a880812e05ae51af09a9d9d61035946f859cb00c9c6e82950af8d2a61124f17
+    knowledge/tidb_src/br/br-snapshot-architecture.md: e68d181f113909ac900493cd322e1473789c5209f78fc94c9d7c17427b1b8289
+    knowledge/tidb_src/br/backup-and-restore-design.md: 23e63ed78763305d95f3bdabdf036966bd2e685470ddb58d9ce59e38ae5f8d06
+  curated_source_files:
+    k08_checkpoint_identity_and_retry.md: 7cbdfe79096fcd371981ccaf8c0d65a3b6d9fe92d7c1428d7cd095d97a443c30
+    k08_pitr_chain_and_log_reachability.md: babdfdb2d417fa498ba69c261cf527478a136d6f18b1a72cf1cee0edb875b03e
+    k08_safe_recovery_and_acceptance.md: c4992795f5e3ddd0db6de91e63536c54fb6baebbf20fda471f0b63aef37a5d11
+hops:
+  - hop_id: H1
+    knowledge_question: What does a failed BR checkpoint represent in the current restore version?
+    expected_concept: Checkpoint is durable progress for one restore request and is version-scoped, not a standalone backup.
+    required_environment_binding: BR and target release, restore phase, checkpoint location, original request identity
+    allowed_source_scope: [self_managed]
+  - hop_id: H2
+    knowledge_question: Which boundaries make the PITR chain reachable?
+    expected_concept: A snapshot before the target plus continuous log backup coverage through the requested target is required; global checkpoint is cluster-wide evidence.
+    required_environment_binding: snapshot BackupTS, log start and global checkpoint, target TSO, retention, object continuity
+    allowed_source_scope: [self_managed]
+  - hop_id: H3
+    knowledge_question: Which values must remain unchanged on an exact retry?
+    expected_concept: Upstream identity, BackupTS, start-ts, restored-ts, target identity, and checkpoint phase must match the original request.
+    required_environment_binding: original attempt args, checkpoint metadata, target cluster identity and current object prefix
+    allowed_source_scope: [self_managed]
+  - hop_id: H4
+    knowledge_question: Why is a matching target cluster ID insufficient after a failed restore?
+    expected_concept: Target-side table/ID mapping and external writes after checkpoint persistence can make checkpoint ownership ambiguous.
+    required_environment_binding: partial target catalog and writes after checkpoint persistence
+    allowed_source_scope: [self_managed]
+  - hop_id: H5
+    knowledge_question: What is the safe action when the partial target is no longer checkpoint-compatible?
+    expected_concept: Retire the incompatible attempt explicitly and use a newly isolated target with the same valid chain and requested point, or reject if continuity is not proven.
+    required_environment_binding: abandon state, old target identity, new target identity, chain continuity and protected objects
+    allowed_source_scope: [self_managed]
+  - hop_id: H6
+    knowledge_question: What proves recovery rather than process-level success?
+    expected_concept: Terminal restore state, target time boundary, business truth, continuous objects, and unchanged source/protected backup state must all hold.
+    required_environment_binding: final restore attempt, target markers/checksums, source truth, object inventory and protected neighbors
+    allowed_source_scope: [self_managed]
+materialization:
+  formal_serving_corpus: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+  formal_provenance: knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
+  formal_manifest: knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
+  knowledge_base_mode: hierarchical
+  no_private_agent_index: true
+  no_fallback: true
+  stale_source_policy: fail
+build:
+  merge_command: conda run -n aiops python scripts/merge_tidb_curated_knowledge.py
+  sqlite_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_docs
+    --collection tidb81_unified_docs --no-progress
+  chroma_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend chroma
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_unified_chroma
+    --collection tidb81_unified_docs --embedding-model Qwen/Qwen3-Embedding-4B
+    --embedding-device cuda --embedding-batch-size 4 --embedding-workers 1 --no-progress

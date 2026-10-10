@@ -1,0 +1,17 @@
+{
+  "workload_name": "demo",
+  "scale": 1,
+  "required_tables": [
+    "demo_users"
+  ],
+  "data_files": {
+    "demo_users.dat": {
+      "size_bytes": 255,
+      "sha256": "493af90acfc93aa15404ea5c597532ff588bcfe0c6be13070f13cbe27de6e865"
+    }
+  },
+  "init_sql_sha256": "eb5478420ee283c6d894905347a1724af21dd49393a78ba8c641ab38fe81b166",
+  "schema_sha256": "eb5478420ee283c6d894905347a1724af21dd49393a78ba8c641ab38fe81b166",
+  "schema_source": "init.sql",
+  "dataset_fingerprint": "99068f516baff3ad8d95b7c06c8fef8ab9166fe53a12aee37f5b762ba201af6d"
+}

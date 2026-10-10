@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-hc08",
+  "source_lock": ".source-lock.json",
+  "files": [
+    {
+      "path": "placement_policy_inheritance.md",
+      "sha256": "9dfbbe05931894402375ea8b5babd1bc2075d99f9d1fb3e339e45bb6beffcf17"
+    },
+    {
+      "path": "placement_policy_constraints_and_progress.md",
+      "sha256": "a148cf16fa4282867448b27a8a44b57d305e7fee02d2d014c4a611cf9b03b4e8"
+    },
+    {
+      "path": "placement_policy_review_safety.md",
+      "sha256": "a45ac04141da7ef2b3dd55cf1c7db642dd3a734bf454922246100bcbfba02eec"
+    },
+    {
+      "path": "tidb81_hc08_chunks.jsonl",
+      "sha256": "55fa2314c1df3349127ec4bd806ace3abb3ffa8be79bf63f80102bb968f94e44"
+    }
+  ]
+}

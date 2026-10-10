@@ -1,0 +1,138 @@
+{
+  "workload_name": "tpcds",
+  "scale": 1,
+  "required_tables": [
+    "dbgen_version",
+    "customer_address",
+    "customer_demographics",
+    "date_dim",
+    "warehouse",
+    "ship_mode",
+    "time_dim",
+    "reason",
+    "income_band",
+    "item",
+    "store",
+    "call_center",
+    "customer",
+    "web_site",
+    "store_returns",
+    "household_demographics",
+    "web_page",
+    "promotion",
+    "catalog_page",
+    "inventory",
+    "catalog_returns",
+    "web_returns",
+    "web_sales",
+    "catalog_sales",
+    "store_sales"
+  ],
+  "data_files": {
+    "dbgen_version.dat": {
+      "size_bytes": 127,
+      "sha256": "3e7f710fb5a6285a34848664d0cd178d41f2f9d1d2cd566e9df58eba5cf80c48"
+    },
+    "customer_address.dat": {
+      "size_bytes": 5452165,
+      "sha256": "6b244c54c77a6c46062c7580bfdef581a0bc89e6baf0b6007ff6bad13aa2795c"
+    },
+    "customer_demographics.dat": {
+      "size_bytes": 78739296,
+      "sha256": "55c63a5e5a1fd0a319da1d5b19664b16f2df76c5cfe4dc862386b761016e181c"
+    },
+    "date_dim.dat": {
+      "size_bytes": 10244389,
+      "sha256": "3daa146ffbb2dadc8477bdf20dafde503d26cf79b42249d9f5db5b808dfec333"
+    },
+    "warehouse.dat": {
+      "size_bytes": 580,
+      "sha256": "19d027ad7040658096053bed9c9210a9a6ed6a3459c6fbc6a8abd6a8a6d333cc"
+    },
+    "ship_mode.dat": {
+      "size_bytes": 1093,
+      "sha256": "150b965b107fa262de0e230d8fab17173eb39f2102c24138a5580b3286197797"
+    },
+    "time_dim.dat": {
+      "size_bytes": 5021380,
+      "sha256": "800bc4ae5531e5f3ef71e8d50ec8b7b7b8946082ef891309444ab669f75a6e75"
+    },
+    "reason.dat": {
+      "size_bytes": 1304,
+      "sha256": "cc0d28616ddbfda4dc2e6c2cecf09cff936055da136401c7bbe5c8d751697cd5"
+    },
+    "income_band.dat": {
+      "size_bytes": 308,
+      "sha256": "6e188887e61a74e09f5a3fd9f12ae991b60c78c5ab3460ddac3028d71641c163"
+    },
+    "item.dat": {
+      "size_bytes": 5033899,
+      "sha256": "74a661ac6855b4e48dbdd1cdce3962ca854ae83051de68b608b5c13b1aaf719d"
+    },
+    "store.dat": {
+      "size_bytes": 3143,
+      "sha256": "2684b82f2600bfb8035bfb036d4cf4ecce1ebce50570148f3217cca61efb7e99"
+    },
+    "call_center.dat": {
+      "size_bytes": 1885,
+      "sha256": "524fe085f9e12e5e6ee93aba8675e732f179290d933e39abb025d4b6b7def47f"
+    },
+    "customer.dat": {
+      "size_bytes": 13110282,
+      "sha256": "5710d428f169104946c58f2b023ea7fa670070bfb4bf3f96a299e460a9a3bc8c"
+    },
+    "web_site.dat": {
+      "size_bytes": 8741,
+      "sha256": "f251496d3fdcc09c3e10ac6642b668073be15e21a169ece805e65b9ec34edc1a"
+    },
+    "store_returns.dat": {
+      "size_bytes": 32422491,
+      "sha256": "b36872d8ac12cc0804f93d227b004e274005cbdc48c6c27c876d6009a3facdfc"
+    },
+    "household_demographics.dat": {
+      "size_bytes": 144453,
+      "sha256": "b7f57bb122fd8710287ada44f2bfb31716e8f61ea9c89061490d6c27bd9e8a9e"
+    },
+    "web_page.dat": {
+      "size_bytes": 5716,
+      "sha256": "88438148639d8e9ce9d170382dc8bed3423935c7d0341581903c28067a6ea45b"
+    },
+    "promotion.dat": {
+      "size_bytes": 36933,
+      "sha256": "cc85291f86554346eb98895c6d5a695cc3cb88bbff5e331c568cf3e46bba557c"
+    },
+    "catalog_page.dat": {
+      "size_bytes": 1620074,
+      "sha256": "17d188d3e7d90c124d717dcb6d246b322b02a26a27aef3d784c7a74a0469630e"
+    },
+    "inventory.dat": {
+      "size_bytes": 224675139,
+      "sha256": "27d53c46ad16f29ef166a394e242b141ccd705ccc79c5c2595aad5074a76b7af"
+    },
+    "catalog_returns.dat": {
+      "size_bytes": 21234304,
+      "sha256": "7b0f2d2c70dd260691607654207edf4fec93aa676d7a841acc8710d4cca07699"
+    },
+    "web_returns.dat": {
+      "size_bytes": 9734473,
+      "sha256": "bc1f19e34ed09135d7cd47327970498430243cedb993ce792a9abccda3866f6f"
+    },
+    "web_sales.dat": {
+      "size_bytes": 146158290,
+      "sha256": "fa2263af3169d6c1f6758cd0f128e958cfcd1f3b7f11ad431b8f826ecd3926d0"
+    },
+    "catalog_sales.dat": {
+      "size_bytes": 294468836,
+      "sha256": "3b7a62c84dc150ba2e896c20a9e80a5edf5e31d732c059f7fabcf15b35b338f4"
+    },
+    "store_sales.dat": {
+      "size_bytes": 385565005,
+      "sha256": "2e90e2bb87bd4feac0a51ed35cf6c2b73943618e1e6a7e14ede57e988e892d38"
+    }
+  },
+  "init_sql": "init.sql",
+  "init_sql_sha256": "3bc044942f4be598b583fd456809a41fd589d3778a255cf187fd699a536104d4",
+  "schema_sha256": "567a6aaf9311602649cf967bc28b31c37a4d644a9537b3f593d330939643a8b1",
+  "schema_source": "tpcds.sql",
+  "dataset_fingerprint": "202e8ca6d1b288dbfd046a40c98b9c82b5446f0f83c1c7726d3edd89f294d142"
+}

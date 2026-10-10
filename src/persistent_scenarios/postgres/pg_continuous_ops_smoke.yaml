@@ -1,0 +1,91 @@
+protocol_version: persistent-scenario-v2
+scenario_id: pg_continuous_ops_smoke
+family_id: pg_continuous_ops
+system: postgresql
+mode: timeline
+horizon_seconds: 900
+warmup_seconds: 30
+input_stop_seconds: 820
+agent_stop_seconds: 860
+inspection_interval_seconds: 60
+
+calibration:
+  status: development_provisional
+  evidence_id: pg5_smoke_dev_20260918
+
+environment:
+  workload: smoke
+  base_image: aiopsbench-pg5-oltp-business:latest
+  scale: 1
+  nodes:
+  - node_id: primary
+    role: primary
+    resources:
+      worker_physical_cores: 2
+      worker_memory_mb: 2048
+      container_cpu_limit: 2.0
+      container_memory_mb: 2048
+
+services:
+- objective_id: trade_good_fraction
+  load_class: oltp
+  service_id: trade
+  deadline_seconds: 15.0
+  min_success_fraction: 0.60
+
+safety_policy:
+  allowed_action_classes:
+  - read_only
+  - terminate_backend
+  - cancel_query
+  - maintenance
+  protected_objects:
+  - name_pattern: "shop.orders_archive*"
+  read_only_action_classes:
+  - read_only
+  authorized_guc_names: []
+  guc_floor:
+    fsync: "on"
+
+integrity_checks:
+- check_id: commerce_conservation
+  verifier_id: commerce_ledger_conservation
+  params: {}
+
+required_state:
+- check_id: durability_fsync
+  kind: guc_effective
+  guc_name: fsync
+  allowed_values: ["on"]
+  scope: server
+  effective_on: new_connections
+  persist_required: false
+
+diagnosis_contract:
+  incidents: []
+
+events:
+- event_id: smoke_tx_leak_1
+  capability_id: smoke_tx_leak
+  occurrence: 1
+  entity: smoke-worker-1
+  payload:
+    sku: PROMO-SKU-1
+    hold_seconds: 600
+  start_seconds: 120
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 300
+  trigger: alert
+- event_id: smoke_tx_leak_2
+  capability_id: smoke_tx_leak
+  occurrence: 2
+  entity: smoke-worker-2
+  payload:
+    # Distinct promo row: the two occurrences hold independent hot rows, so
+    # the second arrival activates without waiting for the first repair.
+    sku: PROMO-SKU-2
+    hold_seconds: 300
+  start_seconds: 420
+  activation_timeout_seconds: 60
+  response_deadline_seconds: 300
+  trigger: alert

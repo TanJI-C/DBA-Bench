@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AiOpsBench - 实验运行</title>
+    <link rel="stylesheet" href="/portal.css?v=6">
+    <link rel="stylesheet" href="/table-tools.css?v=1">
+    <link rel="stylesheet" href="/experiments.css?v=1">
+</head>
+<body>
+    <div data-portal-slot></div>
+    <main class="experiment-page">
+        <header class="experiment-toolbar">
+            <select id="experiment-select" aria-label="实验"><option value="">选择实验</option></select>
+            <input id="run-search" type="search" placeholder="搜索 run_id、场景、Agent、模型">
+            <select id="run-scenario" aria-label="场景"><option value="">全部场景</option></select>
+            <select id="run-agent" aria-label="Agent"><option value="">全部 Agent</option></select>
+            <select id="run-status" aria-label="执行状态"><option value="">全部状态</option></select>
+            <button id="run-refresh" type="button" title="刷新">↻</button>
+        </header>
+        <section class="summary-strip" id="experiment-summary">请选择一个实验</section>
+        <section class="run-table-wrap">
+            <table class="run-table" id="experiment-runs-table">
+                <thead><tr><th>运行</th><th data-filter>Scenario</th><th data-filter>ScenarioCase</th><th data-filter>模型</th><th>状态</th><th class="number">分数</th><th class="number">耗时</th><th class="number">开始时间</th><th>产物</th></tr></thead>
+                <tbody id="run-rows"></tbody>
+            </table>
+            <div id="run-empty" class="run-empty">没有运行记录</div>
+        </section>
+    </main>
+    <script src="/table-tools.js?v=1"></script>
+    <script src="/experiments.js?v=2"></script>
+    <script src="/portal.js?v=6" defer></script>
+</body>
+</html>

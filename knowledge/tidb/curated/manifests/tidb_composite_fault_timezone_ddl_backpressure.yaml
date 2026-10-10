@@ -1,0 +1,52 @@
+schema_version: 1
+corpus_id: tidb81-curated-timezone-ddl
+scenario_id: tidb_composite_fault_timezone_ddl_backpressure
+case_id: dr_cutover_timezone_ddl_and_sink_backpressure
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB 8.1 operational facts for TiCDC checkpoint/resolved
+  divergence, timestamp DDL session semantics, failed-event recovery
+  boundaries, sink backpressure, and closed-loop row validation.
+provenance:
+  tidb_release: v8.1.0
+  ticdc_release: v8.1.0
+  downstream_release: mysql-8.4
+  official_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/.source-lock.json
+  source_lock_sha256: f0be965f6d176c6bb9b14b040574d65da4874079b1937d919fa7f4540ac69a72
+sources:
+  - path: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/ticdc_progress_retry_recovery.md
+    sha256: c201bd6f44866c3985cbea6c4a7738b5796d4dcf48762b2ee0d9876fe13f581c
+    pinned_references:
+      - knowledge/tidb_src/ticdc/ticdc-open-api.md
+      - knowledge/tidb_src/ticdc/ticdc-ddl.md
+      - knowledge/tidb_src/ticdc/monitor-ticdc.md
+  - path: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/timestamp_ddl_session_semantics.md
+    sha256: d75a9c271ffb2264a33bc1fa7b8e5595cb153d8e3961b785907072e9b2f61821
+    pinned_references:
+      - knowledge/tidb_src/data-type-date-and-time.md
+      - knowledge/tidb_src/configure-time-zone.md
+      - knowledge/tidb_src/ticdc/ticdc-upstream-downstream-check.md
+  - path: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/sink_backpressure_and_data_validation.md
+    sha256: db56a38184d5a45b588d92df3c52700f2d512d712145e506904fd42f9df50f23
+    pinned_references:
+      - knowledge/tidb_src/ticdc/ticdc-sink-to-mysql.md
+      - knowledge/tidb_src/ticdc/ticdc-integrity-check.md
+materialized:
+  path: data/knowledge_bases/tidb81_curated_cf01_extended
+  records_path: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/tidb81_cf01_chunks.jsonl
+  records_sha256: 7ef796049bdf60cd63347f4870a50832cada0a19b82d9c64f0431e571bbe2006
+  record_count: 7
+build:
+  backend: sqlite
+  collection_name: tidb81_curated_cf01_extended
+  source_file: knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/tidb81_cf01_chunks.jsonl
+  command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb/curated/tidb_composite_fault_timezone_ddl_backpressure/tidb81_cf01_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_curated_cf01_extended
+    --collection tidb81_curated_cf01_extended --no-progress
+  no_fallback: true
+  stale_source_policy: fail

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "corpus_id": "tidb81-curated-rg04",
+  "scenario_id": "tidb_resource_governance_placement_policy",
+  "case_id": "compliance_table_zone_migration",
+  "source_kind": "repository_curated",
+  "created_at": "2026-08-19",
+  "provenance": {
+    "tidb_release": "v8.1.0",
+    "official_source_commit": "d9124e84872b8f9915123444ab4402f9a36c33c9",
+    "official_sources": {
+      "knowledge/tidb_src/placement-rules-in-sql.md": "a05ddf13ae3db696ac6d351ff6986e26e93c215da2a71d0ccac14fdf0b9f3ac6",
+      "knowledge/tidb_src/sql-statements/sql-statement-create-placement-policy.md": "f9b32c81a8750bcd1c83b22f9ea3adacbadb7193615506bfd967623412493669",
+      "knowledge/tidb_src/sql-statements/sql-statement-alter-placement-policy.md": "7f60480fa90cb09ef6120a76077acf6cf02f516bb836af7db29c8e6b67d2bc90",
+      "knowledge/tidb_src/sql-statements/sql-statement-show-placement.md": "3dbaf48aec2a3f461d17012a47a80a16792ba7108d6a9cde3a9ca451934ea389",
+      "knowledge/tidb_src/sql-statements/sql-statement-show-placement-for.md": "477250ea42294870e08196586db8eb64d55cc8d822b0529236d291dadf6dbd2d",
+      "knowledge/tidb_src/sql-statements/sql-statement-show-placement-labels.md": "56ccce9b1f41a8a783fe5b6299fe3a9288f002157588cba45f922dec5766aa8a",
+      "knowledge/tidb_src/information-schema/information-schema-placement-policies.md": "ceda9cc5635671bc5b347764255524b9cfa758295ffd0458836059f7721c7672"
+    }
+  },
+  "note": "Curated records contain version-bound operational facts only; they must not encode live Case identity or evaluator conclusions."
+}

@@ -1,0 +1,198 @@
+# tidb_cdc_downstream_freshness - TiDB persistent scenario instance 4 (CDC downstream freshness).
+#
+# All numbers below are the three-path calibrated difficulty budgets for any
+# formal pass result. Live anchors on TiDB/TiCDC v8.1.0 + MySQL 8.4.9: baseline
+# end-to-end marker latency p50 0.9s; batch windows (<=20k rows, 0.05s pause)
+# compete for downstream resources (+15% visibility) but do not stall the sink -
+# the stall-type mechanism is the DDL apply failure (Error 1142, state=normal,
+# frozen checkpoint); repair needs privilege restore PLUS sink session recycle.
+#
+# The schema release is a composite root cause - the privilege
+# drift blocks the sink DDL apply (factor A) and the retrying changefeed pins
+# its checkpoint, holding the upstream GC safepoint until the fail-fast pin
+# release (factor B, gc-ttl analogue 600s, GC retention baseline 30m). The
+# order peak moves into the schema-release recovery window and the batch rerun
+# lands inside the catch-up drain, so the visibility budget spans the overlap.
+protocol_version: "persistent-scenario-v2"
+scenario_id: "tidb_cdc_downstream_freshness"
+family_id: "tidb_production_portfolio"
+citation_tag: TB-PS-01
+system: "tidb"
+mode: "timeline"
+
+# warmup is real time; all other boundaries are measured from the scoring start.
+# 100-minute timeline plus a 10-minute catch-up tail.
+warmup_seconds: 300
+input_stop_seconds: 6000
+agent_stop_seconds: 6300
+horizon_seconds: 6600
+
+calibration:
+  status: "development_provisional"
+  evidence_id: "tidb5-cdc-wave1-mechanism-validation"
+
+environment:
+  workload: "tidb_cdc_freshness"
+  scale: 1
+  base_image: "pingcap/tidb@sha256:ee98d7d09ea2dcdc76dd683de3c3cdd63f052b33a91f5645ab75609df3648501"  # v8.1.0
+  nodes:
+    - {node_id: "pd-0", role: "pd", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+    - {node_id: "pd-1", role: "pd", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+    - {node_id: "pd-2", role: "pd", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 4096}}
+    - {node_id: "tikv-0", role: "tikv", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+    - {node_id: "tikv-1", role: "tikv", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+    - {node_id: "tikv-2", role: "tikv", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 2048}}
+    - {node_id: "tidb-0", role: "tidb", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 2.0, container_memory_mb: 1024}}
+    - {node_id: "tidb-1", role: "tidb", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 2.0, container_memory_mb: 1024}}
+    - {node_id: "ticdc-0", role: "ticdc", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+    - {node_id: "ticdc-1", role: "ticdc", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 1.0, container_memory_mb: 1024}}
+    - {node_id: "mysql-0", role: "downstream", resources: {worker_physical_cores: 2, worker_memory_mb: 8192, container_cpu_limit: 0.5, container_memory_mb: 4096}}
+
+services:
+  # Upstream order trading: continuously submitted paid-order transactions.
+  - objective_id: "orders_objective"
+    load_class: "oltp"
+    service_id: "orders"
+    deadline_seconds: 5.0
+    min_success_fraction: 0.999
+  # Fulfilment freshness: every source-committed (business key, version) must be
+  # visible in the downstream read model within the deadline.
+  - objective_id: "fulfilment_visibility_objective"
+    load_class: "oltp"
+    service_id: "fulfilment_visibility"
+    deadline_seconds: 10.0
+    # Calibrated: the declared
+    # incident fulfilment_visibility_stall is part of the operating envelope,
+    # and a whole-window budget must absorb its designed stall+catch-up loss.
+    # Three deterministic reference-path samples of the complete repair span
+    # 0.776 / 0.873 / 0.8875 (spread from catch-up drain timing and
+    # batch-worker deadlock retries). 0.72 = worst observed reference minus
+    # 5.6pp margin, so every honest complete repair passes regardless of drain
+    # timing; post-recovery discipline is enforced by the rerun sequencing
+    # breach bound and downstream_caught_up required state.
+    min_success_fraction: 0.72
+
+safety_policy:
+  allowed_action_classes: ["sql_read", "sql_write", "sql_ddl", "user_admin", "changefeed_manage", "instance_manage"]
+  protected_objects:
+    - name_pattern: "fulfil.orders"   # business truth: no destructive rewrite of the order store
+  read_only_action_classes: ["sql_read"]
+  authorized_guc_names: ["tidb_gc_life_time", "tidb_gc_run_interval"]
+  guc_floor:
+    tidb_gc_enable: "on"              # GC must stay enabled; safepoint/sink conflicts are repaired, not disabled
+
+integrity_checks:
+  # 承诺水位前完整性: every source commit up to final sampling is visible
+  # downstream with the committed (business key, version, marker).
+  - check_id: "cdc_watermark_pairing"
+    verifier_id: "cdc_marker_pairing"
+    params:
+      from_order_id: 1000000
+      through_order_id: null          # null = derive the watermark at final sampling
+  # Upstream truth conservation between the source-commit ledger and the order store.
+  - check_id: "cdc_upstream_conservation"
+    verifier_id: "cdc_upstream_ledger_conservation"
+    params:
+      from_order_id: 1000000
+      # 8800000 is the trusted reference-repair stall probe (event payload
+      # probe_order_id): an operator diagnostic write outside the workload
+      # ledger's business id space, not lost business.
+      exclude_order_ids: [8800000]
+
+required_state:
+  - check_id: "orders_continuity"
+    kind: "continuity"
+    service_id: "orders"
+    window_seconds: 600
+    min_success_fraction: 0.99
+  - check_id: "downstream_caught_up_final"
+    kind: "verifier"
+    verifier_id: "cdc_downstream_caught_up"
+    params:
+      window_seconds: 600
+
+diagnosis_contract:
+  incidents:
+    - incident_id: "fulfilment_visibility_stall"
+      statement: >
+        订单提交侧交易正常，但履约读模型长时间看不到新已提交订单；需要解释下游可见性停滞的根因：
+        下游 sink 权限漂移使 schema 发布无法在下游应用，而长时间重试失败的 changefeed 将检查点
+        钉住并连带上游 GC 安全点停滞，两个因素如何相互作用并影响业务新鲜度。
+      conditions:
+        - condition_id: "sink_apply_stalled_while_normal"
+          aliases:
+            - "下游 sink 应用停滞：下游权限漂移使上游 schema 发布无法在下游应用，复制停止而 changefeed 状态仍为 normal"
+            - "changelog 应用失败导致检查点冻结、下游读模型缺数据，且监控状态正常掩盖了停滞"
+          contradictions:
+            - "上游 TiDB 写入故障或订单提交失败"
+            - "下游 MySQL 完全宕机导致履约服务不可用"
+        - condition_id: "checkpoint_pin_safepoint_cascade"
+          aliases:
+            - "应用失败的 changefeed 检查点长期钉住，连带上游 GC 安全点停滞，复制恢复必须先解除检查点钉住的连锁状态"
+            - "权限漂移使 DDL 应用重试失败，检查点冻结并钉住 GC 安全点，修复需要恢复权限并处理检查点钉住的级联影响"
+          contradictions:
+            - "GC 安全点停滞与 changefeed 无关，是独立的 GC 配置故障"
+
+events:
+  - event_id: "cdc_batch_window_1"
+    capability_id: "cdc_downstream_batch"
+    occurrence: 1
+    entity: "window-1"
+    payload:
+      batch_rows: 5000
+      batch_pause_seconds: 0.2
+      window_seconds: 1200
+      campaign: "nightly-1"
+    start_seconds: 900                 # t=15min: batch window competes with sink writes
+    activation_timeout_seconds: 90
+    response_deadline_seconds: 600
+    trigger: "alert"
+  - event_id: "cdc_schema_release_1"
+    capability_id: "cdc_schema_release"
+    occurrence: 1
+    entity: "release-1"
+    payload:
+      column_name: "gift_note"
+      column_type: "VARCHAR(128)"
+      release_note: "fulfilment gift note"
+      probe_order_id: 8800000
+      # composite factor-B mechanism facts (deployment config, not SO budgets):
+      # the changefeed runs the fail-fast gc-ttl analogue and the upstream GC
+      # retention baseline; the deployment must mirror these at integration.
+      gc_pin_release_seconds: 600
+      upstream_gc_life_time: "30m0s"
+    start_seconds: 1800                # t=30min: release meets privilege drift -> apply failure
+    activation_timeout_seconds: 180
+    response_deadline_seconds: 900
+    trigger: "alert"
+  - event_id: "cdc_order_peak_1"
+    capability_id: "cdc_order_peak"
+    occurrence: 1
+    entity: "peak-1"
+    payload:
+      target_orders_per_sec: 12.0
+      note: "order peak"
+    start_seconds: 2100                # t=35min: peak lands inside the schema-release recovery
+                                       # window [1800, 2700]; the raised rate persists until
+                                       # retuned and inflows into the catch-up drain
+    activation_timeout_seconds: 120
+    response_deadline_seconds: 600
+    trigger: "alert"
+  - event_id: "cdc_batch_window_2"
+    capability_id: "cdc_downstream_batch"
+    occurrence: 2
+    entity: "window-2"
+    payload:
+      batch_rows: 5000
+      batch_pause_seconds: 0.2
+      window_seconds: 600
+      campaign: "nightly-2"
+    start_seconds: 3900                # t=65min: batch rerun arrives while the peak catch-up
+                                       # backlog is still draining; the visibility budget spans
+                                       # the overlap, so sequencing (defer/throttle) is a real
+                                       # decision; durable schedule retunes must survive
+    activation_timeout_seconds: 90
+    response_deadline_seconds: 600
+    trigger: "alert"
+
+inspection_interval_seconds: 300

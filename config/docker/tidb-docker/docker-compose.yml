@@ -1,0 +1,98 @@
+x-pd: &pd
+  image: pingcap/pd@sha256:78f5de9dc59abd02c99056294fb51f29da39ed932eb92cb2570ad57fe0774e80
+  cpus: 2.0
+  mem_limit: 4g
+  memswap_limit: 4g
+  storage_opt:
+    size: 2G
+  tmpfs:
+    - /data/pd:mode=1777,size=512M
+  volumes:
+    - ./config/pd.toml:/pd.toml:ro
+  restart: "no"
+
+x-tikv: &tikv
+  image: pingcap/tikv@sha256:0b9d00f2b4f60cd3f91b55720a737136643e17bfb4de82a3c30ca532430374a5
+  cpus: 1.0
+  mem_limit: 2g
+  memswap_limit: 2g
+  storage_opt:
+    size: 8G
+  volumes:
+    - ./config/tikv.toml:/tikv.toml:ro
+  restart: "no"
+
+x-tidb: &tidb
+  image: pingcap/tidb@sha256:ee98d7d09ea2dcdc76dd683de3c3cdd63f052b33a91f5645ab75609df3648501
+  cpus: 2.0
+  mem_limit: 1g
+  memswap_limit: 1g
+  storage_opt:
+    size: 2G
+  tmpfs:
+    - /tmp/tidb:size=512M
+  restart: "no"
+
+x-tiflash: &tiflash
+  image: docker.m.daocloud.io/pingcap/tiflash@sha256:251e3e2b76482fe2f5c2b82311c9cce24f240a1ad66f1eeda3438e66da3a18ec
+  cpus: 2.0
+  mem_limit: 4g
+  memswap_limit: 4g
+  storage_opt:
+    size: 10G
+  security_opt:
+    - seccomp:unconfined
+  entrypoint:
+    - /tiflash/tiflash
+    - server
+    - --config-file
+    - /config.toml
+  restart: "no"
+
+x-ticdc: &ticdc
+  image: pingcap/ticdc@sha256:7832063b5215b3107d33b7280b2653a79667e9ba54e4b0596ed1092b4a486015
+  cpus: 1.0
+  mem_limit: 1g
+  memswap_limit: 1g
+  restart: "no"
+
+x-downstream: &downstream
+  image: mysql@sha256:43bd9764df60666fb2ba2cf8217dd17b3d2414c150005d2fdd07a0cd73d3b7f5
+  cpus: 0.5
+  mem_limit: 4g
+  memswap_limit: 4g
+  tmpfs:
+    - /var/lib/mysql:size=16G
+  restart: "no"
+
+services:
+  prometheus:
+    image: prom/prometheus@sha256:f20d3127bf2876f4a1df76246fca576b41ddf1125ed1c546fbd8b16ea55117e6
+    user: "0:0"
+    cpus: 0.5
+    mem_limit: 2g
+    memswap_limit: 2g
+    storage_opt:
+      size: 4G
+    restart: "no"
+
+  cadvisor:
+    image: m.daocloud.io/gcr.io/cadvisor/cadvisor@sha256:f40e65878e25c2e78ea037f73a449527a0fb994e303dc3e34cb6b187b4b91435
+    cpus: 2.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=2s
+      - --global_housekeeping_interval=2s
+      - --store_container_labels=true
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - ${DOCKER_ROOT_DIR:?DOCKER_ROOT_DIR is required}:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    restart: "no"

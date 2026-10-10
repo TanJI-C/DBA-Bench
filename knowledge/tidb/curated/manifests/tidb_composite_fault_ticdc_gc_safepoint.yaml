@@ -1,0 +1,23 @@
+schema_version: 2
+corpus_id: tidb81-unified-kb
+scenario_id: tidb_composite_fault_ticdc_gc_safepoint
+case_id: ticdc_oom_leftover_lock_and_service_safepoint
+knowledge_mode: hierarchical
+source_kind: repository_curated
+source_root: knowledge/tidb/curated/tidb_composite_fault_ticdc_gc_safepoint
+source_manifest: knowledge/tidb/curated/tidb_composite_fault_ticdc_gc_safepoint/.source-manifest.json
+source_lock: knowledge/tidb/curated/tidb_composite_fault_ticdc_gc_safepoint/.source-lock.json
+processed_corpus: knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
+processed_corpus_sha256: f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5
+serving_corpus: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+serving_corpus_sha256: e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a
+provenance: knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
+provenance_sha256: 420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866
+unified_manifest: knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
+build:
+  merge_command: conda run -n aiops python scripts/merge_tidb_curated_knowledge.py
+  sqlite_backend: tidb81_unified_docs
+  chroma_collection: tidb81_unified_docs
+  no_private_index: true
+  no_fallback: true
+  stale_source_policy: fail

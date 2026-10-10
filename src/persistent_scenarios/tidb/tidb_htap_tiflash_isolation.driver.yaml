@@ -1,0 +1,63 @@
+# Instance driver contract for tidb_htap_tiflash_isolation (tidb5-portfolio / HTAP).
+#
+# This file is NOT part of the core persistent-scenario spec (the frozen loader rejects
+# unknown top-level keys by design). It is the HTAP driver assembly input. Values
+# follow the three-path difficulty calibration.
+orders_table: htap.orders
+history_row_count: 800000           # LOAD DATA ~12.3k rows/s measured
+tidb_memory_mb: 2048                # 1GB TiDB kernel-OOM-killed during bulk provisioning
+tiflash_replica_count: 1            # shared TiDBTopologySpec caps TiFlash at 1
+trading:
+  rate_per_second: 2.0
+  deadline_seconds: 5.0
+  peak_multiplier: 2
+dashboard:
+  interval_seconds: 30
+  latency_budget_seconds: 20
+analysis:
+  max_workers: 2
+  attempt_timeout_seconds: 600
+  deadline_offset_seconds: 900
+engine_routing:                     # measured v8.1.0 facts
+  session_variable: tidb_isolation_read_engines
+  global_scope_supported: false     # SET GLOBAL raises 1228: SESSION-only on v8.1.0
+  publication_surface: htap.analytics_config.engine_preference   # applied per claim
+  auto_plan_engine: tiflash         # optimizer chooses the replica for the analysis scan
+  mpp_dependency: "aggregations routed to TiFlash without MPP have no physical plan (1815)"
+resource_group:
+  name: rg_analytics
+  ru_per_sec: 10
+  account_binding_supported: true   # ALTER USER ... RESOURCE GROUP; CURRENT_RESOURCE_GROUP reflects it
+  session_variable_supported: false # `resource_group` sysvar unknown (1193) on v8.1.0
+  measured_coverage:                # measured (v8.1.0, fresh cluster): warm-cache
+                                    # alternation, TiFlash MPP scan 0.05s default vs 25.0s
+                                    # under the group (runs 28.59/25.0/25.0; a second
+                                    # cluster measured 27.31s). TiKV cop aggregation stays unthrottled.
+    tiflash_scan_default_seconds: 0.05
+    tiflash_scan_rg_seconds: 25.0
+    tikv_scan_rg_seconds: 0.01      # TiKV cop aggregation consumes ~1.4 RU: not throttled
+tiflash_throttle:                   # reversible node degradation (t=40)
+  primitive: docker update --cpus   # deployment lacks a public CPU-limit primitive
+  default_cpus: 2.0
+  throttled_cpus: 0.4
+  measured_slowdown_factor: 3.3     # measured under concurrent trading load; isolated
+                                    # measurement at 800k rows: 0.06s -> 0.09-0.10s, node
+                                    # serves throughout, throttle_reversible=true
+tenant_onboarding:                  # tenant placement residue (t=58)
+  table: htap.tenant_orders
+  creation: CREATE TABLE LIKE htap.orders   # real TiDB semantics: LIKE does NOT inherit the TiFlash replica
+  slice: order_id % 20 = 0
+  template_config: htap.analytics_config.tenant_engine_preference = tiflash_preferred
+                                    # the tenant's column-store SLA pins its session engines
+  attachment_deferral: node maintenance window (degradation..recovery); audited in htap.trade_audit;
+                                    # NOT flushed by recovery - re-attach is the repair
+node_recovery:                      # node rejoin (t=70)
+  steps: [docker update --cpus default, docker restart tiflash-0]
+  replica_rebuild: information_schema.tiflash_replica progress/available lag is the observable
+tenant_analysis:                    # tenant delivery duty
+  service: htap_tenant_service
+  job_kind: tenant_analysis         # claimed only by the tenant service under the tenant template
+  retry_policy: max 3 attempts, 180s requeue backoff (tenant BI scheduler retry semantics)
+  recurrence: routing errors on htap.tenant_orders recur across attempts while the placement
+                                    # attachment is missing; they surface with the routing fix or
+                                    # the tenant template, never on the shared orders reads

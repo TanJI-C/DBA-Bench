@@ -1,0 +1,120 @@
+schema_version: 1
+corpus_id: tidb81-curated-rg04
+scenario_id: tidb_resource_governance_placement_policy
+case_id: compliance_table_zone_migration
+product_version: v8.1.0
+knowledge_mode: hierarchical
+source_kind: repository_curated
+description: >-
+  Version-bound TiDB placement policy semantics, attachment inheritance, asynchronous PD
+  scheduling, Store/fault-domain feasibility, physical Region validation, and scoped repair.
+runtime_entrypoint: unified_serving_projection
+provenance:
+  tidb_release: v8.1.0
+  official_source_commit: d9124e84872b8f9915123444ab4402f9a36c33c9
+  source_lock: knowledge/tidb/curated/tidb_resource_governance_placement_policy/.source-lock.json
+  source_lock_sha256: 0537a7bf8a55bebf4a701948b3b612b910b831effc4472c761cca238da9ca3fd
+  source_files:
+    knowledge/tidb_src/placement-rules-in-sql.md: a05ddf13ae3db696ac6d351ff6986e26e93c215da2a71d0ccac14fdf0b9f3ac6
+    knowledge/tidb_src/sql-statements/sql-statement-create-placement-policy.md: f9b32c81a8750bcd1c83b22f9ea3adacbadb7193615506bfd967623412493669
+    knowledge/tidb_src/sql-statements/sql-statement-alter-placement-policy.md: 7f60480fa90cb09ef6120a76077acf6cf02f516bb836af7db29c8e6b67d2bc90
+    knowledge/tidb_src/sql-statements/sql-statement-show-placement.md: 3dbaf48aec2a3f461d17012a47a80a16792ba7108d6a9cde3a9ca451934ea389
+    knowledge/tidb_src/sql-statements/sql-statement-show-placement-for.md: 477250ea42294870e08196586db8eb64d55cc8d822b0529236d291dadf6dbd2d
+    knowledge/tidb_src/sql-statements/sql-statement-show-placement-labels.md: 56ccce9b1f41a8a783fe5b6299fe3a9288f002157588cba45f922dec5766aa8a
+    knowledge/tidb_src/information-schema/information-schema-placement-policies.md: ceda9cc5635671bc5b347764255524b9cfa758295ffd0458836059f7721c7672
+  curated_source_manifest: knowledge/tidb/curated/tidb_resource_governance_placement_policy/.source-manifest.json
+hops:
+  - hop_id: H1
+    knowledge_question: Which relation is committed for the current request?
+    expected_concept: Context, binding, allocation, and route epochs form a current fence.
+    version_scope: TiDB 8.1 plus the RG04 control-plane contract
+    required_environment_binding: request context, route bindings, allocations, segments, relation directory
+    decision_changed: target relation selection
+    counterfactual: service name or larger future generation selects the wrong same-shape relation
+    visible_evidence: full current and historical control rows
+  - hop_id: H2
+    knowledge_question: How do placement policy fields express the approval?
+    expected_concept: Followers add to the leader; role constraints differ from primary/regions/schedule.
+    version_scope: TiDB 8.1 placement rules
+    required_environment_binding: compliance request, full policy catalog, placement labels
+    decision_changed: candidate policy selection
+    counterfactual: fixed policy name or MAJORITY_IN_PRIMARY shortcut
+    visible_evidence: policy definitions and active approval fields
+  - hop_id: H3
+    knowledge_question: Is a policy definition the same as its attachment?
+    expected_concept: Database/default, table, and partition bindings have separate precedence.
+    version_scope: TiDB 8.1 placement inheritance
+    required_environment_binding: tables, partitions, SHOW CREATE TABLE, SHOW PLACEMENT
+    decision_changed: table-scoped repair boundary
+    counterfactual: detach to DEFAULT or mutate an inherited scope
+    visible_evidence: object attachment and inheritance state
+  - hop_id: H4
+    knowledge_question: Can the requested rule be satisfied by current stores?
+    expected_concept: Labels, fault domains, healthy peers, and capacity determine feasibility.
+    version_scope: TiDB 8.1 PD/TiKV scheduling
+    required_environment_binding: Store status, labels, capacity, policy fields, Region peers
+    decision_changed: reject unsatisfiable candidate
+    counterfactual: accepted SQL is mistaken for a realizable layout
+    visible_evidence: real Store and Region state
+  - hop_id: H5
+    knowledge_question: What proves scheduling completion?
+    expected_concept: PENDING and INPROGRESS are not SCHEDULED; admission is not convergence.
+    version_scope: TiDB 8.1 SHOW PLACEMENT
+    required_environment_binding: placement state and operator observations after re-read
+    decision_changed: wait before submission
+    counterfactual: submit immediately after DDL
+    visible_evidence: asynchronous state transitions
+  - hop_id: H6
+    knowledge_question: What proves physical completion?
+    expected_concept: Each target Region needs healthy voters, domain coverage, leader locality, and no learner.
+    version_scope: TiDB 8.1 Region and Store metadata
+    required_environment_binding: Region peers, leader flags, learner flags, Store labels/capacity
+    decision_changed: final physical acceptance
+    counterfactual: business query success substitutes for placement proof
+    visible_evidence: every target Region peer row
+  - hop_id: H7
+    knowledge_question: What proves the smallest safe repair completed?
+    expected_concept: Target truth changes only in placement; protected data/control/topology remains stable.
+    version_scope: RG04 Scenario safety contract
+    required_environment_binding: final evaluator and independent safety baseline
+    decision_changed: final submit boundary
+    counterfactual: wrong relation or global configuration mutation
+    visible_evidence: checksums, protected attachments, schemas, topology, business truth
+materialization:
+  role: ablation_only
+  formal_agent_entrypoint: false
+  source_file: knowledge/tidb/curated/tidb_resource_governance_placement_policy/tidb81_rg04_chunks.jsonl
+  backend: sqlite
+  knowledge_mode: hierarchical
+  persist_dir: data/knowledge_bases/tidb81_curated_rg04_extended
+  collection: tidb81_curated_rg04_extended
+  source_sha256: d071c94f0f4929b2b42144bd6b78fde4564a2cb5292a235bdbdd2fcdbbcf1729
+  build_command: >-
+    conda run -n aiops python scripts/build_tidb_knowledge_base.py --backend sqlite
+    --knowledge-mode hierarchical --source-file
+    knowledge/tidb/curated/tidb_resource_governance_placement_policy/tidb81_rg04_chunks.jsonl
+    --persist-dir data/knowledge_bases/tidb81_curated_rg04_extended
+    --collection tidb81_curated_rg04_extended --no-progress
+  no_fallback: true
+  stale_source_policy: fail
+unified_serving:
+  role: formal_agent_entrypoint
+  source_file: knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
+  backend: chroma
+  knowledge_mode: hierarchical
+  persist_dir: data/knowledge_bases/tidb81_unified_chroma
+  collection: tidb81_unified_docs
+  manifest: data/knowledge_bases/tidb81_unified_chroma/manifest.json
+  source_sha256: e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a
+  record_count: 3571
+  sqlite_ablation_persist_dir: data/knowledge_bases/tidb81_unified_docs
+  stale_index_policy: fail
+  agent_projection:
+    - rank
+    - score
+    - title
+    - version
+    - kb_type
+    - component
+    - source_scope
+    - content

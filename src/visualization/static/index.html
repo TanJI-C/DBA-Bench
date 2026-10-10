@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AiOpsBench - Diagnosis Trace Viewer</title>
+    <link rel="stylesheet" href="/portal.css?v=5">
+    <link rel="stylesheet" href="style.css?v=13">
+</head>
+<body>
+    <div data-portal-slot></div>
+
+    <div class="trace-toolbar">
+        <div class="trace-actions">
+            <span id="structure-badge" class="structure-badge hidden"></span>
+            <div class="toolbar">
+                <button id="btn-fit" title="Fit to screen">Fit</button>
+                <button id="btn-expand-all" title="Expand all turns">Expand All</button>
+                <button id="btn-collapse-all" title="Collapse all turns">Collapse All</button>
+            </div>
+            <div class="header-meta" id="run-meta"></div>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <svg id="flowchart-svg">
+            <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-color, #4b5563)"/>
+                </marker>
+                <marker id="arrow-best" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24"/>
+                </marker>
+            </defs>
+            <g id="flowchart-root"></g>
+        </svg>
+
+        <div id="side-panel" class="side-panel">
+            <div class="side-panel-header">Trace Logs</div>
+            <div id="trace-list" class="trace-list"></div>
+        </div>
+
+        <div id="side-panel-extra" class="context-panel hidden">
+            <div class="side-panel-header" id="side-panel-title">Info</div>
+            <div id="side-panel-content"></div>
+        </div>
+    </div>
+
+    <div id="detail-panel" class="detail-panel hidden">
+        <div class="resize-handle" id="resize-handle"></div>
+        <div class="detail-header">
+            <span id="detail-title">Node Detail</span>
+            <button class="close-btn" id="btn-close-detail">&times;</button>
+        </div>
+        <div id="detail-content"></div>
+    </div>
+
+    <div id="tooltip" class="tooltip hidden"></div>
+
+    <script src="lib/d3.v7.min.js"></script>
+    <script src="app.js?v=6"></script>
+    <script src="/portal.js" defer></script>
+</body>
+</html>

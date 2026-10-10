@@ -1,0 +1,24 @@
+experiment_id: pg_smoke_example
+
+benchmark:
+  systems: [postgresql]
+  categories: [query_perf]
+  scenarios:
+    - pg_query_perf_missing_index
+
+agents:
+  - id: mock
+    mode: mock
+    max_turns: 30
+
+repetitions: 1
+seeds: [11]
+
+runtime:
+  # Global run limit; runs sharing one scenario_id are always serialized.
+  concurrency: 1
+  timeout_seconds: 1800
+  port_base: 16432
+  container_prefix: aiopsbench-pg-smoke
+  fault_snapshot: auto
+  llm_config: config/llm_config.json

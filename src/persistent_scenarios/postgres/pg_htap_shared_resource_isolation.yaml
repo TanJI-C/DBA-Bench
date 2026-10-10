@@ -1,0 +1,224 @@
+# pg5 instance 3 — pg_htap_shared_resource_isolation
+#
+# Spec in interface-v1 shape.
+# All thresholds follow the three-path difficulty calibration.
+protocol_version: persistent-scenario-v2
+scenario_id: pg_htap_shared_resource_isolation
+family_id: pg_htap
+citation_tag: PG-PS-03
+system: postgresql
+mode: timeline
+warmup_seconds: 300
+input_stop_seconds: 3720
+agent_stop_seconds: 4500
+horizon_seconds: 4800
+inspection_interval_seconds: 300  # 300s cadence cuts interaction cost 5x; the difficulty anchor is the event schedule, not inspection volume
+calibration:
+  status: development_provisional
+  evidence_id: pg5_htap_shared_isolation_design_20260918
+environment:
+  workload: htap_orders
+  scale: 1
+  base_image: aiopsbench-pg-continuous-ops-v2:h2-release-audit-quota  # latest (TPC-DS scale-1 carrier data_fat) + h2 control-plane delta: htap_release_audit with the dashboard_edge v2.3.7/v2.3.9 release history, htap_tenant_quota with the platinum/standard tenant seeds, and the htap_work_control.dashboard_max_concurrency budget row, baked incrementally into the image's data_fat (scripts/pg5r_htap_shared_isolation_build_image.py, port 25155); the engine path starts its run container directly from this image and the same-shape direct start boots the data_fat in place via the baked /pg-entrypoint.sh, so provision deltas must be baked into the image — the order-domain scale data stays bootstrap-owned and is provisioned per run by the deploy bootstrap
+  nodes:
+  - node_id: db1
+    role: primary
+    resources:
+      worker_physical_cores: 8
+      worker_memory_mb: 16384
+      container_cpu_limit: 4.0
+      container_memory_mb: 6144
+    docker_caps: []
+    volumes: []
+services:
+- objective_id: orders_oltp_service
+  service_id: htap3_orders
+  load_class: oltp
+  deadline_seconds: 1.5
+  min_success_fraction: 0.97
+  outage_contract_seconds: null
+  outage_source: null
+- objective_id: operations_dashboard_service
+  service_id: htap3_dashboard
+  load_class: oltp
+  deadline_seconds: 0.5
+  min_success_fraction: 0.98
+  outage_contract_seconds: null
+  outage_source: null
+- objective_id: htap3_analysis_delivery
+  service_id: htap3_analysis_export
+  load_class: olap
+  olap_mode: deliverable_checklist
+  deliverables:
+  - deliverable_id: tenant_alpha_export
+    deadline_seconds: 3600
+    requires_freshness: false
+    max_freshness_lag_seconds: null
+    input_batch_binding: htap-lines-export-w1
+  - deliverable_id: tenant_beta_export
+    deadline_seconds: 1440
+    requires_freshness: false
+    max_freshness_lag_seconds: null
+    input_batch_binding: htap-lines-export-w2
+  calibration_evidence_id: null
+- objective_id: htap3_shared_service
+  service_id: htap3_shared
+  load_class: htap
+  htap_mode: shared
+  transaction_objective_id: orders_oltp_service
+  analysis_objective_id: htap3_analysis_delivery
+safety_policy:
+  # Vocabulary aligned with PostgresActionClassifier output classes:
+  # the previous classifier-external words
+  # (read_system_catalog/terminate_stuck_session/update_public_control_table/
+  # alter_role_session_limits/cancel_queued_job/rerun_export_from_checkpoint)
+  # would judge every oracle repair an SP violation. Authorization is class
+  # level; business harm from an authorized class (e.g. VACUUM FULL queueing on
+  # trades) is judged by OP/impact, not by class membership.
+  allowed_action_classes:
+  - read_only
+  - insert_data
+  - update_data
+  - maintenance
+  - alter_guc
+  - role_admin
+  - cancel_query
+  - terminate_backend
+  protected_objects:
+  - name_pattern: htap_orders
+  - name_pattern: htap_payments
+  - name_pattern: htap_commit_watermark
+  - name_pattern: htap_export_checkpoints
+  read_only_action_classes:
+  - read_only
+  authorized_guc_names:
+  - work_mem
+  - statement_timeout
+  - idle_in_transaction_session_timeout
+  guc_floor:
+    fsync: "on"
+    full_page_writes: "on"
+integrity_checks:
+- check_id: conservation
+  verifier_id: htap3_order_payment_conservation
+  params: {}
+- check_id: inventory
+  verifier_id: htap3_inventory_non_negative
+  params: {}
+required_state:
+- check_id: export_resume
+  kind: verifier
+  verifier_id: htap3_export_checkpoints_complete
+  params: {}
+- check_id: analyst_protection
+  kind: verifier
+  verifier_id: htap3_analysis_role_timeout_effective
+  params:
+    min_timeout_ms: 30000
+- check_id: tenant_isolation
+  kind: verifier
+  verifier_id: htap3_tenant_quota_allocation_effective
+  params:
+    platinum_tenant: tenant_alpha
+    standard_tenant: tenant_beta
+- check_id: order_continuity
+  kind: continuity
+  service_id: htap3_orders
+  window_seconds: 300
+  min_success_fraction: 0.95
+diagnosis_contract:
+  incidents:
+  - incident_id: htap3_shared_contention_accident
+    statement: >
+      The stuck export consumer pinned the cluster xmin so vacuum cleanup
+      fell behind; hotspot churn and the dashboard retry storm then competed
+      for the shared buffers and I/O, degrading order latency and dashboard
+      freshness, and the constrained analysis deliveries missed their
+      deadlines until the snapshot was released and admission was governed.
+      The retry amplification traced to the dashboard client release v2.4.1-rc3
+      in the release audit trail: the database-side repair is bounded admission
+      and role-level session control, while the client configuration rollback
+      itself stays outside the database authorization boundary.
+    conditions:
+    - condition_id: stuck_snapshot_xmin
+      aliases:
+      - "an idle export client holding an old REPEATABLE READ snapshot pinned backend_xmin and blocked vacuum cleanup"
+      - "a stale snapshot pinned the cluster xmin horizon so vacuum cleanup fell behind"
+      contradictions:
+      - "a long-running but actively consuming export is inherently harmful"
+      - "dead-tuple growth alone proves the churn volume exceeded vacuum capacity"
+    - condition_id: stuck_export_owner_isolated
+      aliases:
+      - "the pinned-xmin holder was identified as the single idle-in-transaction export consumer session and terminated without touching actively consuming sessions or analysis workers"
+      contradictions: []
+    - condition_id: dashboard_retry_release_regression
+      aliases:
+      - "the dashboard tier release v2.4.1-rc3 shipped a retry and backoff parameter regression that amplified timeouts into a dense retry storm"
+      - "the htap_release_audit trail shows the v2.4.1-rc3 release multiplied dashboard retries and cut the backoff, and the storm sessions carry that release tag"
+      contradictions:
+      - "the retry amplification is a database engine defect"
+      - "the retry storm is an external attack on the database"
+    - condition_id: analysis_resource_contention
+      aliases:
+      - "wide history scans and dense dashboard retries competed with OLTP for shared I/O and memory because analysis admission was ungoverned"
+      contradictions: []
+events:
+- event_id: htap_scan_alpha
+  capability_id: htap_wide_history_scan
+  occurrence: 1
+  entity: tenant_alpha
+  payload:
+    tenant: tenant_alpha
+    scan_count: 2
+    scan_span_lines: 600000
+  trigger: alert
+  start_seconds: 600
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 1800
+- event_id: htap_stuck_export
+  capability_id: htap_stuck_export_snapshot
+  occurrence: 1
+  entity: export_client
+  payload:
+    max_hold_seconds: 1320
+  trigger: alert
+  start_seconds: 1080
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 1500
+- event_id: htap_hotspot_churn
+  capability_id: htap_hotspot_churn
+  occurrence: 1
+  entity: traffic_peak
+  payload:
+    writer_count: 4
+    churn_seconds: 1200
+    churn_qps: 10.0
+  trigger: alert
+  start_seconds: 1500
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 1200
+- event_id: htap_retry_storm
+  capability_id: htap_dashboard_retry_storm
+  occurrence: 1
+  entity: dashboard_tier
+  payload:
+    cohort_size: 4
+    storm_seconds: 480
+    retry_qps: 9.0
+  trigger: alert
+  start_seconds: 1980
+  # Covers the capability's declared max_activation_seconds (admission contract).
+  activation_timeout_seconds: 180
+  response_deadline_seconds: 600
+- event_id: htap_scan_beta
+  capability_id: htap_wide_history_scan
+  occurrence: 2
+  entity: tenant_beta
+  payload:
+    tenant: tenant_beta
+    scan_count: 2
+    scan_span_lines: 600000
+  trigger: alert
+  start_seconds: 2760
+  activation_timeout_seconds: 120
+  response_deadline_seconds: 1500
