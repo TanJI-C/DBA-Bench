@@ -76,6 +76,50 @@ def test_pg_init_restarts_after_large_import_shutdown_timeout(monkeypatch, tmp_p
     assert ["docker", "start", deployment.container_name] in calls
 
 
+
+def _record_deploy_commands(monkeypatch, deployment):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(stdout="", stderr="no such image", returncode=1)
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    monkeypatch.setattr("src.execution.deployment.subprocess.run", fake_run)
+    monkeypatch.setattr(deployment, "initialize_dataset_container", lambda: None)
+    monkeypatch.setattr(deployment, "_ensure_owned_resources", lambda: None)
+    monkeypatch.setattr(deployment, "is_container_running", lambda: False)
+    monkeypatch.setattr(deployment, "_build_docker_run_command", lambda for_init=False: ["docker", "run", "main"])
+    return calls
+
+
+def test_pg_deploy_builds_base_image_without_workload_data(monkeypatch):
+    deployment = PGDockerDeployment(container_name="test-base-image")
+    calls = _record_deploy_commands(monkeypatch, deployment)
+
+    deployment.deploy()
+
+    commit = next(command for command in calls if command[:2] == ["docker", "commit"])
+    assert commit == ["docker", "commit", deployment.container_name, deployment.image_name]
+    assert ["docker", "run", "main"] in calls
+
+
+def test_pg_deploy_labels_dataset_image_with_workload_data(monkeypatch, tmp_path):
+    deployment = PGDockerDeployment(container_name="test-dataset-image", workload_data_dir=str(tmp_path / "data"))
+    calls = _record_deploy_commands(monkeypatch, deployment)
+    monkeypatch.setattr(deployment, "_dataset_ready_label", lambda: "ready-123")
+
+    deployment.deploy()
+
+    commit = next(command for command in calls if command[:2] == ["docker", "commit"])
+    assert commit == [
+        "docker", "commit",
+        "--change", "LABEL aiopsbench.dataset_ready=ready-123",
+        deployment.container_name,
+        deployment.image_name,
+    ]
+
 def main():
     print("="*60)
     print("PGDockerDeployment 测试")

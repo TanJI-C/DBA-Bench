@@ -649,13 +649,15 @@ class PGDockerDeployment(BaseDeployment):
                 check=True,
                 capture_output=True,
             )
+            # The readiness label pins a workload dataset; an image without workload
+            # data has nothing to pin, and _is_initialized() accepts it unlabelled.
+            label = (
+                []
+                if self.workload_data_dir is None
+                else ["--change", f"LABEL aiopsbench.dataset_ready={self._dataset_ready_label()}"]
+            )
             result = subprocess.run(
-                [
-                    "docker", "commit",
-                    "--change", f"LABEL aiopsbench.dataset_ready={self._dataset_ready_label()}",
-                    self.container_name,
-                    self.image_name,
-                ],
+                ["docker", "commit", *label, self.container_name, self.image_name],
                 capture_output=True,
                 text=True,
             )
