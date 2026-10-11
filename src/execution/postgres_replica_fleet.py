@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.execution.deployment import BaseDeployment
-from src.execution.environment import PGEnv, Tool
+from src.execution.environment import PGEnv, Tool, lazy_agent_text
 from src.execution.history.metrics import MetricFrame, MetricQuery, MetricService, bound_metric_result, format_utc_timestamp, parse_utc_timestamp, render_metric_frame
 from src.execution.history.records import CapturedRecords, HistoricalCoverage, HistoricalPointRecord, HistoricalRecordSource
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider
@@ -1458,14 +1458,26 @@ class PgReplicaFleetEnv(PGEnv):
         return conn
 
     @Tool(
-        description=(
-            "管理 replica fleet 的实例生命周期。允许 start/stop/restart 单个 replica；"
-            "router 和 pgbouncer 只支持显式的实例生命周期动作；不允许 fleet-wide 操作。"
+        description=lazy_agent_text(
+            zh=(
+                "管理 replica fleet 的实例生命周期。允许 start/stop/restart 单个 replica；"
+                "router 和 pgbouncer 只支持显式的实例生命周期动作；不允许 fleet-wide 操作。"
+            ),
+            en=(
+                "Manage the instance lifecycle of the replica fleet. start/stop/restart of a single replica is allowed; "
+                "router and pgbouncer support only explicit instance lifecycle actions; fleet-wide operations are not allowed."
+            ),
         ),
         arg_descriptions={
-            "action": "start、stop、restart；replica 不接受通用配置动作",
-            "target": "primary、replica_0、replica_1、replica_2、router 或 pgbouncer",
-            "value": "配置值",
+            "action": lazy_agent_text(
+                zh="start、stop、restart；replica 不接受通用配置动作",
+                en="start, stop, restart; replicas do not accept generic configuration actions",
+            ),
+            "target": lazy_agent_text(
+                zh="primary、replica_0、replica_1、replica_2、router 或 pgbouncer",
+                en="primary, replica_0, replica_1, replica_2, router or pgbouncer",
+            ),
+            "value": lazy_agent_text(zh="配置值", en="Configuration value"),
         },
     )
     def manage_instance(self, action: str, target: str = None, value: str = None) -> str:
@@ -1501,23 +1513,51 @@ class PgReplicaFleetEnv(PGEnv):
     @Tool(
         alias="query_metrics",
         tool_id="query_metrics",
-        description=(
-            "查询 primary、三台 read replica 和 PgBouncer 的真实观测。metric_type 可用 "
-            "router_distribution、replica_service、replica_lwlock、query_footprint、"
-            "pgbouncer_pool、primary_service，也保留 replica_health、replication、pool、read_apdex "
-            "和 PGEnv 基础时序观测。"
-            "replica_health、replication、pool 和 read_apdex 只返回当前快照；"
-            "任务的 fleet 指标来自冻结历史，用于比较 route、LWLock waiters、"
-            "query duration 和 pool waiting/maxwait 的先后。"
-            "active_connections 只返回原始连接数时序，disk_usage 只返回容器文件系统容量；"
-            "连接状态、锁等待、数据库/表/WAL/temp 细节请通过 execute_sql 查询。"
+        description=lazy_agent_text(
+            zh=(
+                "查询 primary、三台 read replica 和 PgBouncer 的真实观测。metric_type 可用 "
+                "router_distribution、replica_service、replica_lwlock、query_footprint、"
+                "pgbouncer_pool、primary_service，也保留 replica_health、replication、pool、read_apdex "
+                "和 PGEnv 基础时序观测。"
+                "replica_health、replication、pool 和 read_apdex 只返回当前快照；"
+                "任务的 fleet 指标来自冻结历史，用于比较 route、LWLock waiters、"
+                "query duration 和 pool waiting/maxwait 的先后。"
+                "active_connections 只返回原始连接数时序，disk_usage 只返回容器文件系统容量；"
+                "连接状态、锁等待、数据库/表/WAL/temp 细节请通过 execute_sql 查询。"
+            ),
+            en=(
+                "Query real observations of the primary, the three read replicas and PgBouncer. metric_type can be "
+                "router_distribution, replica_service, replica_lwlock, query_footprint, "
+                "pgbouncer_pool, primary_service; replica_health, replication, pool, read_apdex "
+                "and the PGEnv base time-series observations are also kept. "
+                "replica_health, replication, pool and read_apdex return only the current snapshot; "
+                "the task's fleet metrics come from frozen history and are used to compare the order of route, LWLock waiters, "
+                "query duration and pool waiting/maxwait. "
+                "active_connections returns only the raw connection count time series, disk_usage returns only the container filesystem capacity; "
+                "query connection states, lock waits and database/table/WAL/temp details through execute_sql."
+            ),
         ),
         arg_descriptions={
-            "metric_type": "指标类型，如 router_distribution, replica_service, replica_lwlock, query_footprint, pgbouncer_pool, primary_service",
-            "target": "Fleet 指标可选 replica_0/replica_1/replica_2、read_pool、report_pool 或 query family；cpu 可用 top_processes",
-            "limit": "history 或 workload_activity 返回前 N 条记录，默认 20",
-            "start_timestamp": "时序指标开始时间，必须与 end_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
-            "end_timestamp": "时序指标结束时间，必须与 start_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+            "metric_type": lazy_agent_text(
+                zh="指标类型，如 router_distribution, replica_service, replica_lwlock, query_footprint, pgbouncer_pool, primary_service",
+                en="Metric type, such as router_distribution, replica_service, replica_lwlock, query_footprint, pgbouncer_pool, primary_service",
+            ),
+            "target": lazy_agent_text(
+                zh="Fleet 指标可选 replica_0/replica_1/replica_2、read_pool、report_pool 或 query family；cpu 可用 top_processes",
+                en="Fleet metrics accept replica_0/replica_1/replica_2, read_pool, report_pool or a query family; cpu accepts top_processes",
+            ),
+            "limit": lazy_agent_text(
+                zh="history 或 workload_activity 返回前 N 条记录，默认 20",
+                en="history or workload_activity returns the first N records, default 20",
+            ),
+            "start_timestamp": lazy_agent_text(
+                zh="时序指标开始时间，必须与 end_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+                en="Start time of the time-series metric; must be provided together with end_timestamp, format YYYY-MM-DD HH:mm:ss",
+            ),
+            "end_timestamp": lazy_agent_text(
+                zh="时序指标结束时间，必须与 start_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+                en="End time of the time-series metric; must be provided together with start_timestamp, format YYYY-MM-DD HH:mm:ss",
+            ),
         },
     )
     def _query_metrics_for_agent(

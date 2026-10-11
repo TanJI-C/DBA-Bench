@@ -185,6 +185,7 @@ _PGRESOURCEGOVERNANCEDATAARCHIVINGSCENARIO_CASE = PgResourceGovernanceDataArchiv
     workload_tag='initialized',
     title='Simulates cold order-history archiving and physical space reclaim under online workload constraints.',
     alert='P1 存储容量告警：PostgreSQL 单机实例数据目录使用率持续高于 80%，order_history 表占用增长明显且冷数据比例异常。业务仍在线写入，当前没有停机窗口，禁止使用会长时间持有 ACCESS EXCLUSIVE 锁的回收方式。请归档一年以前冷数据并回收物理空间，同时避免阻塞核心交易。',
+    alert_en="P1 storage capacity alert: data directory usage of the standalone PostgreSQL instance stays above 80%, the space used by the order_history table is growing noticeably, and the proportion of cold data is abnormal. The business is still writing online, there is no downtime window, and reclamation methods that hold an ACCESS EXCLUSIVE lock for a long time are forbidden. Archive the cold data older than one year and reclaim the physical space, while avoiding blocking core transactions.",
     initial_state={'status': 'storage_warning', 'cold_data': 'present', 'physical_space': 'not_reclaimed'},
     expected_target={'status': 'recovered',
  'cold_data': 'archived',

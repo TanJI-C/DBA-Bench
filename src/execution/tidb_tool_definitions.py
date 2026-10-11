@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.agent_language import agent_text
 from src.scenarios.evaluation.protocol import STRUCTURED_REPORT_JSON_SCHEMA
 from src.execution.tidb_metrics import CASE_ONLY_METRICS, TIDB_METRIC_CATALOG
 
@@ -734,46 +735,84 @@ TIDB_TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
 }
 
 
-CONTROL_TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
-    "help": _tool(
-        "help",
-        "查询当前环境的公共工具列表，或查询一个工具的完整参数和结构化调用定义。",
-        parameter_definitions=[
-            _parameter(
-                "tool_name",
-                "string",
-                required=False,
-                description="不传则列出工具；传工具名则返回该工具的详细定义。",
+def control_tool_definitions() -> dict[str, dict[str, Any]]:
+    """Build the help/submit/exit contracts in the run's agent language."""
+    return {
+        "help": _tool(
+            "help",
+            agent_text(
+                zh="查询当前环境的公共工具列表，或查询一个工具的完整参数和结构化调用定义。",
+                en="List the public tools of the current environment, or get the full parameters and structured call definition of one tool.",
             ),
-        ],
-        result_description="help(tool_name) 返回 args 和 definition；复杂工具的 definition 是可直接照着构造 action 的 JSON 对象。",
-    ),
-    "submit": _tool(
-        "submit",
-        (
-            "提交结构化诊断报告并结束当前诊断；report 必须是顶层对象，且仅包含 diagnosis、"
-            "outcome、summary 三个字段。不要把 outcome 或 summary 放入 diagnosis；结构形状为 "
-            "{diagnosis:{conditions:[...]},outcome:{changes:[...],verification:[...]},summary:string}。"
-            "提交后不能继续调用工具。"
+            parameter_definitions=[
+                _parameter(
+                    "tool_name",
+                    "string",
+                    required=False,
+                    description=agent_text(
+                        zh="不传则列出工具；传工具名则返回该工具的详细定义。",
+                        en="Omit it to list the tools; pass a tool name to get that tool's detailed definition.",
+                    ),
+                ),
+            ],
+            result_description=agent_text(
+                zh="help(tool_name) 返回 args 和 definition；复杂工具的 definition 是可直接照着构造 action 的 JSON 对象。",
+                en="help(tool_name) returns args and definition; for complex tools, definition is a JSON object you can follow directly to construct an action.",
+            ),
         ),
-        parameter_definitions=[
-            _parameter(
-                "report",
-                "object",
-                required=True,
-                description=(
-                    "符合 StructuredReport schema 的顶层诊断、变更、验证和摘要；"
-                    "diagnosis、outcome、summary 必须是同级字段。"
+        "submit": _tool(
+            "submit",
+            agent_text(
+                zh=(
+                    "提交结构化诊断报告并结束当前诊断；report 必须是顶层对象，且仅包含 diagnosis、"
+                    "outcome、summary 三个字段。不要把 outcome 或 summary 放入 diagnosis；结构形状为 "
+                    "{diagnosis:{conditions:[...]},outcome:{changes:[...],verification:[...]},summary:string}。"
+                    "提交后不能继续调用工具。"
+                ),
+                en=(
+                    "Submit the structured diagnosis report and end the current diagnosis; report must be a top-level "
+                    "object containing only the three fields diagnosis, outcome and summary. Do not put outcome or "
+                    "summary inside diagnosis; the structure is "
+                    "{diagnosis:{conditions:[...]},outcome:{changes:[...],verification:[...]},summary:string}. "
+                    "No tools can be called after submitting."
                 ),
             ),
-        ],
-        report_schema=STRUCTURED_REPORT_JSON_SCHEMA,
-        result_description="由 Agent.solve() 消费为终止控制信号；不是普通数据库操作。",
-    ),
-    "exit": _tool(
-        "exit",
-        "放弃当前诊断流程并退出，不执行修复或提交报告。",
-        parameter_definitions=[],
-        result_description="返回 exiting 控制状态。",
-    ),
-}
+            parameter_definitions=[
+                _parameter(
+                    "report",
+                    "object",
+                    required=True,
+                    description=agent_text(
+                        zh=(
+                            "符合 StructuredReport schema 的顶层诊断、变更、验证和摘要；"
+                            "diagnosis、outcome、summary 必须是同级字段。"
+                        ),
+                        en=(
+                            "Top-level diagnosis, changes, verification and summary conforming to the StructuredReport "
+                            "schema; diagnosis, outcome and summary must be sibling fields."
+                        ),
+                    ),
+                ),
+            ],
+            report_schema=STRUCTURED_REPORT_JSON_SCHEMA,
+            result_description=agent_text(
+                zh="由 Agent.solve() 消费为终止控制信号；不是普通数据库操作。",
+                en="Consumed by Agent.solve() as a terminating control signal; not an ordinary database operation.",
+            ),
+        ),
+        "exit": _tool(
+            "exit",
+            agent_text(
+                zh="放弃当前诊断流程并退出，不执行修复或提交报告。",
+                en="Abandon the current diagnosis process and exit without performing a fix or submitting a report.",
+            ),
+            parameter_definitions=[],
+            result_description=agent_text(
+                zh="返回 exiting 控制状态。",
+                en="Returns the exiting control status.",
+            ),
+        ),
+    }
+
+
+CONTROL_TOOL_DEFINITIONS: dict[str, dict[str, Any]] = control_tool_definitions()

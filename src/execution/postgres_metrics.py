@@ -12,12 +12,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
+from src.agent_language import agent_text
 from src.execution.history.metrics import (
     MetricDefinition,
     MetricFrame,
     MetricQuery,
     MetricService,
     QUERY_METRICS_BOUND_CONTRACT,
+    QUERY_METRICS_BOUND_CONTRACT_EN,
     metric_variant_sort_key,
     validate_metric_frame,
 )
@@ -508,85 +510,124 @@ def _postgres_metric_description(
     )
 
 
-POSTGRES_QUERY_METRICS_TOOL_DEFINITION = {
-    "tool_name": "query_metrics",
-        "tool_description": (
-            "查询 PostgreSQL 时序观测。metric 类型、字段、target scope 和数值边界来自当前 "
-            "PostgreSQL metric catalog；历史窗口使用 UTC 时间和固定 sampler step。当前状态 SQL 细节使用 "
-            "execute_sql。"
-    ),
-    "parameter_definitions": [
-        {
-            "parameter_name": "metric_type",
-            "data_type": "string",
-            "required": True,
-            "allowed_values": sorted(POSTGRES_METRIC_CATALOG.metric_names),
-            "parameter_description": "Catalog 中声明的 PostgreSQL metric 名称。",
-        },
-        {
-            "parameter_name": "target",
-            "data_type": "string|null",
-            "required": False,
-            "default_value": None,
-            "parameter_description": "基础时序 target 省略或为 null；场景 relation/service metric 可用 target 选择实体，省略则返回全部可用 series。",
-        },
-        {
-            "parameter_name": "limit",
-            "data_type": "integer|null",
-            "required": False,
-            "parameter_description": "未指定时间窗时，每个时序 series 返回的最新点数；显式历史窗口保持完整。",
-        },
-        {
-            "parameter_name": "start_timestamp",
-            "data_type": "string|null",
-            "required": False,
-            "parameter_description": "UTC 窗口开始时间，格式 YYYY-MM-DD HH:mm:ss；必须和 end_timestamp 一起提供。",
-        },
-        {
-            "parameter_name": "end_timestamp",
-            "data_type": "string|null",
-            "required": False,
-            "parameter_description": "UTC 窗口结束时间，格式 YYYY-MM-DD HH:mm:ss；必须和 start_timestamp 一起提供。",
-        },
-        {
-            "parameter_name": "step_seconds",
-            "data_type": "integer|null",
-            "required": False,
-            "parameter_description": "固定 sampler step 的正整数倍；显式 history capture 使用 catalog sampler step。",
-        },
-    ],
-    "metric_definitions": [
-        {
-            "metric_name": definition.name,
-            "metric_description": _postgres_metric_description(definition),
-            "target_scope": {
-                "query_target": (
-                    None
-                    if definition.name in _POSTGRES_FIXED_TARGET_METRICS
-                    else f"{_POSTGRES_SOURCES[definition.name].target_shape}|null"
+def postgres_default_query_metrics_tool_definition() -> dict:
+    """Build the default PGEnv query_metrics contract in the run's agent language."""
+    return {
+        "tool_name": "query_metrics",
+        "tool_description": agent_text(
+            zh=(
+                "查询 PostgreSQL 时序观测。metric 类型、字段、target scope 和数值边界来自当前 "
+                "PostgreSQL metric catalog；历史窗口使用 UTC 时间和固定 sampler step。当前状态 SQL 细节使用 "
+                "execute_sql。"
+            ),
+            en=(
+                "Query PostgreSQL time-series observations. Metric types, fields, target scope and value bounds come "
+                "from the current PostgreSQL metric catalog; history windows use UTC time and a fixed sampler step. "
+                "Use execute_sql for current-state SQL details."
+            ),
+        ),
+        "parameter_definitions": [
+            {
+                "parameter_name": "metric_type",
+                "data_type": "string",
+                "required": True,
+                "allowed_values": sorted(POSTGRES_METRIC_CATALOG.metric_names),
+                "parameter_description": agent_text(
+                    zh="Catalog 中声明的 PostgreSQL metric 名称。",
+                    en="PostgreSQL metric name declared in the catalog.",
                 ),
-                "series_target": (
-                    "postgres"
-                    if _POSTGRES_SOURCES[definition.name].target_shape == "postgres"
-                    else _POSTGRES_SOURCES[definition.name].target_shape
-                ),
-                "fields": list(definition.value_fields),
-                "lower_bound": definition.lower_bound,
-                "upper_bound": definition.upper_bound,
             },
-        }
-        for definition in sorted(
-            (POSTGRES_METRIC_CATALOG.definition(metric) for metric in POSTGRES_METRIC_CATALOG.metric_names),
-            key=lambda item: item.name,
-        )
-    ],
-    "result_description": (
-        "返回固定 UTC epoch-ms 采样网格渲染成的 series；采样不完整或窗口越界返回 error。"
-        "长 overview 的 timestamps 使用 {start,end,step_seconds,count} 表示固定网格，"
-        "数值数组仍包含每个采样点；显式 2 秒窗口返回逐点 UTC timestamps。"
-        + QUERY_METRICS_BOUND_CONTRACT
-    ),
-}
+            {
+                "parameter_name": "target",
+                "data_type": "string|null",
+                "required": False,
+                "default_value": None,
+                "parameter_description": agent_text(
+                    zh="基础时序 target 省略或为 null；场景 relation/service metric 可用 target 选择实体，省略则返回全部可用 series。",
+                    en="For base time series, omit target or pass null; scenario relation/service metrics can use target to select an entity, and omitting it returns all available series.",
+                ),
+            },
+            {
+                "parameter_name": "limit",
+                "data_type": "integer|null",
+                "required": False,
+                "parameter_description": agent_text(
+                    zh="未指定时间窗时，每个时序 series 返回的最新点数；显式历史窗口保持完整。",
+                    en="Number of latest points returned per time series when no time window is given; an explicit history window is returned in full.",
+                ),
+            },
+            {
+                "parameter_name": "start_timestamp",
+                "data_type": "string|null",
+                "required": False,
+                "parameter_description": agent_text(
+                    zh="UTC 窗口开始时间，格式 YYYY-MM-DD HH:mm:ss；必须和 end_timestamp 一起提供。",
+                    en="UTC window start time, format YYYY-MM-DD HH:mm:ss; must be provided together with end_timestamp.",
+                ),
+            },
+            {
+                "parameter_name": "end_timestamp",
+                "data_type": "string|null",
+                "required": False,
+                "parameter_description": agent_text(
+                    zh="UTC 窗口结束时间，格式 YYYY-MM-DD HH:mm:ss；必须和 start_timestamp 一起提供。",
+                    en="UTC window end time, format YYYY-MM-DD HH:mm:ss; must be provided together with start_timestamp.",
+                ),
+            },
+            {
+                "parameter_name": "step_seconds",
+                "data_type": "integer|null",
+                "required": False,
+                "parameter_description": agent_text(
+                    zh="固定 sampler step 的正整数倍；显式 history capture 使用 catalog sampler step。",
+                    en="A positive integer multiple of the fixed sampler step; an explicit history capture uses the catalog sampler step.",
+                ),
+            },
+        ],
+        "metric_definitions": [
+            {
+                "metric_name": definition.name,
+                "metric_description": _postgres_metric_description(definition),
+                "target_scope": {
+                    "query_target": (
+                        None
+                        if definition.name in _POSTGRES_FIXED_TARGET_METRICS
+                        else f"{_POSTGRES_SOURCES[definition.name].target_shape}|null"
+                    ),
+                    "series_target": (
+                        "postgres"
+                        if _POSTGRES_SOURCES[definition.name].target_shape == "postgres"
+                        else _POSTGRES_SOURCES[definition.name].target_shape
+                    ),
+                    "fields": list(definition.value_fields),
+                    "lower_bound": definition.lower_bound,
+                    "upper_bound": definition.upper_bound,
+                },
+            }
+            for definition in sorted(
+                (POSTGRES_METRIC_CATALOG.definition(metric) for metric in POSTGRES_METRIC_CATALOG.metric_names),
+                key=lambda item: item.name,
+            )
+        ],
+        "result_description": agent_text(
+            zh=(
+                "返回固定 UTC epoch-ms 采样网格渲染成的 series；采样不完整或窗口越界返回 error。"
+                "长 overview 的 timestamps 使用 {start,end,step_seconds,count} 表示固定网格，"
+                "数值数组仍包含每个采样点；显式 2 秒窗口返回逐点 UTC timestamps。"
+                + QUERY_METRICS_BOUND_CONTRACT
+            ),
+            en=(
+                "Returns series rendered on a fixed UTC epoch-ms sampling grid; incomplete sampling or an out-of-range "
+                "window returns an error. For a long overview, timestamps use {start,end,step_seconds,count} to "
+                "describe the fixed grid, and the value arrays still contain every sampling point; an explicit "
+                "2-second window returns per-point UTC timestamps. "
+                + QUERY_METRICS_BOUND_CONTRACT_EN
+            ),
+        ),
+    }
+
+
+POSTGRES_QUERY_METRICS_TOOL_DEFINITION = postgres_default_query_metrics_tool_definition()
 
 
 def postgres_query_metrics_tool_definition(catalog: PostgresMetricCatalog) -> dict:
@@ -615,9 +656,15 @@ def postgres_query_metrics_tool_definition(catalog: PostgresMetricCatalog) -> di
         })
     return {
         "tool_name": "query_metrics",
-        "tool_description": (
-            "查询 PostgreSQL 时序观测。metric 类型、字段、target scope 和数值边界来自当前 "
-            "PostgreSQL metric catalog；历史窗口使用 UTC 时间和固定 sampler step。"
+        "tool_description": agent_text(
+            zh=(
+                "查询 PostgreSQL 时序观测。metric 类型、字段、target scope 和数值边界来自当前 "
+                "PostgreSQL metric catalog；历史窗口使用 UTC 时间和固定 sampler step。"
+            ),
+            en=(
+                "Query PostgreSQL time-series observations. Metric types, fields, target scope and value bounds come "
+                "from the current PostgreSQL metric catalog; history windows use UTC time and a fixed sampler step."
+            ),
         ),
         "parameter_definitions": [
             {
@@ -625,46 +672,73 @@ def postgres_query_metrics_tool_definition(catalog: PostgresMetricCatalog) -> di
                 "data_type": "string",
                 "required": True,
                 "allowed_values": sorted(catalog.metric_names),
-                "parameter_description": "当前 catalog 中声明的 PostgreSQL metric 名称。",
+                "parameter_description": agent_text(
+                    zh="当前 catalog 中声明的 PostgreSQL metric 名称。",
+                    en="PostgreSQL metric name declared in the current catalog.",
+                ),
             },
             {
                 "parameter_name": "target",
                 "data_type": "string|null",
                 "required": False,
                 "default_value": None,
-                "parameter_description": "基础时序 target 省略或为 null；relation/service metric 可使用已声明的 target。",
+                "parameter_description": agent_text(
+                    zh="基础时序 target 省略或为 null；relation/service metric 可使用已声明的 target。",
+                    en="For base time series, omit target or pass null; relation/service metrics can use a declared target.",
+                ),
             },
             {
                 "parameter_name": "limit",
                 "data_type": "integer|null",
                 "required": False,
-                "parameter_description": "未指定时间窗时，每个时序 series 返回的最新点数；显式历史窗口保持完整。",
+                "parameter_description": agent_text(
+                    zh="未指定时间窗时，每个时序 series 返回的最新点数；显式历史窗口保持完整。",
+                    en="Number of latest points returned per time series when no time window is given; an explicit history window is returned in full.",
+                ),
             },
             {
                 "parameter_name": "start_timestamp",
                 "data_type": "string|null",
                 "required": False,
-                "parameter_description": "UTC 窗口开始时间，格式 YYYY-MM-DD HH:mm:ss；必须和 end_timestamp 一起提供。",
+                "parameter_description": agent_text(
+                    zh="UTC 窗口开始时间，格式 YYYY-MM-DD HH:mm:ss；必须和 end_timestamp 一起提供。",
+                    en="UTC window start time, format YYYY-MM-DD HH:mm:ss; must be provided together with end_timestamp.",
+                ),
             },
             {
                 "parameter_name": "end_timestamp",
                 "data_type": "string|null",
                 "required": False,
-                "parameter_description": "UTC 窗口结束时间，格式 YYYY-MM-DD HH:mm:ss；必须和 start_timestamp 一起提供。",
+                "parameter_description": agent_text(
+                    zh="UTC 窗口结束时间，格式 YYYY-MM-DD HH:mm:ss；必须和 start_timestamp 一起提供。",
+                    en="UTC window end time, format YYYY-MM-DD HH:mm:ss; must be provided together with start_timestamp.",
+                ),
             },
             {
                 "parameter_name": "step_seconds",
                 "data_type": "integer|null",
                 "required": False,
-                "parameter_description": "固定 sampler step 的正整数倍；显式 history capture 使用 catalog sampler step。",
+                "parameter_description": agent_text(
+                    zh="固定 sampler step 的正整数倍；显式 history capture 使用 catalog sampler step。",
+                    en="A positive integer multiple of the fixed sampler step; an explicit history capture uses the catalog sampler step.",
+                ),
             },
         ],
         "metric_definitions": metric_definitions,
-        "result_description": (
-            "返回固定 UTC epoch-ms 采样网格渲染成的 series；采样不完整或窗口越界返回 error。"
-            "长 overview 的 timestamps 使用 {start,end,step_seconds,count} 表示固定网格，"
-            "数值数组仍包含每个采样点；显式 2 秒窗口返回逐点 UTC timestamps。"
-            + QUERY_METRICS_BOUND_CONTRACT
+        "result_description": agent_text(
+            zh=(
+                "返回固定 UTC epoch-ms 采样网格渲染成的 series；采样不完整或窗口越界返回 error。"
+                "长 overview 的 timestamps 使用 {start,end,step_seconds,count} 表示固定网格，"
+                "数值数组仍包含每个采样点；显式 2 秒窗口返回逐点 UTC timestamps。"
+                + QUERY_METRICS_BOUND_CONTRACT
+            ),
+            en=(
+                "Returns series rendered on a fixed UTC epoch-ms sampling grid; incomplete sampling or an out-of-range "
+                "window returns an error. For a long overview, timestamps use {start,end,step_seconds,count} to "
+                "describe the fixed grid, and the value arrays still contain every sampling point; an explicit "
+                "2-second window returns per-point UTC timestamps. "
+                + QUERY_METRICS_BOUND_CONTRACT_EN
+            ),
         ),
     }
 
@@ -1083,6 +1157,7 @@ __all__ = [
     "CompositePostgresMetricProvider",
     "POSTGRES_METRIC_CATALOG",
     "POSTGRES_QUERY_METRICS_TOOL_DEFINITION",
+    "postgres_default_query_metrics_tool_definition",
     "postgres_query_metrics_tool_definition",
     "read_device_io_stats",
 ]

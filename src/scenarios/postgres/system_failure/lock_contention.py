@@ -36,6 +36,8 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
+from src.agent_language import agent_text
+
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.postgres.common import (
     PgQueryPerfFaultFingerprintProbe,
@@ -156,7 +158,7 @@ class PgSystemFailureLockContentionInjector(BaseFaultInjector):
         )
         for statement in self.review_job_ddl:
             _require_sql_success(
-                self.env.execute_sql(statement),
+                self.env.execute_sql(_agent_language_review_job_statement(statement)),
                 "install fraud-review job control plane",
             )
 
@@ -164,7 +166,7 @@ class PgSystemFailureLockContentionInjector(BaseFaultInjector):
         # 幂等补建控制面：fault snapshot 不含作业层表时也能激活。
         for statement in self.review_job_ddl:
             _require_sql_success(
-                self.env.execute_sql(statement),
+                self.env.execute_sql(_agent_language_review_job_statement(statement)),
                 "ensure fraud-review job control plane",
             )
         payload = _json_object(
@@ -927,6 +929,26 @@ FRAUD_REVIEW_JOB_DDL = (
     );
     """,
 )
+
+# The table and column comments are read by the agent through the catalog; the
+# English run installs them in English. Keyed by the Chinese statement above.
+_FRAUD_REVIEW_JOB_COMMENTS_EN = {
+    FRAUD_REVIEW_JOB_DDL[1]: (
+        f"COMMENT ON TABLE {PgSystemFailureLockContentionInjector.REVIEW_JOB_TABLE} IS "
+        "'Fraud review job queue: the fraud_review worker claims pending review tasks (status=pending) from this table "
+        "and holds a shared lock on the disputed customer row; terminating only the worker session gets it restarted "
+        "by the job, cancelling or pausing the review must go through the status column of this table.';"
+    ),
+    FRAUD_REVIEW_JOB_DDL[2]: (
+        f"COMMENT ON COLUMN {PgSystemFailureLockContentionInjector.REVIEW_JOB_TABLE}.status IS "
+        "'Task status (complete CHECK enumeration): pending=to be executed (the worker will claim it); "
+        "paused=paused (not executed); cancelled=cancelled (not executed); completed=completed.';"
+    ),
+}
+
+
+def _agent_language_review_job_statement(statement: str) -> str:
+    return agent_text(zh=statement, en=_FRAUD_REVIEW_JOB_COMMENTS_EN.get(statement, statement))
 
 
 _CASE = PgSystemFailureLockContentionForCustomerRowLockQueueScenarioCase(

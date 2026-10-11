@@ -127,6 +127,7 @@ repetitions: 1
 seeds: [11]
 runtime:
   fault_snapshot: auto
+  agent_language: en   # optional: zh (default) or en; English covers PostgreSQL bounded scenarios
 ```
 
 ```bash

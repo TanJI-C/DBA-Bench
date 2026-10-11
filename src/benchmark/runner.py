@@ -16,6 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.agent_language import AGENT_LANGUAGE_ENV
 from src.scenarios.base import DatabaseSystem
 from .adapters.persistent_scenario import build_persistent_scenario_command
 from .adapters.scenario import build_scenario_command
@@ -763,6 +764,7 @@ class ExperimentRunner:
                 spec.agent.settings, ensure_ascii=True, sort_keys=True
             ),
             "AIOPS_RUN_TIMEOUT_SECONDS": str(self.manifest.runtime.timeout_seconds),
+            AGENT_LANGUAGE_ENV: self.manifest.runtime.agent_language,
             "AIOPS_REPETITION": str(spec.repetition),
             "AIOPS_SEED": str(spec.seed),
             "AIOPS_TRACE_OUTPUT_DIR": str(attempt_dir),

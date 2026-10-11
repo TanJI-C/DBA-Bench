@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, get_args, get_origin
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -34,10 +35,11 @@ from src.execution.deployment import (
 )
 from src.execution.tidb_connection_router import TiDBConnectionRouter
 from src.execution.tidb_dr_auto_sync import TiDBDrAutoSyncControl
+from src.agent_language import agent_text
 from src.execution.tidb_tool_definitions import (
-    CONTROL_TOOL_DEFINITIONS,
     TIDB_TOOL_DEFINITIONS,
     canonical_tool_definition,
+    control_tool_definitions,
 )
 from src.execution.history.metrics import (
     MetricFrame,
@@ -60,8 +62,8 @@ from src.execution.history.sql_archive import FrozenHistoricalSqlArchive
 from src.execution.postgres_metrics import (
     LivePostgresSamplerMetricProvider,
     POSTGRES_METRIC_CATALOG,
-    POSTGRES_QUERY_METRICS_TOOL_DEFINITION,
     PostgresScenarioMetricCatalog,
+    postgres_default_query_metrics_tool_definition,
     postgres_query_metrics_tool_definition,
 )
 from src.execution.postgres_history import (
@@ -113,6 +115,27 @@ SQL_TRUNCATION_HINT = (
     "请缩小查询窗口后重试：只 SELECT 需要的列（避免对宽系统表使用 SELECT *），"
     "增加 WHERE 过滤或使用更小的 LIMIT，或改用 COUNT/SUM 等聚合；必要时分页逐段查看。"
 )
+SQL_TRUNCATION_HINT_EN = (
+    "This result exceeded 128 KiB and was truncated: only some rows are returned, and overlong fields are cut to 2048 characters. "
+    "Narrow the query window and retry: SELECT only the columns you need (avoid SELECT * on wide system tables), "
+    "add WHERE filters or use a smaller LIMIT, or switch to aggregates such as COUNT/SUM; page through the result if necessary."
+)
+
+
+def _pg_unavailable_error() -> str:
+    return agent_text(
+        zh="PostgreSQL 服务未运行或无法连接。请使用 manage_instance('start') 启动服务。",
+        en="The PostgreSQL service is not running or cannot be reached. Use manage_instance('start') to start the service.",
+    )
+
+
+def lazy_agent_text(*, zh: str, en: str) -> Callable[[], str]:
+    """Defer ``agent_text`` until a tool spec is built, so the run's language applies."""
+    return partial(agent_text, zh=zh, en=en)
+
+
+def _resolve_agent_text(value: Any) -> Any:
+    return value() if callable(value) else value
 
 
 class ReplicationProgressUnavailableError(RuntimeError):
@@ -204,7 +227,8 @@ class ToolSpec:
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        return f"{self.description}\n调用定义(JSON): {definition}"
+        label = agent_text(zh="调用定义(JSON)", en="Call definition (JSON)")
+        return f"{self.description}\n{label}: {definition}"
 
     def to_openai_schema(self) -> Dict[str, Any]:
         properties = {
@@ -282,16 +306,19 @@ def _annotation_to_json_type(annotation: Any) -> str:
 def Tool(
     *,
     alias: Optional[str] = None,
-    description: str,
-    arg_descriptions: Optional[Dict[str, str]] = None,
+    description: Union[str, Callable[[], str]],
+    arg_descriptions: Optional[Dict[str, Union[str, Callable[[], str]]]] = None,
     tool_id: Optional[str] = None,
-    definition: Optional[Dict[str, Any]] = None,
+    definition: Optional[Union[Dict[str, Any], Callable[[], Dict[str, Any]]]] = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register an Env method as an agent-visible tool.
 
     The method name is the internal tool id by default. The alias is the
     function name exposed to the agent. Multiple Env methods may share one alias
     as long as only one of them is enabled for a concrete Env instance.
+    ``description``, each ``arg_descriptions`` value and ``definition`` may be a
+    zero-argument callable; it is called when the Env builds its tool specs, so
+    agent-facing text follows the run's language.
     """
     arg_descriptions = arg_descriptions or {}
 
@@ -437,9 +464,15 @@ class BaseEnv(ABC):
         return self._execute_tool(api, args)
 
     @Tool(
-        description="查询当前环境可用工具的帮助信息",
-        arg_descriptions={"tool_name": "工具名称，不传则返回所有工具列表"},
-        definition=CONTROL_TOOL_DEFINITIONS["help"],
+        description=lazy_agent_text(
+            zh="查询当前环境可用工具的帮助信息",
+            en="Get help information about the tools available in the current environment",
+        ),
+        arg_descriptions={"tool_name": lazy_agent_text(
+            zh="工具名称，不传则返回所有工具列表",
+            en="Tool name; omit it to return the list of all tools",
+        )},
+        definition=lambda: control_tool_definitions()["help"],
     )
     def help(self, tool_name: Optional[str] = None) -> str:
         """
@@ -458,7 +491,10 @@ class BaseEnv(ABC):
                     }
                     for spec in self.get_tool_specs()
                 ],
-                "message": "可用工具列表。使用 help(tool_name) 查看详细参数信息",
+                "message": agent_text(
+                    zh="可用工具列表。使用 help(tool_name) 查看详细参数信息",
+                    en="List of available tools. Use help(tool_name) to see detailed parameter information",
+                ),
             }, ensure_ascii=False, separators=(",", ":"))
         spec = self._alias_to_tool_spec.get(tool_name)
         if spec is None:
@@ -585,21 +621,31 @@ class BaseEnv(ABC):
         return result
 
     @Tool(
-        description=(
-            "提交严格结构化诊断报告并结束诊断流程。diagnosis.conditions 中的 evidence "
-            "必须引用已观察到的证据；outcome 必须列出变更和最终验证。提交后不能继续调用工具。"
+        description=lazy_agent_text(
+            zh=(
+                "提交严格结构化诊断报告并结束诊断流程。diagnosis.conditions 中的 evidence "
+                "必须引用已观察到的证据；outcome 必须列出变更和最终验证。提交后不能继续调用工具。"
+            ),
+            en=(
+                "Submit a strictly structured diagnosis report and end the diagnosis process. The evidence in "
+                "diagnosis.conditions must cite observed evidence; outcome must list the changes and the final "
+                "verification. No tools can be called after submitting."
+            ),
         ),
         arg_descriptions={
-            "report": "符合 StructuredReport schema 的诊断报告",
+            "report": lazy_agent_text(
+                zh="符合 StructuredReport schema 的诊断报告",
+                en="Diagnosis report conforming to the StructuredReport schema",
+            ),
         },
-        definition=CONTROL_TOOL_DEFINITIONS["submit"],
+        definition=lambda: control_tool_definitions()["submit"],
     )
     def submit(self, report: Dict[str, Any]) -> str:
         return json.dumps({"status": "control", "message": "submit is an Environment terminal tool consumed by Agent.solve()"})
 
     @Tool(
-        description="退出当前诊断流程",
-        definition=CONTROL_TOOL_DEFINITIONS["exit"],
+        description=lazy_agent_text(zh="退出当前诊断流程", en="Exit the current diagnosis process"),
+        definition=lambda: control_tool_definitions()["exit"],
     )
     def exit(self) -> str:
         return json.dumps({"status": "exiting"})
@@ -662,15 +708,15 @@ class BaseEnv(ABC):
                         name=name,
                         type=_annotation_to_json_type(parameter.annotation),
                         required=parameter.default is inspect._empty,
-                        description=arg_descriptions.get(name, ""),
+                        description=_resolve_agent_text(arg_descriptions.get(name, "")),
                     ))
                 spec = ToolSpec(
                     tool_id=metadata.get("tool_id") or method_name,
                     alias=metadata.get("alias") or method_name,
                     method_name=method_name,
-                    description=metadata.get("description", ""),
+                    description=_resolve_agent_text(metadata.get("description", "")),
                     parameters=tuple(parameters),
-                    definition=metadata.get("definition"),
+                    definition=_resolve_agent_text(metadata.get("definition")),
                 )
                 if spec.tool_id not in specs:
                     specs[spec.tool_id] = spec
@@ -696,12 +742,21 @@ class BaseEnv(ABC):
         specs = self.get_tool_specs()
         if use_native_tools:
             tool_names = ", ".join(spec.alias for spec in specs)
-            return (
-                "请分析场景，并通过当前环境提供的 tools 进行函数调用（Function Calling）来执行操作。\n"
-                f"当前环境可用工具: {tool_names}"
+            return agent_text(
+                zh=(
+                    "请分析场景，并通过当前环境提供的 tools 进行函数调用（Function Calling）来执行操作。\n"
+                    f"当前环境可用工具: {tool_names}"
+                ),
+                en=(
+                    "Analyze the scenario and perform actions by making function calls (Function Calling) "
+                    "with the tools provided by the current environment.\n"
+                    f"Tools available in the current environment: {tool_names}"
+                ),
             )
 
         if specs:
+            params_label = agent_text(zh="参数", en="Parameters")
+            params_notes_label = agent_text(zh="参数说明", en="Parameter descriptions")
             tool_lines = []
             for spec in specs:
                 args_str = ", ".join(
@@ -710,8 +765,8 @@ class BaseEnv(ABC):
                 )
                 tool_lines.append(
                     f"- {spec.alias}: {spec.agent_description()}\n"
-                    f"  参数: {args_str}\n"
-                    + "  参数说明: "
+                    f"  {params_label}: {args_str}\n"
+                    + f"  {params_notes_label}: "
                     + "; ".join(
                         f"{parameter.name}: {parameter.description}"
                         for parameter in spec.parameters
@@ -719,9 +774,15 @@ class BaseEnv(ABC):
                     )
                 )
             formatted_tools = "\n".join(tool_lines)
-            return f"你有以下工具可用：\n{formatted_tools}\n请根据工具描述和参数信息调用合适的工具来执行操作。"
+            return agent_text(
+                zh=f"你有以下工具可用：\n{formatted_tools}\n请根据工具描述和参数信息调用合适的工具来执行操作。",
+                en=(
+                    f"You have the following tools available:\n{formatted_tools}\n"
+                    "Call the appropriate tool to perform actions based on the tool descriptions and parameter information."
+                ),
+            )
         else:
-            return "无可用工具"
+            return agent_text(zh="无可用工具", en="No tools available")
 
     def _execute_tool(self, api: str, args: Dict[str, Any]) -> str:
         args = args or {}
@@ -1095,7 +1156,10 @@ class PGEnv(BaseEnv):
         for parameter in definition["parameter_definitions"]:
             if parameter.get("parameter_name") == "metric_type":
                 parameter["allowed_values"] = metric_names
-        metric_description = "指标类型，可选当前 Case catalog 值: " + ", ".join(metric_names)
+        metric_description = agent_text(
+            zh="指标类型，可选当前 Case catalog 值: ",
+            en="Metric type; allowed values from the current Case catalog: ",
+        ) + ", ".join(metric_names)
         self._enabled_tool_specs = [
             replace(
                 spec,
@@ -1134,12 +1198,15 @@ class PGEnv(BaseEnv):
                 {
                     "name": "primary",
                     "kind": "database",
-                    "description": "当前 PostgreSQL 实例",
+                    "description": agent_text(zh="当前 PostgreSQL 实例", en="Current PostgreSQL instance"),
                 },
                 {
                     "name": "history",
                     "kind": "frozen_history",
-                    "description": "当前 Case 的只读冻结历史 SQL archive",
+                    "description": agent_text(
+                        zh="当前 Case 的只读冻结历史 SQL archive",
+                        en="Read-only frozen history SQL archive of the current Case",
+                    ),
                     "tables": ["statement_summary", "slow_query"],
                     "write_policy": "read_only",
                     "requires_utc_time_bounds": True,
@@ -2728,15 +2795,32 @@ class PGEnv(BaseEnv):
 
     @Tool(
         alias="query_knowledge_base",
-        description=(
-            "检索本地PostgreSQL 16官方文档通用知识库。该工具不做类型过滤，"
-            "适合查询系统视图含义、参数语义、SQL语法、诊断线索、修复动作、索引/锁/"
-            "MVCC/autovacuum/WAL等官方文档内容。"
+        description=lazy_agent_text(
+            zh=(
+                "检索本地PostgreSQL 16官方文档通用知识库。该工具不做类型过滤，"
+                "适合查询系统视图含义、参数语义、SQL语法、诊断线索、修复动作、索引/锁/"
+                "MVCC/autovacuum/WAL等官方文档内容。"
+            ),
+            en=(
+                "Search the local general knowledge base of the official PostgreSQL 16 documentation. "
+                "This tool applies no type filter and suits looking up official documentation on system view "
+                "meanings, parameter semantics, SQL syntax, diagnostic clues, remediation actions, "
+                "indexes/locks/MVCC/autovacuum/WAL and similar topics."
+            ),
         ),
         arg_descriptions={
-            "query": "面向PostgreSQL文档的自然语言检索问题",
-            "top_k": "返回片段数量，默认5，最大20",
-            "max_chars_per_result": "每个片段最多返回字符数，默认1600",
+            "query": lazy_agent_text(
+                zh="面向PostgreSQL文档的自然语言检索问题",
+                en="Natural-language search question about the PostgreSQL documentation",
+            ),
+            "top_k": lazy_agent_text(
+                zh="返回片段数量，默认5，最大20",
+                en="Number of passages to return, default 5, maximum 20",
+            ),
+            "max_chars_per_result": lazy_agent_text(
+                zh="每个片段最多返回字符数，默认1600",
+                en="Maximum characters returned per passage, default 1600",
+            ),
         },
     )
     def query_general_knowledge_base(self, query: str, top_k: int = 5,
@@ -2751,15 +2835,34 @@ class PGEnv(BaseEnv):
 
     @Tool(
         alias="query_knowledge_base",
-        description=(
-            "检索本地PostgreSQL 16官方文档层级知识库。可用 kb_type 限定 "
-            "configuration/guide/solution/fact；不同类型分别覆盖配置、原理、操作建议和事实信息。"
+        description=lazy_agent_text(
+            zh=(
+                "检索本地PostgreSQL 16官方文档层级知识库。可用 kb_type 限定 "
+                "configuration/guide/solution/fact；不同类型分别覆盖配置、原理、操作建议和事实信息。"
+            ),
+            en=(
+                "Search the local hierarchical knowledge base of the official PostgreSQL 16 documentation. "
+                "kb_type can restrict results to configuration/guide/solution/fact; the types cover "
+                "configuration, principles, operational recommendations and factual information respectively."
+            ),
         ),
         arg_descriptions={
-            "query": "面向PostgreSQL文档的自然语言检索问题",
-            "top_k": "返回片段数量，默认5，最大20",
-            "max_chars_per_result": "每个片段最多返回字符数，默认1600",
-            "kb_type": "可选知识类型过滤: configuration, guide, solution, fact",
+            "query": lazy_agent_text(
+                zh="面向PostgreSQL文档的自然语言检索问题",
+                en="Natural-language search question about the PostgreSQL documentation",
+            ),
+            "top_k": lazy_agent_text(
+                zh="返回片段数量，默认5，最大20",
+                en="Number of passages to return, default 5, maximum 20",
+            ),
+            "max_chars_per_result": lazy_agent_text(
+                zh="每个片段最多返回字符数，默认1600",
+                en="Maximum characters returned per passage, default 1600",
+            ),
+            "kb_type": lazy_agent_text(
+                zh="可选知识类型过滤: configuration, guide, solution, fact",
+                en="Optional knowledge type filter: configuration, guide, solution, fact",
+            ),
         },
     )
     def query_hierarchical_knowledge_base(self, query: str, top_k: int = 5,
@@ -2776,21 +2879,45 @@ class PGEnv(BaseEnv):
     @Tool(
         alias="query_metrics",
         tool_id="query_metrics",
-        description=POSTGRES_QUERY_METRICS_TOOL_DEFINITION["tool_description"],
+        description=lambda: postgres_default_query_metrics_tool_definition()["tool_description"],
         arg_descriptions={
-            "metric_type": (
-                "指标类型，可选 catalog 值: "
-                + ", ".join(sorted(POSTGRES_METRIC_CATALOG.metric_names))
-                + "; 当前 Case 还可用 filesystem_io、bufferio_waiters、host_pressure、"
-                "partition_lifecycle 四类原始场景观测；先用 help('query_metrics') 查看字段、单位、"
-                "baseline、采样窗口和最终恢复合同"
+            "metric_type": lazy_agent_text(
+                zh=(
+                    "指标类型，可选 catalog 值: "
+                    + ", ".join(sorted(POSTGRES_METRIC_CATALOG.metric_names))
+                    + "; 当前 Case 还可用 filesystem_io、bufferio_waiters、host_pressure、"
+                    "partition_lifecycle 四类原始场景观测；先用 help('query_metrics') 查看字段、单位、"
+                    "baseline、采样窗口和最终恢复合同"
+                ),
+                en=(
+                    "Metric type; allowed catalog values: "
+                    + ", ".join(sorted(POSTGRES_METRIC_CATALOG.metric_names))
+                    + "; the current Case may also offer four kinds of raw scenario observations: filesystem_io, "
+                    "bufferio_waiters, host_pressure, partition_lifecycle; first use help('query_metrics') to see the "
+                    "fields, units, baseline, sampling window and final recovery contract"
+                ),
             ),
-            "target": "目标对象；cpu 传 top_process/top_processes 返回容器内 top CPU 进程快照，disk_usage 返回根文件系统观测，其他指标按场景定义",
-            "limit": "workload_activity 或场景 provider 使用，返回前 N 条记录，默认 20",
-            "start_timestamp": "时序指标开始时间，必须与 end_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
-            "end_timestamp": "时序指标结束时间，必须与 start_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+            "target": lazy_agent_text(
+                zh="目标对象；cpu 传 top_process/top_processes 返回容器内 top CPU 进程快照，disk_usage 返回根文件系统观测，其他指标按场景定义",
+                en=(
+                    "Target object; for cpu, pass top_process/top_processes to get a snapshot of the top CPU processes "
+                    "in the container; disk_usage returns root filesystem observations; other metrics are defined by the scenario"
+                ),
+            ),
+            "limit": lazy_agent_text(
+                zh="workload_activity 或场景 provider 使用，返回前 N 条记录，默认 20",
+                en="Used by workload_activity or scenario providers; returns the first N records, default 20",
+            ),
+            "start_timestamp": lazy_agent_text(
+                zh="时序指标开始时间，必须与 end_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+                en="Start time of the time-series metric; must be provided together with end_timestamp, format YYYY-MM-DD HH:mm:ss",
+            ),
+            "end_timestamp": lazy_agent_text(
+                zh="时序指标结束时间，必须与 start_timestamp 同时提供，格式 YYYY-MM-DD HH:mm:ss",
+                en="End time of the time-series metric; must be provided together with start_timestamp, format YYYY-MM-DD HH:mm:ss",
+            ),
         },
-        definition=POSTGRES_QUERY_METRICS_TOOL_DEFINITION,
+        definition=postgres_default_query_metrics_tool_definition,
     )
     def _query_metrics_for_agent(
         self,
@@ -3260,12 +3387,29 @@ class PGEnv(BaseEnv):
                 self._conn = None
 
     @Tool(
-        description=(
-            "执行 PostgreSQL 当前实例或只读冻结历史连接面上的 SQL。"
-            "返回结果最多 200 行且不超过 128 KiB，超限时 truncated=true 并附带 truncation_hint；"
-            "此时请缩小查询窗口：只选需要的列、加 WHERE/LIMIT，或改用聚合后分页查看。"
+        description=lazy_agent_text(
+            zh=(
+                "执行 PostgreSQL 当前实例或只读冻结历史连接面上的 SQL。"
+                "返回结果最多 200 行且不超过 128 KiB，超限时 truncated=true 并附带 truncation_hint；"
+                "此时请缩小查询窗口：只选需要的列、加 WHERE/LIMIT，或改用聚合后分页查看。"
+            ),
+            en=(
+                "Execute SQL on the current PostgreSQL instance or on the read-only frozen history connection surface. "
+                "The result has at most 200 rows and no more than 128 KiB; beyond that, truncated=true is set and "
+                "truncation_hint is attached; in that case narrow the query window: select only the columns you need, "
+                "add WHERE/LIMIT, or aggregate and then page through the result."
+            ),
         ),
-        arg_descriptions={"sql_query": "要执行的 SQL 语句", "target": "连接面名称；不传、传 'primary' 或传告警中的实例名 'postgresql-primary' 使用当前 PostgreSQL 实例，'history' 表示只读冻结历史"},
+        arg_descriptions={
+            "sql_query": lazy_agent_text(zh="要执行的 SQL 语句", en="SQL statement to execute"),
+            "target": lazy_agent_text(
+                zh="连接面名称；不传、传 'primary' 或传告警中的实例名 'postgresql-primary' 使用当前 PostgreSQL 实例，'history' 表示只读冻结历史",
+                en=(
+                    "Connection surface name; omitting it, passing 'primary', or passing the instance name from the alert "
+                    "'postgresql-primary' uses the current PostgreSQL instance; 'history' means the read-only frozen history"
+                ),
+            ),
+        },
     )
     def execute_sql(self, sql_query: str, target: Optional[str] = None) -> str:
         if target == "history":
@@ -3275,7 +3419,7 @@ class PGEnv(BaseEnv):
                 columns, rows, row_count, truncated = self._history_sql_archive.execute(sql_query)
                 payload = {"status": "success", "columns": columns, "result": rows, "row_count": row_count, "truncated": truncated}
                 if truncated:
-                    payload["truncation_hint"] = SQL_TRUNCATION_HINT
+                    payload["truncation_hint"] = agent_text(zh=SQL_TRUNCATION_HINT, en=SQL_TRUNCATION_HINT_EN)
                 return json.dumps(payload, ensure_ascii=False, default=str)
             except (ValueError, RuntimeError, TypeError) as exc:
                 return json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False)
@@ -3342,7 +3486,7 @@ class PGEnv(BaseEnv):
 
     def _execute_sql_surface_locked(self, sql_query: str, enforce_history_guard: bool) -> str:
         if not self._ensure_connection():
-            return json.dumps({"status": "error", "error": "PostgreSQL 服务未运行或无法连接。请使用 manage_instance('start') 启动服务。"}, ensure_ascii=False)
+            return json.dumps({"status": "error", "error": _pg_unavailable_error()}, ensure_ascii=False)
         if enforce_history_guard and self._history_timeline is not None:
             try:
                 reject_postgres_public_historical_sql(sql_query)
@@ -3353,7 +3497,7 @@ class PGEnv(BaseEnv):
             # A concurrent caller's failure may have dropped the shared
             # connection between the readiness check and here; reconnect once.
             if not self._ensure_connection():
-                return json.dumps({"status": "error", "error": "PostgreSQL 服务未运行或无法连接。请使用 manage_instance('start') 启动服务。"}, ensure_ascii=False)
+                return json.dumps({"status": "error", "error": _pg_unavailable_error()}, ensure_ascii=False)
             connection = self._conn
         try:
             with connection.cursor() as cur:
@@ -3377,7 +3521,7 @@ class PGEnv(BaseEnv):
                             "returned_rows": len(result),
                             "row_limit": PG_SQL_RESULT_MAX_ROWS,
                             "byte_limit": PG_SQL_RESULT_MAX_BYTES,
-                            "truncation_hint": SQL_TRUNCATION_HINT,
+                            "truncation_hint": agent_text(zh=SQL_TRUNCATION_HINT, en=SQL_TRUNCATION_HINT_EN),
                         })
                     return json.dumps(payload, default=str, ensure_ascii=False)
                 else:
@@ -3545,21 +3689,54 @@ class PGEnv(BaseEnv):
         return json.dumps({"status": "success", "action": "start"})
 
     @Tool(
-        description=(
-            "管理数据库实例（进程控制与配置管理）。"
-            "get_config/set_config/reset_config 的 target 可以是 PostgreSQL 参数，"
-            "也可以是少量实例级 OS 进程资源限制。"
-            "terminate_process 仅用于终止容器内指定的非 PostgreSQL OS 进程；"
-            "数据库会话应通过 execute_sql 执行 pg_terminate_backend。"
-            "validate_backup 仅用于备份/RPO 场景，校验容器内物理备份文件和归档 WAL 可恢复链；"
-            "它不是通用 SQL 查询，也不能由普通数据库连接替代。"
-            "配置 PgBouncer endpoint 后，pgbouncer_show_*、pgbouncer_set_config 和 "
-            "pgbouncer_reload 用于真实连接池 admin 操作。"
+        description=lazy_agent_text(
+            zh=(
+                "管理数据库实例（进程控制与配置管理）。"
+                "get_config/set_config/reset_config 的 target 可以是 PostgreSQL 参数，"
+                "也可以是少量实例级 OS 进程资源限制。"
+                "terminate_process 仅用于终止容器内指定的非 PostgreSQL OS 进程；"
+                "数据库会话应通过 execute_sql 执行 pg_terminate_backend。"
+                "validate_backup 仅用于备份/RPO 场景，校验容器内物理备份文件和归档 WAL 可恢复链；"
+                "它不是通用 SQL 查询，也不能由普通数据库连接替代。"
+                "配置 PgBouncer endpoint 后，pgbouncer_show_*、pgbouncer_set_config 和 "
+                "pgbouncer_reload 用于真实连接池 admin 操作。"
+            ),
+            en=(
+                "Manage the database instance (process control and configuration management). "
+                "The target of get_config/set_config/reset_config can be a PostgreSQL parameter "
+                "or one of a few instance-level OS process resource limits. "
+                "terminate_process is only for terminating a specified non-PostgreSQL OS process in the container; "
+                "database sessions should be terminated with pg_terminate_backend through execute_sql. "
+                "validate_backup is only for backup/RPO scenarios and checks the physical backup files in the container "
+                "and the recoverable chain of archived WAL; "
+                "it is not a general SQL query and cannot be replaced by an ordinary database connection. "
+                "When a PgBouncer endpoint is configured, pgbouncer_show_*, pgbouncer_set_config and "
+                "pgbouncer_reload perform real connection pool admin operations."
+            ),
         ),
         arg_descriptions={
-            "action": "操作类型，可选值: restart, start, stop, reboot, get_config, set_config, reset_config, terminate_process, validate_backup, pgbouncer_show_pools, pgbouncer_show_config, pgbouncer_show_stats, pgbouncer_set_config, pgbouncer_reload。terminate_process 只面向非 PostgreSQL OS 进程；validate_backup 只面向备份/RPO 场景；reboot 为重启整台机器的高危操作，仅在明确需要机器级重启时使用",
-            "target": "目标实例名、配置参数名、进程资源名、进程标识或备份目录；terminate_process 使用 PID 或简单进程名；validate_backup 使用容器内备份目录或 manifest 路径",
-            "value": "配置值（用于 set_config 或 pgbouncer_set_config；validate_backup、SHOW 和 reload 可留空）",
+            "action": lazy_agent_text(
+                zh="操作类型，可选值: restart, start, stop, reboot, get_config, set_config, reset_config, terminate_process, validate_backup, pgbouncer_show_pools, pgbouncer_show_config, pgbouncer_show_stats, pgbouncer_set_config, pgbouncer_reload。terminate_process 只面向非 PostgreSQL OS 进程；validate_backup 只面向备份/RPO 场景；reboot 为重启整台机器的高危操作，仅在明确需要机器级重启时使用",
+                en=(
+                    "Operation type, allowed values: restart, start, stop, reboot, get_config, set_config, reset_config, "
+                    "terminate_process, validate_backup, pgbouncer_show_pools, pgbouncer_show_config, pgbouncer_show_stats, "
+                    "pgbouncer_set_config, pgbouncer_reload. terminate_process targets only non-PostgreSQL OS processes; "
+                    "validate_backup applies only to backup/RPO scenarios; reboot is a high-risk operation that restarts "
+                    "the whole machine, use it only when a machine-level restart is clearly required"
+                ),
+            ),
+            "target": lazy_agent_text(
+                zh="目标实例名、配置参数名、进程资源名、进程标识或备份目录；terminate_process 使用 PID 或简单进程名；validate_backup 使用容器内备份目录或 manifest 路径",
+                en=(
+                    "Target instance name, configuration parameter name, process resource name, process identifier or "
+                    "backup directory; terminate_process takes a PID or a simple process name; validate_backup takes a "
+                    "backup directory or manifest path inside the container"
+                ),
+            ),
+            "value": lazy_agent_text(
+                zh="配置值（用于 set_config 或 pgbouncer_set_config；validate_backup、SHOW 和 reload 可留空）",
+                en="Configuration value (for set_config or pgbouncer_set_config; may be left empty for validate_backup, SHOW and reload)",
+            ),
         },
     )
     def manage_instance(self, action: str, target: str = None, value: str = None) -> str:
@@ -3764,7 +3941,7 @@ class PGEnv(BaseEnv):
             try:
                 with self._conn.cursor() as cur:
                     cur.execute(f"ALTER SYSTEM SET {param_name} = '{value}';")
-                return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": "需要 restart/reload 生效"})
+                return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": agent_text(zh="需要 restart/reload 生效", en="requires restart/reload to take effect")})
             except Exception:
                 pass
         container = self.deployment.container_name
@@ -3776,7 +3953,7 @@ class PGEnv(BaseEnv):
                 ["docker", "exec", container, "bash", "-c", sed_cmd],
                 capture_output=True, text=True, timeout=10, check=True
             )
-            return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": "已写入 auto.conf，需要 start/restart 生效"})
+            return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": agent_text(zh="已写入 auto.conf，需要 start/restart 生效", en="written to auto.conf; requires start/restart to take effect")})
         except Exception as e:
             return json.dumps({"status": "error", "error": str(e)})
 
@@ -3810,7 +3987,7 @@ class PGEnv(BaseEnv):
                  f"/^{param_name}/d", f"{self.deployment.pgdata}/postgresql.auto.conf"],
                 capture_output=True, text=True, timeout=10, check=True
             )
-            return json.dumps({"status": "success", "action": "reset_config", "param": param_name, "note": "已从 auto.conf 移除，需要 start/restart 生效"})
+            return json.dumps({"status": "success", "action": "reset_config", "param": param_name, "note": agent_text(zh="已从 auto.conf 移除，需要 start/restart 生效", en="removed from auto.conf; requires start/restart to take effect")})
         except Exception as e:
             return json.dumps({"status": "error", "error": str(e)})
 
@@ -4094,17 +4271,47 @@ class PGEnv(BaseEnv):
         return output.strip()
 
     @Tool(
-        description="读取系统、数据库日志或当前 Case 声明的冻结 operation event 记录",
+        description=lazy_agent_text(
+            zh="读取系统、数据库日志或当前 Case 声明的冻结 operation event 记录",
+            en="Read system or database logs, or the frozen operation event records declared by the current Case",
+        ),
         arg_descriptions={
-            "log_type": "日志类型，可选值: dmesg, docker_logs, pg_log, operation_event；operation_event 必须同时提供 start_timestamp 与 end_timestamp",
-            "lines": "返回行数/记录数上限；operation_event 只支持此分页上限，不支持 start_line/end_line/match_key",
-            "start_line": "1-based 起始行号；仅文本日志可用，operation_event 禁止使用",
-            "end_line": "1-based 结束行号；仅文本日志可用，operation_event 禁止使用",
-            "match_key": "文本日志关键字；operation_event 禁止使用，应改用 filters",
-            "start_timestamp": "冻结历史窗口起点；必须与 end_timestamp 一起提供（operation_event 必填）",
-            "end_timestamp": "冻结历史窗口终点；必须与 start_timestamp 一起提供（operation_event 必填）",
-            "target": "可选的冻结历史记录目标；不传时覆盖 Case 中该来源的所有目标",
-            "filters": "可选的冻结历史字段过滤条件；仅适用于 operation_event",
+            "log_type": lazy_agent_text(
+                zh="日志类型，可选值: dmesg, docker_logs, pg_log, operation_event；operation_event 必须同时提供 start_timestamp 与 end_timestamp",
+                en="Log type, allowed values: dmesg, docker_logs, pg_log, operation_event; operation_event requires both start_timestamp and end_timestamp",
+            ),
+            "lines": lazy_agent_text(
+                zh="返回行数/记录数上限；operation_event 只支持此分页上限，不支持 start_line/end_line/match_key",
+                en="Maximum number of lines/records to return; operation_event supports only this page limit, not start_line/end_line/match_key",
+            ),
+            "start_line": lazy_agent_text(
+                zh="1-based 起始行号；仅文本日志可用，operation_event 禁止使用",
+                en="1-based start line number; text logs only, not allowed for operation_event",
+            ),
+            "end_line": lazy_agent_text(
+                zh="1-based 结束行号；仅文本日志可用，operation_event 禁止使用",
+                en="1-based end line number; text logs only, not allowed for operation_event",
+            ),
+            "match_key": lazy_agent_text(
+                zh="文本日志关键字；operation_event 禁止使用，应改用 filters",
+                en="Text log keyword; not allowed for operation_event, use filters instead",
+            ),
+            "start_timestamp": lazy_agent_text(
+                zh="冻结历史窗口起点；必须与 end_timestamp 一起提供（operation_event 必填）",
+                en="Start of the frozen history window; must be provided together with end_timestamp (required for operation_event)",
+            ),
+            "end_timestamp": lazy_agent_text(
+                zh="冻结历史窗口终点；必须与 start_timestamp 一起提供（operation_event 必填）",
+                en="End of the frozen history window; must be provided together with start_timestamp (required for operation_event)",
+            ),
+            "target": lazy_agent_text(
+                zh="可选的冻结历史记录目标；不传时覆盖 Case 中该来源的所有目标",
+                en="Optional frozen history record target; when omitted, all targets of this source in the Case are covered",
+            ),
+            "filters": lazy_agent_text(
+                zh="可选的冻结历史字段过滤条件；仅适用于 operation_event",
+                en="Optional frozen history field filter conditions; applies only to operation_event",
+            ),
         },
     )
     def read_log(

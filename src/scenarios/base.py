@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Mapping
 if TYPE_CHECKING:
     from src.scenarios.evaluation.base import BaseEvaluator
 
+from src.agent_language import agent_text
 from src.scenarios.evaluation.protocol import StructuredReport
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.workloads import (
@@ -286,11 +287,21 @@ class ScenarioCase:
     frozen_history_adapter: object | None = None
     metric_history_adapter_config: Mapping[str, object] | None = None
     difficulty: DifficultyCalibration | None = None
+    # English variant of a Chinese ``alert``; None when ``alert`` is already English.
+    alert_en: str | None = None
 
     def __post_init__(self) -> None:
         StructuredReport.from_mapping(self.reference_report)
         if self.frozen_history is not None:
             self.frozen_history.validate(self.background_workload)
+
+    def agent_alert(self) -> str:
+        """The alert in the run's agent language (``alert_en`` when English is selected)."""
+        if self.alert_en is None:
+            return self.alert
+        return agent_text(zh=self.alert, en=self.alert_en)
+
+
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

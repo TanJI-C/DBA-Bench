@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Mapping
 
-from src.execution.environment import PGEnv, Tool
+from src.execution.environment import PGEnv, Tool, lazy_agent_text
 from src.execution.history.metrics import MetricService
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider
 from src.execution.history.metrics import (
@@ -518,21 +518,41 @@ class CpuBudgetPGEnv(PGEnv):
     @Tool(
         alias="query_metrics",
         tool_id="query_metrics",
-        description=(
-            "查询正式 CPU budget 历史观测。使用 host_cpu、host_cpu_pressure、"
-            "cgroup_cpu_usage、cgroup_cpu_throttle、process_cpu、service_slo 和 job_progress "
-            "分别观察 host、PostgreSQL/sibling cgroup、进程族、业务 SLO 和后台进度；"
-            "返回原始字段与 run-local series target，不提供 shortage 或 recommended policy 结论。"
-            "workload_activity 只用于确认后台 workload 仍在运行，不返回延迟排名。"
-            "连接状态、数据库/表/WAL/temp 细节、慢 SQL、TopSQL 和 dead tuples "
-            "请使用 execute_sql 自行查询、筛选和解释。"
+        description=lazy_agent_text(
+            zh=(
+                "查询正式 CPU budget 历史观测。使用 host_cpu、host_cpu_pressure、"
+                "cgroup_cpu_usage、cgroup_cpu_throttle、process_cpu、service_slo 和 job_progress "
+                "分别观察 host、PostgreSQL/sibling cgroup、进程族、业务 SLO 和后台进度；"
+                "返回原始字段与 run-local series target，不提供 shortage 或 recommended policy 结论。"
+                "workload_activity 只用于确认后台 workload 仍在运行，不返回延迟排名。"
+                "连接状态、数据库/表/WAL/temp 细节、慢 SQL、TopSQL 和 dead tuples "
+                "请使用 execute_sql 自行查询、筛选和解释。"
+            ),
+            en=(
+                "Query the formal CPU budget history observations. Use host_cpu, host_cpu_pressure, "
+                "cgroup_cpu_usage, cgroup_cpu_throttle, process_cpu, service_slo and job_progress "
+                "to observe the host, the PostgreSQL/sibling cgroups, process families, business SLO and background progress respectively; "
+                "returns raw fields and run-local series targets, and provides no shortage or recommended policy conclusions. "
+                "workload_activity only confirms that the background workload is still running and returns no latency ranking. "
+                "For connection states, database/table/WAL/temp details, slow SQL, TopSQL and dead tuples, "
+                "query, filter and interpret them yourself with execute_sql."
+            ),
         ),
         arg_descriptions={
-            "metric_type": "指标类型，可用 host_cpu、host_cpu_pressure、cgroup_cpu_usage、cgroup_cpu_throttle、process_cpu、service_slo、job_progress 或 workload_activity",
-            "target": "可选的 run-local series target 过滤；省略时返回该 metric 的全部实体",
-            "limit": "未指定时间窗时每个 series 返回的最新点数；显式历史窗口保持完整",
-            "start_timestamp": "时间窗开始，可选",
-            "end_timestamp": "时间窗结束，可选",
+            "metric_type": lazy_agent_text(
+                zh="指标类型，可用 host_cpu、host_cpu_pressure、cgroup_cpu_usage、cgroup_cpu_throttle、process_cpu、service_slo、job_progress 或 workload_activity",
+                en="Metric type: host_cpu, host_cpu_pressure, cgroup_cpu_usage, cgroup_cpu_throttle, process_cpu, service_slo, job_progress or workload_activity",
+            ),
+            "target": lazy_agent_text(
+                zh="可选的 run-local series target 过滤；省略时返回该 metric 的全部实体",
+                en="Optional run-local series target filter; when omitted, all entities of the metric are returned",
+            ),
+            "limit": lazy_agent_text(
+                zh="未指定时间窗时每个 series 返回的最新点数；显式历史窗口保持完整",
+                en="Number of latest points returned per series when no time window is given; an explicit history window is returned in full",
+            ),
+            "start_timestamp": lazy_agent_text(zh="时间窗开始，可选", en="Time window start, optional"),
+            "end_timestamp": lazy_agent_text(zh="时间窗结束，可选", en="Time window end, optional"),
         },
     )
     def _query_metrics_for_agent(
@@ -744,18 +764,37 @@ class CpuBudgetPGEnv(PGEnv):
         )
 
     @Tool(
-        description=(
-            "有界调整指标结果中标记为 managed=true 的共享实体资源策略；"
-            "支持 set_resource_limit、set_scheduling_weight、set_peer_limit、set_peer_weight。"
-            "不支持无限资源、停止必要工作、主机级调度或 SQL tenant 隔离。"
+        description=lazy_agent_text(
+            zh=(
+                "有界调整指标结果中标记为 managed=true 的共享实体资源策略；"
+                "支持 set_resource_limit、set_scheduling_weight、set_peer_limit、set_peer_weight。"
+                "不支持无限资源、停止必要工作、主机级调度或 SQL tenant 隔离。"
+            ),
+            en=(
+                "Make bounded adjustments to the resource policies of shared entities marked managed=true in the metric results; "
+                "supports set_resource_limit, set_scheduling_weight, set_peer_limit, set_peer_weight. "
+                "Unlimited resources, stopping necessary work, host-level scheduling and SQL tenant isolation are not supported."
+            ),
         ),
         arg_descriptions={
-            "action": (
-                "set_resource_limit、set_scheduling_weight、set_peer_limit、set_peer_weight；"
-                "其他普通 PG action 仍可用"
+            "action": lazy_agent_text(
+                zh=(
+                    "set_resource_limit、set_scheduling_weight、set_peer_limit、set_peer_weight；"
+                    "其他普通 PG action 仍可用"
+                ),
+                en=(
+                    "set_resource_limit, set_scheduling_weight, set_peer_limit, set_peer_weight; "
+                    "the other ordinary PG actions remain available"
+                ),
             ),
-            "target": "使用指标结果返回的 entity_id 或兼容的已知目标名；只能调整 managed=true 实体",
-            "value": "资源上限使用 cores 浮点数，调度权重使用 1-10000 整数",
+            "target": lazy_agent_text(
+                zh="使用指标结果返回的 entity_id 或兼容的已知目标名；只能调整 managed=true 实体",
+                en="Use an entity_id returned in the metric results or a compatible known target name; only managed=true entities can be adjusted",
+            ),
+            "value": lazy_agent_text(
+                zh="资源上限使用 cores 浮点数，调度权重使用 1-10000 整数",
+                en="Resource limits use a floating-point number of cores; scheduling weights use an integer from 1 to 10000",
+            ),
         },
     )
     def manage_instance(self, action: str, target: str = None, value: str = None) -> str:

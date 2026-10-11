@@ -44,6 +44,7 @@ _DEMOSCENARIO_CASE = DemoForMinimalHealthyScenarioCase(
     evaluator=DemoForMinimalHealthyEvaluatorCase,
     title='Minimal demo scenario without any faults.',
     alert='告警或提示：Minimal demo scenario without any faults.',
+    alert_en="Alert or notice: Minimal demo scenario without any faults.",
     initial_state={'status': 'healthy'},
     expected_target={'status': 'healthy'},
     background_workload=EMPTY_BACKGROUND_WORKLOAD,

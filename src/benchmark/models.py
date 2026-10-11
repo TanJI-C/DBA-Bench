@@ -70,6 +70,7 @@ class RuntimeSpec:
     postgres_storage_root: str | None = None
     diagnosis_match_mode: str = "exact"
     diagnosis_semantic_model: str = "Qwen/Qwen3-4B-Instruct-2507"
+    agent_language: str = "zh"
     isolation: IsolationPolicySpec | None = None
     run_mode: str = "formal"
     time_scale: float = 1.0

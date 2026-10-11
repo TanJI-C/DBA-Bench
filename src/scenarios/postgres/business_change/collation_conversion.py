@@ -226,6 +226,7 @@ _PGBUSINESSCHANGECOLLATIONCONVERSIONSCENARIO_CASE = PgBusinessChangeCollationCon
     dataset_scale=1,
     title='Simulates an online collation conversion on a TPC-DS fact table that invalidates LIKE-friendly B-tree access paths.',
     alert='业务变更窗口提醒：退货报表发布硬性要求承载线上 LIKE 前缀检索的主票号文本字段完成区域性排序改造。发布验收以数据库目录元数据为准：该列 collation 必须已转换为非 C 的区域性 collation，转换后 LIKE 前缀检索条件必须继续由索引条件承载，随附的发布预览视图在变更后必须仍然可用并按区域性排序语义返回。变更需以低锁方式在低峰期完成；同表的审计票号与历史预览字段及其索引不得变更。请先用业务负载与目录元数据区分目标字段与相邻字段，评估表重写、锁等待、依赖对象与空间膨胀影响，再实施变更并用元数据查询与 EXPLAIN 验证；确认闭环后必须调用 submit 结束流程。',
+    alert_en="Business change window reminder: the returns report release strictly requires the primary ticket number text column, which serves the online LIKE prefix searches, to be converted to locale-aware sorting. Release acceptance is based on the database catalog metadata: the column's collation must have been converted to a non-C locale-aware collation, after the conversion the LIKE prefix search condition must still be served by an index condition, and the accompanying release preview view must remain usable after the change and return results with locale-aware sorting semantics. The change must be made with low locking during off-peak hours; the audit ticket number and history preview columns of the same table and their indexes must not be changed. First use the business workload and the catalog metadata to tell the target column apart from the neighbouring columns, assess the impact of table rewrites, lock waits, dependent objects and space bloat, then make the change and verify it with metadata queries and EXPLAIN; once the loop is confirmed closed, you must call submit to end the process.",
     initial_state={'status': 'change_requested',
  'table': 'store_returns',
  'column': 'sr_ticket_number_txt',
@@ -344,6 +345,7 @@ _PGBUSINESSCHANGECOLLATIONCONVERSIONSCENARIO_SIMPLE_CASE = (
             "请确认真正承载线上检索的字段，评估转换与索引影响，安全完成变更并验证查询计划；"
             "审计预览流量仍在低频运行。"
         ),
+        alert_en="Change window alert: the returns search service needs to support locale-aware text sorting, and the release pre-check shows that the prefix query plan may regress. Identify the column that actually serves the online searches, assess the impact of the conversion on indexes, complete the change safely and verify the query plan; audit preview traffic is still running at low frequency.",
         initial_state={
             "status": "change_requested",
             "symptom": "regional_sorting_and_prefix_plan_risk",
