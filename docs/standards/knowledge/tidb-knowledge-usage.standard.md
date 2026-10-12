@@ -8,49 +8,58 @@ scope: [tidb, knowledge]
 summary: Defines how to use the existing TiDB unified knowledge base, including lazy embedding startup, explicit service startup, query interfaces, test scripts, and failure behavior.
 source_of_truth: code
 related: [standard.knowledge.tidb-knowledge-construction]
+language: en
 ---
 
-# TiDB 统一知识库使用规范
+# TiDB Unified Knowledge Base Usage Standard
 
-本文只定义当前 TiDB 统一知识库的使用方法。目标读者是需要查询知识库的 Agent
-runtime、运行烟测的维护者，以及在知识驱动场景中接入统一检索接口的开发者。
+This document defines only how to use the current TiDB unified knowledge base. Its intended
+readers are the Agent runtime that needs to query the knowledge base, maintainers running smoke
+tests, and developers integrating the unified retrieval interface in knowledge-driven scenarios.
 
-本文不描述 raw corpus 如何合并、三层语料如何物化或索引如何生成；这些内容由
-[TiDB 知识库构建原理与实现规范](./tidb-knowledge-construction.standard.md)定义。
-本文也不定义知识驱动场景的设计哲学、具体故障机制或 DP/OP/SP 合同。
+This document does not describe how the raw corpus is merged, how the three corpus layers are
+materialized, or how indexes are generated; those are defined by the
+[TiDB Knowledge Base Construction Principles and Implementation Standard](./tidb-knowledge-construction.standard.md).
+It also does not define the knowledge-driven scenario design philosophy, concrete fault mechanisms,
+or DP/OP/SP contracts.
 
-## 1. 先区分两个“启动”
+## 1. First Distinguish the Two Kinds of "Startup"
 
-当前系统中“启动知识库”不是启动一个独立的数据库服务。正式知识库由两部分组成：
+In the current system, "starting the knowledge base" is not starting a standalone database
+service. The official knowledge base consists of two parts:
 
-| 部分 | 实际形态 | 是否由查询自动创建 |
+| Part | Actual form | Created automatically by a query |
 |---|---|---:|
-| 知识索引 | 主仓库中的 SQLite 文件或 Chroma 持久化 collection | 否 |
-| Embedding service | 本机 HTTP 服务，默认 127.0.0.1:8765 | Chroma 查询时可以自动拉起 |
+| Knowledge index | A SQLite file or Chroma persisted collection in the main repository | No |
+| Embedding service | A local HTTP service, default 127.0.0.1:8765 | Can be auto-started for Chroma queries |
 
-因此：
+Therefore:
 
-- 第一次使用前，索引必须已经构建，并且对应目录中有 manifest.json；
-- Chroma 查询需要 embedding service。请求经过统一 runtime 检查服务，服务不存在时，
-  本机 endpoint 会在锁保护下以脱离当前命令的后台进程启动；
-- SQLite 查询不需要 embedding service；
-- 查询不会自动构建索引，不会从旧索引、SQLite、网络文档或硬编码摘要中回退；
-- TiDBKnowledgeBase 是索引和查询对象，不是一个需要单独保持前台运行的 daemon。
+- Before first use, the index must already be built, with a manifest.json in the corresponding
+  directory;
+- Chroma queries need the embedding service. Requests check the service through the unified
+  runtime; when the service does not exist, the local endpoint is started as a detached background
+  process under a lock;
+- SQLite queries do not need the embedding service;
+- Queries never build the index automatically and never fall back to a stale index, SQLite, web
+  documents, or hardcoded summaries;
+- TiDBKnowledgeBase is an index-and-query object, not a daemon that must be kept running in the
+  foreground separately.
 
-这个边界很重要：如果索引缺失，必须先按
-[构建规范](./tidb-knowledge-construction.standard.md)完成构建；如果 Chroma 的
-embedding service 缺失，查询可以按下文的规则自动拉起它。
+This boundary matters: if the index is missing, complete the build first per the
+[construction standard](./tidb-knowledge-construction.standard.md); if the Chroma embedding
+service is missing, queries may auto-start it following the rules below.
 
-## 2. 默认运行配置
+## 2. Default Runtime Configuration
 
-所有默认路径通过 src/project_paths.py 的 REPOSITORY_ROOT 解析。linked WorkTree
-和主 WorkTree 共享主仓库中的语料、索引、日志和 runtime 文件。
+All default paths are resolved through REPOSITORY_ROOT in src/project_paths.py. Linked WorkTrees
+and the main WorkTree share the corpus, indexes, logs, and runtime files in the main repository.
 
-当前 hierarchical TiDB 知识库的默认配置如下：
+The current hierarchical TiDB knowledge base defaults are:
 
-| 配置项 | 默认值 |
+| Configuration item | Default value |
 |---|---|
-| 知识模式 | hierarchical |
+| knowledge mode | hierarchical |
 | serving source | knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl |
 | collection | tidb81_unified_docs |
 | Chroma persist dir | data/knowledge_bases/tidb81_unified_chroma |
@@ -59,16 +68,18 @@ embedding service 缺失，查询可以按下文的规则自动拉起它。
 | embedding device | cuda |
 | embedding endpoint | http://127.0.0.1:8765 |
 
-上表中的相对路径均相对于主仓库根目录（`<repo-root>`，即本仓库的 checkout 根）。
+Relative paths in the table above are relative to the main repository root (`<repo-root>`, i.e.
+the checkout root of this repository).
 
-当前正式 TiDB Agent 入口固定使用 hierarchical。general 是通用目录源的历史配置，
-不应作为新的知识驱动场景入口。
+The current official TiDB Agent entry point always uses hierarchical. general is a legacy
+configuration for the generic directory source and must not be used as the entry point for new
+knowledge-driven scenarios.
 
-## 3. 自动启动与显式启动
+## 3. Automatic and Explicit Startup
 
-### 3.1 正常查询时的自动行为
+### 3.1 Automatic behavior during normal queries
 
-调用链是：
+The call chain is:
 
 ~~~
 TiDBKnowledgeBase.query()
@@ -76,30 +87,37 @@ TiDBKnowledgeBase.query()
   -> request_embeddings()
   -> ensure_embedding_model()
   -> GET /health
-  -> 复用 ready service
-     或锁保护下启动本机 detached service
+  -> reuse the ready service
+     or start the local detached service under a lock
 ~~~
 
-ensure_embedding_model() 位于 src/knowledge/embedding_model_runtime.py，是唯一的自动启动
-入口。
+ensure_embedding_model() lives in src/knowledge/embedding_model_runtime.py and is the only
+automatic startup entry point.
 
-自动行为有以下严格边界：
+Automatic behavior has these strict boundaries:
 
-- /health 返回 status=ready 且模型名匹配：直接复用，不重复加载模型；
-- 本机 endpoint 不可达：取得按端口区分的锁后启动
-  scripts/start_embedding_model.py --serve，等待 ready；
-- endpoint 返回模型不匹配：直接失败，不覆盖正在运行的服务；
-- endpoint 被其他服务占用或返回非法健康响应：直接失败，不替换；
-- endpoint 是远端且不可达：直接失败，不尝试登录或远程启动；
-- 启动进程退出、超过等待时间或 GPU 不可用：直接失败；
-- 不自动切换到 CPU、不自动切换旧模型、不自动切换 SQLite。
+- /health returns status=ready and the model name matches: reuse directly and do not load the
+  model again;
+- the local endpoint is unreachable: take the per-port lock, start
+  scripts/start_embedding_model.py --serve, and wait for ready;
+- the endpoint returns a model mismatch: fail immediately and do not overwrite the running
+  service;
+- the endpoint is occupied by another service or returns an invalid health response: fail
+  immediately and do not replace it;
+- the endpoint is remote and unreachable: fail immediately and do not attempt to log in or start
+  remotely;
+- the started process exits, the wait times out, or the GPU is unavailable: fail immediately;
+- no automatic switch to CPU, no automatic switch to an older model, and no automatic switch to
+  SQLite.
 
-查询脚本不会吞掉这些错误。Agent 工具会把带有 mode、query、过滤器和参数的错误返回给
-调用方，Scenario evaluator 不得把工具错误伪装成普通诊断结果。
+The query script does not swallow these errors. The Agent tool returns the error, together with
+the mode, query, filters, and parameters, to the caller; a Scenario evaluator must not disguise
+tool errors as ordinary diagnosis results.
 
-### 3.2 需要提前预热时的显式启动
+### 3.2 Explicit startup for pre-warming
 
-如果要在批量实验、建库或人工查询前明确确保服务 ready，执行：
+To explicitly ensure the service is ready before bulk experiments, index builds, or manual
+queries, run:
 
 ~~~
 conda run -n aiops python scripts/start_embedding_model.py \
@@ -109,14 +127,15 @@ conda run -n aiops python scripts/start_embedding_model.py \
   --port 8765
 ~~~
 
-该命令默认也是“检查并确保”的入口：
+By default this command is also the "check and ensure" entry point:
 
-- 服务已经 ready 时快速返回；
-- 服务不存在时在后台启动并等待 ready；
-- 命令返回后，embedding service 继续脱离当前终端运行；
-- 日志写入主仓库的 logs/embedding_model.log。
+- it returns quickly when the service is already ready;
+- it starts the service in the background and waits for ready when it does not exist;
+- after the command returns, the embedding service keeps running detached from the current
+  terminal;
+- logs are written to logs/embedding_model.log in the main repository.
 
-只做只读检查时使用：
+For a read-only check only, use:
 
 ~~~
 conda run -n aiops python scripts/start_embedding_model.py \
@@ -126,11 +145,12 @@ conda run -n aiops python scripts/start_embedding_model.py \
   --port 8765
 ~~~
 
---status 不会启动服务；ready 时退出码为 0，其他状态退出码为 1。
+--status does not start the service; the exit code is 0 when ready and 1 in any other state.
 
-### 3.3 额外端口或额外 endpoint
+### 3.3 Extra ports or extra endpoints
 
-需要另一台本机服务或另一端口时，必须明确给出端口、模型和 device。例如：
+When another local service or another port is needed, the port, model, and device must be given
+explicitly. For example:
 
 ~~~
 conda run -n aiops python scripts/start_embedding_model.py \
@@ -140,7 +160,7 @@ conda run -n aiops python scripts/start_embedding_model.py \
   --port 8766
 ~~~
 
-然后让显式查询指向该 endpoint：
+Then point an explicit query at that endpoint:
 
 ~~~
 conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
@@ -149,57 +169,62 @@ conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
   --query "Online Unsafe Recovery failed stores Finished"
 ~~~
 
-也可以在 Python 进程启动前设置：
+You can also set it before the Python process starts:
 
 ~~~
 export AIOPS_EMBEDDING_MODEL_URL=http://127.0.0.1:8766
 ~~~
 
-每个端口使用独立的 lock 文件 /tmp/aiopsbench-embedding-model-<port>.lock。额外 endpoint
-不会改变 Agent 默认入口；查询 CLI 会清除 AIOPS_EMBEDDING_MODEL_URLS，确保一次查询只使用
-一个明确的 endpoint。AIOPS_EMBEDDING_MODEL_URLS 只用于受控的批量 Chroma 建库并行请求，
-详见构建规范。
+Each port uses its own lock file /tmp/aiopsbench-embedding-model-<port>.lock. Extra endpoints do
+not change the Agent's default entry point; the query CLI clears AIOPS_EMBEDDING_MODEL_URLS to
+ensure that one query uses exactly one explicit endpoint. AIOPS_EMBEDDING_MODEL_URLS is only for
+controlled parallel requests during bulk Chroma index builds; see the construction standard for
+details.
 
---serve 是 runtime 内部拉起 detached service 的实现入口，不应作为调用方的第二套启动
-逻辑。需要显式启动时使用上面的默认命令，让检查、锁、等待和错误处理仍由同一个 runtime
-实现完成。
+--serve is the runtime's internal entry point for raising the detached service and must not become
+a second startup path for callers. When an explicit start is needed, use the default command above
+so that checking, locking, waiting, and error handling remain with the same runtime
+implementation.
 
-### 3.4 机器重启后的行为
+### 3.4 Behavior after a machine restart
 
-当前后台进程是脱离当前命令的持久化进程，不是 systemd 或开机服务。机器重启后：
+The current background process is a persistent process detached from the invoking command, not a
+systemd or boot-time service. After a machine restart:
 
-- 索引文件仍在主仓库，除非被主动删除；
-- embedding service 不会自动由操作系统拉起；
-- 第一次 Chroma 查询或显式运行 start_embedding_model.py 会再次按上述规则启动；
-- 若要求机器开机即 ready，应由外部进程管理器托管，但不要在知识库代码里再实现第二套启动器。
+- index files remain in the main repository unless actively deleted;
+- the embedding service is not started automatically by the operating system;
+- the first Chroma query, or an explicit run of start_embedding_model.py, starts it again per the
+  rules above;
+- if the service must be ready at boot, host it with an external process manager, but do not
+  implement a second launcher inside the knowledge base code.
 
-## 4. 访问接口
+## 4. Access Interfaces
 
-### 4.1 命令行查询脚本
+### 4.1 Command-line query script
 
-人工查询、召回验证和延迟测量使用：
+For manual queries, recall verification, and latency measurement, use:
 
 ~~~
 conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
   --query "alloc-id recovery high-water"
 ~~~
 
-脚本默认使用 Chroma hierarchical index。常用参数如下：
+The script uses the Chroma hierarchical index by default. Common parameters:
 
-| 参数 | 作用 |
+| Parameter | Purpose |
 |---|---|
-| --query | 必填，自然语言问题、配置名、SQL 标识符或组件概念 |
-| --backend chroma\|sqlite | 显式选择索引后端，默认 chroma |
-| --top-k 1..20 | 返回片段数量，默认 5 |
-| --source-scope | self_managed、cloud、kubernetes、developer、shared 或 all |
-| --kb-type | architecture、configuration、observability、diagnosis、operation、performance、recovery、data_pipeline、reference、release |
-| --component | TiDB、TiKV、PD、TiFlash、TiCDC、BR、Lightning 等组件 |
-| --max-chars-per-result | 每条正文长度，范围 200..8000 |
-| --embedding-url | Chroma 使用的 endpoint |
-| --embedding-model | 期望的模型名 |
-| --json | 只输出来源中立 JSON |
+| --query | required; a natural-language question, configuration name, SQL identifier, or component concept |
+| --backend chroma\|sqlite | explicitly choose the index backend; default chroma |
+| --top-k 1..20 | number of returned snippets; default 5 |
+| --source-scope | self_managed, cloud, kubernetes, developer, shared, or all |
+| --kb-type | architecture, configuration, observability, diagnosis, operation, performance, recovery, data_pipeline, reference, release |
+| --component | components such as TiDB, TiKV, PD, TiFlash, TiCDC, BR, and Lightning |
+| --max-chars-per-result | body length per result, range 200..8000 |
+| --embedding-url | the endpoint used by Chroma |
+| --embedding-model | the expected model name |
+| --json | output only source-neutral JSON |
 
-例如：
+For example:
 
 ~~~
 conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
@@ -210,7 +235,7 @@ conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
   --json
 ~~~
 
---backend sqlite 只在明确需要 FTS5 查询或检查索引合同的时候使用：
+Use --backend sqlite only when FTS5 queries or index-contract checks are explicitly needed:
 
 ~~~
 conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
@@ -219,7 +244,7 @@ conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
   --json
 ~~~
 
-脚本输出的 Agent-facing 结果字段固定为：
+The Agent-facing result fields of the script output are fixed:
 
 ~~~
 status
@@ -236,12 +261,12 @@ results[].source_scope
 results[].content
 ~~~
 
-CLI 脚本本身可以保留延迟信息供人工观察，但 Scenario runtime 不应通过 subprocess 调用
-它来查询知识库。
+The CLI script itself may keep latency information for human observation, but the Scenario runtime
+must not query the knowledge base by calling it through subprocess.
 
 ### 4.2 Python API
 
-维护脚本、测试和 runtime 内部直接使用 TiDBKnowledgeBase：
+Maintenance scripts, tests, and runtime internals use TiDBKnowledgeBase directly:
 
 ~~~
 from src.knowledge.tidb_knowledge_base import TiDBKnowledgeBase
@@ -260,21 +285,22 @@ result = kb.query(
 )
 ~~~
 
-构造函数会从 src/project_paths.py 取得主仓库路径，并使用 hierarchical 默认 source、
-collection 和 persist dir。调用方不得自行：
+The constructor takes the main repository paths from src/project_paths.py and uses the
+hierarchical default source, collection, and persist dir. Callers must not, on their own:
 
-- 拼接 knowledge/tidb_unified 路径；
-- 初始化 SentenceTransformer；
-- 探测或启动 embedding endpoint；
-- 读取 SQLite/Chroma 内部文件；
-- 在 Chroma 出错后切换 SQLite。
+- assemble knowledge/tidb_unified paths;
+- initialize SentenceTransformer;
+- probe or start the embedding endpoint;
+- read SQLite/Chroma internal files;
+- switch to SQLite after a Chroma error.
 
-kb.query() 返回的内部结果包含 index、persist_dir、source commit 和 materialized
-corpus hash 等维护字段。它们可以用于维护和审计，但不能直接暴露给 Agent。
+Internal results returned by kb.query() include maintenance fields such as index, persist_dir,
+source commit, and materialized corpus hash. They can be used for maintenance and audit but must
+not be exposed directly to the Agent.
 
-### 4.3 TiDB Agent 工具
+### 4.3 TiDB Agent tool
 
-TiDB Agent 使用统一工具：
+The TiDB Agent uses one unified tool:
 
 ~~~
 search_knowledge(
@@ -286,8 +312,8 @@ search_knowledge(
 )
 ~~~
 
-工具固定调用 knowledge_base_mode="hierarchical"，每次将 max_chars_per_result 固定为
-1600。工具返回的顶层字段和 result 字段只有：
+The tool always calls with knowledge_base_mode="hierarchical" and fixes max_chars_per_result to
+1600 on every call. The tool returns only these top-level and result fields:
 
 ~~~
 status
@@ -307,58 +333,61 @@ results[].source_scope
 results[].content
 ~~~
 
-运行时实现位置是 src/execution/environment.py 的 _search_tidb_knowledge() 和
-search_knowledge()；工具 schema 位于 src/execution/tidb_tool_definitions.py。
+The runtime implementation lives in _search_tidb_knowledge() and search_knowledge() in
+src/execution/environment.py; the tool schema is in src/execution/tidb_tool_definitions.py.
 
-知识结果只提供一般 TiDB 产品知识，不提供当前 run 的 Store、Region、表、checkpoint、
-TSO、动态对象、修复结果或 evaluator 结论。Agent 必须把知识结果与 execute_sql、
-query_metrics、read_log、manage_cluster 等现场证据重新绑定。
+Knowledge results provide only general TiDB product knowledge — never the current run's Stores,
+Regions, tables, checkpoints, TSO, dynamic objects, remediation results, or evaluator conclusions.
+The Agent must re-bind knowledge results to live evidence from execute_sql, query_metrics,
+read_log, manage_cluster, and the like.
 
-## 5. WorkTree 下使用
+## 5. Using from a WorkTree
 
-从 linked WorkTree 执行命令时，默认行为仍指向主仓库：
+When commands run from a linked WorkTree, the default behavior still points at the main
+repository:
 
-- serving source、SQLite、Chroma 和 manifest 使用主仓库路径；
-- embedding lock 和日志使用主仓库或按端口约定的共享路径；
-- 查询不会在 WorkTree 生成第二份正式 index；
-- WorkTree 尚未合入主仓库的 raw corpus 不会出现在正式查询结果中。
+- serving source, SQLite, Chroma, and manifest use the main repository paths;
+- the embedding lock and logs use the main repository or the per-port shared paths;
+- queries never generate a second official index in the WorkTree;
+- raw corpus not yet merged into the main repository from a WorkTree never appears in official
+  query results.
 
-可以在任意 WorkTree 查询：
+You can query from any WorkTree:
 
 ~~~
 conda run -n aiops python scripts/query_tidb_unified_knowledge.py \
   --query "placement policy inheritance FOLLOWERS"
 ~~~
 
-不要通过复制 data/knowledge_bases 或设置一个未声明的相对目录来绕开这个单例规则。
-临时实验必须显式使用绝对 source、persist dir 和 collection，并且不能被正式 Agent runtime
-默认读取。
+Do not bypass this singleton rule by copying data/knowledge_bases or setting an undeclared
+relative directory. Temporary experiments must explicitly use absolute source, persist dir, and
+collection paths, and must not be read by default by the official Agent runtime.
 
-## 6. 测试与烟测入口
+## 6. Test and Smoke-test Entry Points
 
-### 6.1 统一 GPU smoke
+### 6.1 Unified GPU smoke test
 
-完整的 serving、embedding、召回和 Agent projection 烟测使用：
+For the full serving, embedding, recall, and Agent projection smoke test, use:
 
 ~~~
 AIOPS_EMBEDDING_MODEL_URL=http://127.0.0.1:8765 \
 conda run -n aiops python scripts/smoke_tidb_unified_knowledge.py
 ~~~
 
-脚本会：
+The script:
 
-1. 检查 serving source；
-2. 确保 Qwen/Qwen3-Embedding-4B 在 CUDA endpoint ready；
-3. 运行一条 cold query 和三轮标准 query；
-4. 记录 min、p50、p95、max、mean 延迟；
-5. 检查标准 query 的 marker recall；
-6. 通过 TiDBEnv._search_tidb_knowledge() 检查 Agent projection；
-7. 确认 source/provenance/index 字段没有泄漏；
-8. 将结果写入 logs/ 下带时间戳的 JSON 文件（该目录不入库）。
+1. checks the serving source;
+2. ensures Qwen/Qwen3-Embedding-4B is ready at the CUDA endpoint;
+3. runs one cold query and three rounds of standard queries;
+4. records min, p50, p95, max, and mean latency;
+5. checks marker recall of the standard queries;
+6. checks the Agent projection through TiDBEnv._search_tidb_knowledge();
+7. confirms that source/provenance/index fields do not leak;
+8. writes results to a timestamped JSON file under logs/ (that directory is not committed).
 
-### 6.2 定向测试
+### 6.2 Targeted tests
 
-知识库行为回归：
+Knowledge-base behavior regression:
 
 ~~~
 conda run -n aiops pytest -q \
@@ -368,27 +397,28 @@ conda run -n aiops pytest -q \
   tests/tidb/test_embedding_model_runtime.py
 ~~~
 
-其中：
+Where:
 
-- test_tidb_knowledge_base.py 验证配置、索引和查询合同；
-- tests/knowledge/test_tidb_knowledge_retrieval_quality.py 验证标准 query 的召回；
-- test_tidb_knowledge_tool.py 验证 Agent 工具参数和来源中立投影；
-- test_embedding_model_runtime.py 验证 health、锁、自动启动和错误边界。
+- test_tidb_knowledge_base.py validates configuration, indexing, and query contracts;
+- tests/knowledge/test_tidb_knowledge_retrieval_quality.py validates recall of the standard
+  queries;
+- test_tidb_knowledge_tool.py validates Agent tool parameters and the source-neutral projection;
+- test_embedding_model_runtime.py validates health, locks, auto-start, and error boundaries.
 
-## 7. 使用时的错误边界
+## 7. Error Boundaries When in Use
 
-| 情况 | 使用方应看到的行为 |
+| Situation | Behavior the caller should see |
 |---|---|
-| serving source 不存在 | 直接报错，先完成构建 |
-| manifest 不存在 | 直接报错，先构建对应 backend |
-| source hash 变化 | 报 stale index，重新构建 |
-| Chroma collection 不存在 | 直接报错，不切换 SQLite |
-| 本机 embedding endpoint 不存在 | 自动启动并等待 ready |
-| 远程 embedding endpoint 不存在 | 直接失败 |
-| endpoint 模型不匹配 | 直接失败，不覆盖现有进程 |
-| GPU 不可用 | 直接失败，不切换 CPU |
-| query 没有结果 | 返回真实空结果，不伪造答案 |
-| Agent 工具查询异常 | 返回带上下文的 error |
+| serving source missing | error immediately; complete the build first |
+| manifest missing | error immediately; build the corresponding backend first |
+| source hash changed | report stale index and rebuild |
+| Chroma collection missing | error immediately; do not switch to SQLite |
+| local embedding endpoint missing | auto-start and wait for ready |
+| remote embedding endpoint missing | fail immediately |
+| endpoint model mismatch | fail immediately; do not overwrite the running process |
+| GPU unavailable | fail immediately; do not switch to CPU |
+| query has no results | return the real empty result; do not fabricate answers |
+| Agent tool query error | return an error with context |
 
-索引构建、三层语料和 stale index 的详细原因见
-[TiDB 知识库构建原理与实现规范](./tidb-knowledge-construction.standard.md)。
+For the detailed reasons behind index building, the three corpus layers, and stale indexes, see
+the [TiDB Knowledge Base Construction Principles and Implementation Standard](./tidb-knowledge-construction.standard.md).

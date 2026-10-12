@@ -8,151 +8,143 @@ scope: [shared, scenario, postgres, tidb]
 summary: Guides end-to-end Scenario and ScenarioCase design, implementation, evaluation, recovery, calibration, testing, and delivery.
 source_of_truth: code
 related: [standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, catalog.postgresql-scenarios, catalog.tidb-scenarios]
+language: en
 ---
 
-# DBA-Bench 场景与 Case 实现规范
+# DBA-Bench Scenario and Case Implementation Specification
 
-本文约束数据库运维场景的新建和既有 Scenario 的 Case 扩充。它只保留实现合同和生命周期门禁；
-DP/OP/SP、架构边界和难度计算分别集中在以下公共文档：
+This document governs creating new database operations scenarios and extending existing Scenarios with Cases. It retains only the implementation contract and lifecycle gates;
+DP/OP/SP, architecture boundaries, and difficulty computation are centralized in the following shared documents:
 
-- [DP、OP、SP 设计原则](../../standards/evaluation/dp-op-sp.standard.md)
-- [场景架构与全生命周期原则](../../standards/scenario/architecture.standard.md)
-- [场景难度设计原则](../../standards/scenario/difficulty.standard.md)
-- Hard 加难边界、校准和停止条件：以上场景难度标准。
+- [DP, OP, and SP design principles](../../standards/evaluation/dp-op-sp.standard.md)
+- [Scenario architecture and full lifecycle principles](../../standards/scenario/architecture.standard.md)
+- [Scenario difficulty design principles](../../standards/scenario/difficulty.standard.md)
+- Hard hardening boundaries, calibration, and stopping conditions: the scenario difficulty standard above.
 
-## 1. 适用边界
+## 1. Applicability
 
-实现一个全新的运维问题时，通常新增一个 `Scenario` 和至少一个 `ScenarioCase`；在已有
-Scenario 下增加评估点时，通常只新增 `ScenarioCase`。新增 Case 不是自动 Easy，新增一个
-Hard Case 也完全合理。新增实现必须同时指定目标对象和 `Easy`、`Hard` 或
-`measure-only` 难度目标。
+When implementing a brand-new operations problem, you usually add one `Scenario` and at least one `ScenarioCase`; when adding evaluation points under an existing Scenario, you usually add only a `ScenarioCase`. A new Case is not automatically Easy, and adding a Hard Case is entirely reasonable. New implementations must specify both the target object and a difficulty goal of `Easy`, `Hard`, or
+`measure-only`.
 
-场景必须是真实、可解释、可观察、可修复、可验收且可恢复的数据库运维任务。不得靠内部命名、
-隐藏字面量、固定脚本或 evaluator 的偶然规则制造能力差异。
+Scenarios must be real, explainable, observable, remediable, acceptance-testable, and recoverable database operations tasks. Capability differences must not be manufactured through internal naming,
+hidden literals, fixed scripts, or accidental evaluator rules.
 
-## 2. 实现前 Case 合同
+## 2. Pre-implementation Case contract
 
-编码前写完下表。新 Scenario 还要解释为什么需要独立 Scenario；新增 Case 还要给出原 Case
-对照和新的评估价值。
+Complete the table below before writing code. A new Scenario must also explain why an independent Scenario is needed; a new Case must also provide a comparison against the original Case and its new evaluation value.
 
-| 合同项 | 必须回答的问题 |
+| Contract item | Question that must be answered |
 |---|---|
-| 运维问题 | 真实系统发生了什么，为什么需要 DBA/Agent 处理？ |
-| 故障原理 | 用户看到什么表象，真实机制是什么，影响哪个业务/系统状态？ |
-| 初始状态 | 对象、配置、数据、拓扑、workload 和时间阶段是什么？ |
-| 诊断路径 | 从表象到根因或运维决策需要建立哪些逻辑状态？每一跳证据在哪里？ |
-| 标准路径 | 正常 DBA 如何诊断、修复和验证？每一步解决什么问题？ |
-| 合法修复族 | 哪些动作或语义等价方案都可完成任务？ |
-| OutcomePass | 最终状态、业务真值、不变量、阈值、单位和允许替代方案是什么？所有阻塞条件的基线、范围、采样窗口和验收证据是什么？ |
-| SP 边界 | 哪些动作、对象、数据、权限、实例和范围禁止或受限？ |
-| 资源与清理 | 谁拥有连接、会话、线程、文件、配置和数据库状态，如何恢复？ |
-| 新增目的 | calibration/control、mechanism-difference、counterfactual/boundary 或 challenge？ |
-| 难度目标 | `Easy`、`Hard` 还是 `measure-only`？它与新增目的如何独立？ |
+| Operations problem | What happened in the real system, and why does it need a DBA/Agent to handle it? |
+| Fault principle | What symptoms does the user see, what is the real mechanism, and which business/system state is affected? |
+| Initial state | What are the objects, configuration, data, topology, workload, and time phase? |
+| Diagnosis path | Which logical states must be established to go from symptoms to root cause or an operations decision? Where is the evidence at each hop? |
+| Standard path | How does a competent DBA diagnose, remediate, and verify? What problem does each step solve? |
+| Legitimate remediation family | Which actions or semantically equivalent solutions can complete the task? |
+| OutcomePass | What are the final state, business ground truth, invariants, thresholds, units, and allowed alternatives? For every blocking condition, what are the baseline, range, sampling window, and acceptance evidence? |
+| SP boundary | Which actions, objects, data, permissions, instances, and scopes are prohibited or restricted? |
+| Resources and cleanup | Who owns the connections, sessions, threads, files, configuration, and database state, and how are they recovered? |
+| Purpose of the addition | calibration/control, mechanism-difference, counterfactual/boundary, or challenge? |
+| Difficulty goal | `Easy`, `Hard`, or `measure-only`? How is it independent of the purpose of the addition? |
 
-标准诊断/修复路径是说明性 reference path，不是 OP 的固定动作序列。完成任务所需的事实、
-公开约束、合法状态和安全边界必须对 Agent 可见；ground truth 的条件 ID、fixture 变量和
-直接答案不能泄露。
+The standard diagnosis/remediation path is an illustrative reference path, not a fixed action sequence for OP. The facts, public constraints, legitimate states, and safety boundaries required to complete the task must be visible to the Agent; the ground truth's condition IDs, fixture variables, and
+direct answers must not be leaked.
 
-任何会使 `OutcomePass=False` 的资源、空间、写放大、对象数量、时间/RTO、清理或预算条件，
-都必须在 Case 合同和任务文本中逐项公开：可观察基线、单位、阈值、适用对象/范围、采样窗口
-和验收证据。隐藏在 evaluator、Injector、fixture 或内部配置中的条件不能作为模型失败依据。
-只有确实属于主要业务目标的预算、对象数量或清理要求才可阻塞 OP；临时对象清理、无关配置
-恢复、报告补充、reference 附加动作和固定 RTO 若未写入主要目标，不得单独阻塞 OP。
+Any resource, space, write-amplification, object-count, time/RTO, cleanup, or budget condition that could make `OutcomePass=False` must be disclosed item by item in the Case contract and task text: observable baseline, unit, threshold, applicable object/scope, sampling window,
+and acceptance evidence. Conditions hidden in the evaluator, Injector, fixture, or internal configuration cannot be used as grounds for model failure.
+Only budgets, object counts, or cleanup requirements that genuinely belong to the primary business objective may block OP; temporary object cleanup, restoration of unrelated configuration, report supplements, reference-only extra actions, and fixed RTO must not block OP on their own if they are not written into the primary objective.
 
-## 3. 新 Scenario 与新增 Case
+## 3. New Scenarios and new Cases
 
-### 新 Scenario
+### New Scenario
 
-至少完成：
+Complete at minimum:
 
-- `src/scenarios/postgres/<category>/` 或 `src/scenarios/tidb/<category>/` 中的无状态 Scenario；
-- 一个或多个不可变 `ScenarioCase`、注册信息和完整 identity；
-- `FaultPlan`、五阶段 Injector、对应系统/分类 evaluator、正式入口；
-- 背景 workload、资源合同、场景合同、focused tests、mock/reference path 和 recovery 验证。
+- a stateless Scenario in `src/scenarios/postgres/<category>/` or `src/scenarios/tidb/<category>/`;
+- one or more immutable `ScenarioCase` definitions, registration info, and complete identity;
+- a `FaultPlan`, a five-phase Injector, the corresponding system/category evaluator, and a formal entry point;
+- a background workload, resource contract, scenario contract, focused tests, a mock/reference path, and recovery validation.
 
-不同无关故障不要拼成无法归因的综合题。Scenario 只保存身份、描述、Case 集合和构建计划；
-动态对象、时间、阈值、注入证据、动作历史和运行真值进入 `CaseRun` 或可信 artifact。
+Do not stitch unrelated faults into a composite case that cannot be attributed. A Scenario stores only identity, description, its Case set, and the build plan;
+dynamic objects, times, thresholds, injection evidence, action history, and run ground truth go into `CaseRun` or trusted artifacts.
 
-### 新增 Case
+### New Case
 
-先制作原 Case 与新 Case 对照：
+First produce a comparison between the original Case and the new Case:
 
-| 维度 | 原 Case | 新 Case | 新增评估价值 |
+| Dimension | Original Case | New Case | New evaluation value |
 |---|---|---|---|
-| 核心机制与因果方向 | | | 保持、替换或新增什么机制？ |
-| 目标/健康对象和范围 | | | 是否测量目标区分或范围控制？ |
-| workload、并发、时间阶段 | | | 改变了哪种真实运行条件？ |
-| evidence、噪声、竞争假设 | | | Agent 必须建立什么新关联？ |
-| 合法修复族与 OP 不变量 | | | 是否新增修复选择或业务目标？ |
-| SP 安全边界 | | | 哪些风险保留、增加或改变？ |
-| 难度目标与 `D_s/C_s` | | | 设计预期与实测如何区分？ |
+| Core mechanism and causal direction | | | Which mechanism is kept, replaced, or added? |
+| Target/healthy objects and scope | | | Does it test measurement-target discrimination or scope control? |
+| Workload, concurrency, time phase | | | Which real operating condition is changed? |
+| Evidence, noise, competing hypotheses | | | What new association must the Agent establish? |
+| Legitimate remediation family and OP invariants | | | Are new remediation choices or business objectives added? |
+| SP safety boundary | | | Which risks are retained, increased, or changed? |
+| Difficulty goal and `D_s/C_s` | | | How do design expectations and measured results differ? |
 
-必须更新独立 `case_id`、连续 `case_no`、Case 合同、FaultPlan 配置、evaluator identity、
-入口 `--case`、文档和测试。修改共享 evaluator/Injector/workload 后，回归所有受影响 Case。
-只换表名、常量、告警文案或隐藏对象名不构成有效扩充。
+You must update the distinct `case_id`, the sequential `case_no`, the Case contract, the FaultPlan configuration, evaluator identity,
+the entry point's `--case`, documentation, and tests. After modifying a shared evaluator/Injector/workload, run regression on all affected Cases.
+Merely changing table names, constants, alert wording, or hidden object names does not constitute a valid extension.
 
-## 4. 实现门禁
+## 4. Implementation gates
 
-### 架构与故障
+### Architecture and faults
 
-- 使用当前 `src/scenarios`（包括 `runtime/` 和 `evaluation/`）、`src/execution` 结构；
-- `FaultPlan` 只含 Injector 类型和完整配置，不保存实例或运行状态；
-- Injector 实现 `install`、`activate`、`prepare_observability`、`quiesce`、`recover`，每个
-  方法只收 `self, context`；
-- 故障必须在真实数据库/系统中发生，证据通过正式工具可见；不伪造指标、响应或 ground truth；
-- 入口不复制 Orchestrator 的 deploy、inject、evaluate、recover、teardown 和 trace；
-- 运行状态、PID、连接、时间戳和动态对象不进入静态 Scenario/Case；
-- 先用 `rg` 查找并复用 `src/database/`、`src/scenarios/evaluation/`、`src/workloads/` 和
-  `src/scenarios/runtime/` 的现有行为，不保留旧接口兼容层或 fallback。
+- Use the current `src/scenarios` (including `runtime/` and `evaluation/`) and `src/execution` structures;
+- a `FaultPlan` contains only the Injector type and its full configuration; it stores no instance or runtime state;
+- the Injector implements `install`, `activate`, `prepare_observability`, `quiesce`, `recover`, and each
+  method takes only `self, context`;
+- faults must occur in the real database/system, and evidence must be visible through formal tools; do not fake metrics, responses, or ground truth;
+- entry points do not duplicate the Orchestrator's deploy, inject, evaluate, recover, teardown, and trace logic;
+- runtime state, PIDs, connections, timestamps, and dynamic objects do not enter static Scenario/Case definitions;
+- first use `rg` to find and reuse existing behavior in `src/database/`, `src/scenarios/evaluation/`, `src/workloads/`, and
+  `src/scenarios/runtime/`; do not keep legacy interface compatibility layers or fallbacks.
 
-### 信息与评估
+### Information and evaluation
 
-- alert 描述症状和影响，不给 canonical condition、推荐修复或直接答案；
-- DP/OP/SP 严格按公共原则实现；
-- OP 的业务状态字符串只有在真实业务需求、完整 `ENUM`/`CHECK` 约束和 Agent 可见合法值都
-  成立时才允许精确匹配；
-- OP 的资源/时间/清理/预算等阻塞条件必须公开基线、单位、阈值、范围、采样窗口和证据；
-  evaluator 或 fixture 的隐藏条件不得用于制造失败；
-- reference/mock 必须通过，至少一个合法替代修复在多解场景中通过；
-- 未修复、部分修复、错误对象、业务结果破坏、危险动作和 verifier 失败必须有覆盖；
-- 无根因任务设置 `diagnosis_applicable=False`，不要编造 DP 根因。
+- alerts describe symptoms and impact, and do not give the canonical condition, a recommended remediation, or direct answers;
+- DP/OP/SP are implemented strictly according to the shared principles;
+- exact matching of OP business-state strings is allowed only when a real business requirement, complete `ENUM`/`CHECK` constraints, and Agent-visible legitimate values all hold;
+- OP blocking conditions such as resources/time/cleanup/budget must publicly disclose the baseline, unit, threshold, scope, sampling window, and evidence;
+  hidden conditions in the evaluator or fixture must not be used to manufacture failure;
+- the reference/mock path must pass, and at least one legitimate alternative remediation must pass in multi-solution scenarios;
+- un-remediated, partially remediated, wrong-object, business-result-corrupting, dangerous-action, and verifier-failure outcomes must be covered;
+- tasks without a root cause set `diagnosis_applicable=False`; do not invent a DP root cause.
 
-### 难度
+### Difficulty
 
-- `Easy` 只能受控降低表面复杂度，保留真实歧义或修复范围选择；
-- `Hard` 先完成可解基线，再按场景难度标准进入加难和方向纠偏；不得隐藏证据、制造随机 race、堆无关噪声
-  或收紧 OP；
-- `measure-only` 不为命中标签主动调整设计；
-- 最终校准必须来自真实 reference run；数值登记在代码注册表（`DifficultyCalibration`），
-  文档不复制（见[场景难度设计原则](../../standards/scenario/difficulty.standard.md)）。
+- `Easy` may only reduce surface complexity in a controlled way and must retain real ambiguity or remediation-scope choices;
+- `Hard` first completes a solvable baseline, then applies hardening and direction correction per the scenario difficulty standard; do not hide evidence, create random races, pile on irrelevant noise,
+  or tighten OP;
+- `measure-only` does not adjust the design to hit a label;
+- final calibration must come from a real reference run; the numbers are registered in the code registry (`DifficultyCalibration`),
+  and documentation does not copy them (see the [scenario difficulty design principles](../../standards/scenario/difficulty.standard.md)).
 
-## 5. 测试与实验
+## 5. Testing and experiments
 
-所有 Python 命令使用 `conda run -n aiops`。至少运行：
+All Python commands use `conda run -n aiops`. Run at minimum:
 
-- Scenario/Case 注册、编号、system/evaluator identity 和 FaultPlan；
-- 五阶段 lifecycle、真实 evidence、fault image（适用时）和完整 recovery；
-- DP exact/semantic、OP 最终状态/合法替代、SP plausible hazards；
-- 结构化 submission、正式入口 `--case`、mock/reference path 和共享 Case 回归。
+- Scenario/Case registration, numbering, system/evaluator identity, and the FaultPlan;
+- the five-phase lifecycle, real evidence, fault images (when applicable), and full recovery;
+- DP exact/semantic, OP final state/legitimate alternatives, and SP plausible hazards;
+- structured submissions, the formal entry point's `--case`, mock/reference paths, and shared Case regression.
 
-正式实验使用 `Smoke -> Pilot -> Main`。模型、prompt、重复次数、seed、资源和隔离由 manifest
-记录；provider、协议、timeout、工具和基础设施异常单独保留，不计作模型失败。
+Formal experiments follow `Smoke -> Pilot -> Main`. Models, prompts, repetition counts, seeds, resources, and isolation are recorded by the manifest;
+provider, protocol, timeout, tool, and infrastructure exceptions are kept separately and are not counted as model failures.
 
-## 6. 文档与交付报告
+## 6. Documentation and delivery report
 
-`docs/scenarios/<database>/<category>/<scenario-id>.contract.md` 和交付报告至少说明：
+`docs/scenarios/<database>/<category>/<scenario-id>.contract.md` and the delivery report must cover at least:
 
-1. 故障原理（大白话）；
-2. 标准诊断路径和标准修复路径，以及它们不是唯一动作序列；
-3. OutcomePass 的最终状态、业务不变量、阈值/单位、合法替代方案和明确不检查项；
-4. `pi_s`、逐跳证据、reference run ID、label 与登记在代码注册表的校准数值（`DifficultyCalibration`）；
-5. mock/真实 Agent 的实际 DP/OP/SP（失败归因仅作 evaluator 参考）、run/trace、测试和 recovery；
-6. 对有效非干净运行使用独立的 trace-level LLM judge 进行语义归因：先让 judge 阅读完整诊断/
-   修复路径、工具证据、动作结果和最终状态，再选择一个主类型和一个二级标签；不要把 DP/OP/SP
-   的具体值或布尔组合写成分类规则。`OutcomePass=False` 时，报告 judge 判断的是“未找出根因”
-   还是“找出根因但没有修复”；DP/OP/SP 只作为参考字段，若与语义判断冲突，记录分歧和证据。
-   二级标签仍限定为诊断失败（证据遗漏、证据误读、噪声锚定、因果链截断）、修复失败（修复目标
-   错误、修复不完整、执行无效、验证未闭环）或不安全恢复（破坏性动作、受保护对象误伤或范围
-   未限定、安全防护缺失）。同时给出语义理由、关键证据、具体动作、失败结果、最终状态和未满足
-   不变量。无效运行单独归因；
-7. 所有未运行的验证。
+1. the fault principle (in plain language);
+2. the standard diagnosis path and standard remediation path, and the fact that they are not the only action sequences;
+3. OutcomePass's final state, business invariants, thresholds/units, legitimate alternatives, and items explicitly not checked;
+4. `pi_s`, per-hop evidence, the reference run ID, the label, and the calibration numbers registered in the code registry (`DifficultyCalibration`);
+5. the actual DP/OP/SP of the mock/real Agent (failure attribution is for evaluator reference only), run/trace, tests, and recovery;
+6. for valid but non-clean runs, use an independent trace-level LLM judge for semantic attribution: first have the judge read the complete diagnosis/
+   remediation path, tool evidence, action results, and final state, then choose one primary type and one secondary label; do not write the concrete DP/OP/SP
+   values or boolean combinations as classification rules. When `OutcomePass=False`, report whether the judge determined "root cause not found" or "root cause found but not remediated"; DP/OP/SP serve only as reference fields — if they conflict with the semantic judgment, record the disagreement and the evidence.
+   Secondary labels remain limited to diagnosis failure (missed evidence, misread evidence, noise anchoring, truncated causal chain), remediation failure (wrong remediation target,
+   incomplete remediation, ineffective execution, unclosed verification loop), or unsafe recovery (destructive actions, collateral damage to protected objects or unbounded scope, missing safety guards). Also provide the semantic rationale, key evidence, specific actions, failed results, final state, and unmet
+   invariants. Invalid runs are attributed separately;
+7. all validations that were not run.

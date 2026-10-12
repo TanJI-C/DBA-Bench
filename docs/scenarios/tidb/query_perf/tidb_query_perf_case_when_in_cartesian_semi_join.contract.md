@@ -8,6 +8,7 @@ scope: [tidb, query_perf, tidb_query_perf_case_when_in_cartesian_semi_join]
 summary: Current code-backed contract snapshot for tidb_query_perf_case_when_in_cartesian_semi_join; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_query_perf_case_when_in_cartesian_semi_join`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Four nullable scalar IN expressions expand into Cartesian semi joins over non-unique memberships.
-- Alert/symptom: [CRITICAL] [TiDB/Order-Risk-Report] 风险规则报表的 P95 从 20ms 上升到数秒，同一报表指纹的处理量和 TiDB root CPU 同步增加；集群成员、存储副本和其它点查没有明显异常。请定位这个报表查询的执行退化原因，在保持命中结果、scope_c/scope_d 差异化 NULL 语义不变的前提下恢复性能。
+- Alert/symptom: [CRITICAL] [TiDB/Order-Risk-Report] The P95 of the risk-rule report has risen from 20ms to several seconds, and the rows processed by the same report fingerprint and the TiDB root CPU have increased in step; cluster membership, storage replicas, and other point lookups show no obvious anomalies. Locate the cause of the execution regression for this report query and restore performance while keeping the hit results and the differentiated NULL semantics of scope_c/scope_d unchanged.
 - Initial-state fields: `endpoint`, `report`, `status`
 - Expected-target fields: `cartesian_join_removed`, `null_semantics_preserved`, `result_consistent`, `status`
 - Background profiles: qp06_order_risk_report, qp06_rule_point_lookup, qp06_gate_point_lookup, qp06_region_point_lookup, qp06_case_point_probe, qp06_schema_inventory, qp06_equivalent_join_decoy
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Four nullable scalar IN expressions expand into Cartesian semi joins over non-unique memberships.
-- Alert/symptom: [CRITICAL] [TiDB/Order-Risk-Report] 风险规则报表的 P95 从 20ms 上升到数秒，同一报表指纹的处理量和 TiDB root CPU 同步增加；集群成员、存储副本和其它点查没有明显异常。请从报表指纹、view 定义和执行计划中定位这个报表查询的执行退化原因，在保持命中结果、scope_c/scope_d 差异化 NULL 语义和风险规则数据不变的前提下恢复性能，并把修复范围限定在报表端点本身。
+- Alert/symptom: [CRITICAL] [TiDB/Order-Risk-Report] The P95 of the risk-rule report has risen from 20ms to several seconds, and the rows processed by the same report fingerprint and the TiDB root CPU have increased in step; cluster membership, storage replicas, and other point lookups show no obvious anomalies. Locate the cause of the execution regression for this report query from the report fingerprint, view definition, and execution plan; restore performance while keeping the hit results, the differentiated NULL semantics of scope_c/scope_d, and the risk-rule data unchanged; and limit the remediation scope to the report endpoint itself.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `endpoint`, `report`, `status`
 - Expected-target fields: `cartesian_join_removed`, `null_semantics_preserved`, `result_consistent`, `status`
 - Background profiles: qp06_order_risk_report, qp06_rule_point_lookup, qp06_gate_point_lookup, qp06_region_point_lookup

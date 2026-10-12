@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Rebalance affected TiDB connection pools and gracefully drain the affected SQL instance.
-- Alert/symptom: [P1] [TiDB/Connection Service] checkout and order-dashboard latency is unstable. The release window requires reviewing application connection placement without interrupting in-flight orders. Inspect time-windowed connection, CPU, QPS, query-latency, workload and cluster evidence; separate affected application traffic from stable background traffic; then complete a reversible load-balancer transition and verify busine
+- Alert/symptom: [P1] [TiDB/Connection Service] checkout and order-dashboard latency is unstable. The release window requires reviewing application connection placement without interrupting in-flight orders. Inspect time-windowed connection, CPU, QPS, query-latency, workload and cluster evidence; separate affected application traffic from stable background traffic; then complete a reversible load-balancer transition and verify business results, endpoint availability and session drain.
 - Initial-state fields: `initial_policy`, `required_operation`, `status`, `topology`
 - Expected-target fields: `accepted_policies`, `all_tidb_endpoints_serving`, `business_data_preserved`, `drained_active_connections`, `draining_target`, `protected_router_policy`, `protected_router_target`, `status`
 - Background profiles: rg08_checkout_order_lookup, rg08_customer_dashboard_rollup, rg08_inventory_reconciliation, rg08_finance_export_preview, rg08_checkout_write_probe, rg08_cache_refresh_probe, rg08_long_order_transaction, rg08_settlement_status_probe, rg08_instance_identity_probe
@@ -51,7 +51,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Rebalance the affected pools and drain the alternate TiDB backend.
-- Alert/symptom: [P1] Connection placement is unstable during a release window. Compare the three SQL backends, identify the backend carrying the affected application pools, and move those pools before draining that backend. Preserve settlement continuity and in-flight work while keeping the settlement pool within the application-pool rebalance scope; only the identity probe affinity is protected. Preserve endpoint continuity and ord
+- Alert/symptom: [P1] Connection placement is unstable during a release window. Compare the three SQL backends, identify the backend carrying the affected application pools, and move those pools before draining that backend. Preserve settlement continuity and in-flight work while keeping the settlement pool within the application-pool rebalance scope; only the identity probe affinity is protected. Preserve endpoint continuity and order truth.
 - Initial-state fields: `initial_policy`, `required_operation`, `status`, `topology`
 - Expected-target fields: `accepted_policies`, `all_tidb_endpoints_serving`, `business_data_preserved`, `drained_active_connections`, `draining_target`, `protected_router_policy`, `protected_router_target`, `status`
 - Background profiles: rg08_checkout_order_lookup, rg08_customer_dashboard_rollup, rg08_inventory_reconciliation, rg08_finance_export_preview, rg08_checkout_write_probe, rg08_cache_refresh_probe, rg08_long_order_transaction, rg08_settlement_status_probe, rg08_instance_identity_probe

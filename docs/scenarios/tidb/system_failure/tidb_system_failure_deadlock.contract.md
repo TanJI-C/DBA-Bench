@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_deadlock]
 summary: Current code-backed contract snapshot for tidb_system_failure_deadlock; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_deadlock`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: A settlement batch remains incomplete amid concurrent wallet activity.
-- Alert/symptom: 告警：一批 settlement 业务操作未完成，部分账户状态和处理进度没有达到预期，但钱包查询仍可用。现场同时有 retry、manual-review、receipt-delivery、dispatch/replay、dashboard 和其他账户操作，部分结算回执延迟，历史事务错误也仍然可见。请从当前批次的事务、会话、业务表和组件证据判断是并发冲突、数据状态问题还是组件异常，完整恢复目标业务并避免重复或遗漏账户更新。不要删除或跳过业务更新，不要重启 TiDB，不要终止无关业务会话。
+- Alert/symptom: Alert: a batch of settlement business operations did not complete; some account states and processing progress did not reach the expected values, but wallet queries remain available. The site simultaneously has retry, manual-review, receipt-delivery, dispatch/replay, dashboard, and other account operations, some settlement receipts are delayed, and historical transaction errors are still visible. Judge from the transaction, session, business table, and component evidence of the current batch whether this is a concurrency conflict, a data-state problem, or a component anomaly, fully restore the target business, and avoid duplicate or missed account updates. Do not delete or skip business updates, do not restart TiDB, and do not terminate unrelated business sessions.
 - Initial-state fields: `reported_service`, `symptom`, `visible_activity`
 - Expected-target fields: `account_101_balance`, `account_202_balance`, `decoy_jobs_preserved`, `target_status`
 - Background profiles: sf05_wallet_pool_rollup, sf05_retry_queue_status_probe, sf05_attempt_error_digest_rollup, sf05_same_domain_pair_touch, sf05_slow_receipt_probe, sf05_missing_cache_probe
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A settlement batch remains incomplete amid concurrent wallet activity.
-- Alert/symptom: 告警：一批 settlement 业务操作未完成，部分账户状态和处理进度没有达到预期，但钱包查询仍可用。现场同时有 retry、manual-review、receipt-delivery、dispatch/replay、dashboard 和其他账户操作，部分结算回执延迟，历史事务错误也仍然可见。请从当前批次的事务、会话、业务表和组件证据判断是并发冲突、数据状态问题还是组件异常，完整恢复目标业务并避免重复或遗漏账户更新。不要删除或跳过业务更新，不要重启 TiDB，不要终止无关业务会话。
+- Alert/symptom: Alert: a batch of settlement business operations did not complete; some account states and processing progress did not reach the expected values, but wallet queries remain available. The site simultaneously has retry, manual-review, receipt-delivery, dispatch/replay, dashboard, and other account operations, some settlement receipts are delayed, and historical transaction errors are still visible. Judge from the transaction, session, business table, and component evidence of the current batch whether this is a concurrency conflict, a data-state problem, or a component anomaly, fully restore the target business, and avoid duplicate or missed account updates. Do not delete or skip business updates, do not restart TiDB, and do not terminate unrelated business sessions.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `reported_service`, `symptom`, `visible_activity`
 - Expected-target fields: `account_101_balance`, `account_202_balance`, `decoy_jobs_preserved`, `target_status`
 - Background profiles: sf05_wallet_pool_rollup, sf05_retry_queue_status_probe, sf05_attempt_error_digest_rollup, sf05_same_domain_pair_touch, sf05_slow_receipt_probe

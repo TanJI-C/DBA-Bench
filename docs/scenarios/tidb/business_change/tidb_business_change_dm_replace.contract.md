@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_dm_replace]
 summary: Current code-backed contract snapshot for tidb_business_change_dm_replace; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_dm_replace`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Keep a DM migration correct after a downstream-incompatible schema DDL pauses synchronization.
-- Alert/symptom: [CRITICAL] 一条 DM 迁移任务的 checkpoint 停止前进，下游业务表仍是旧 schema，上游发布窗口已经连续提交了依赖两个新字段的业务事件。请在不丢失任一事件、不破坏已有数据、不扩大变更范围的前提下逐个恢复同步，并给出可复核的上下游一致性证据。
+- Alert/symptom: [CRITICAL] A DM migration task's checkpoint has stopped advancing, the downstream business tables are still on the old schema, and the upstream release window has already committed a continuous stream of business events that depend on two new fields. Resume synchronization event by event without losing any event, damaging existing data, or widening the change scope, and provide reproducible upstream/downstream consistency evidence.
 - Initial-state fields: `downstream_schema`, `migration`, `pending_business_events`
 - Expected-target fields: `downstream_schema`, `migration`, `pending_business_events`
 - Background profiles: order_api_pending_schema_read, order_api_amount_rollup, dm_task_status_dashboard, dm_binlog_history_probe, dm_worker_log_tail_probe, archive_reconciliation_decoy, schema_inventory_decoy, dm_task_history_decoy, dm_source_lag_dashboard_decoy, dm_failed_event_fingerprint_decoy, release_region_rollup_probe
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Resume a billing DM stream after two incompatible release DDLs without losing events.
-- Alert/symptom: [CRITICAL] billing-api 的 DM checkpoint 停止前进，billing 下游仍缺少本次发布的两个字段，但 billing source 已经提交了依赖这两个字段的订单事件。请区分 active billing task 与 warehouse/历史噪声，逐个修复下游 schema 并让同步无损恢复；不得修改 source business rows、跳过未等价修复的 DDL 或扩大控制面写入范围。
+- Alert/symptom: [CRITICAL] The DM checkpoint of billing-api has stopped advancing; the billing downstream still lacks the two fields from this release, but the billing source has already committed order events that depend on these two fields. Distinguish the active billing task from warehouse/historical noise, repair the downstream schema one by one, and restore synchronization without loss; do not modify source business rows, skip a DDL without an equivalent repair, or widen the control-plane write scope.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `downstream_schema`, `migration`, `pending_business_events`
 - Expected-target fields: `downstream_schema`, `migration`, `pending_business_events`
 - Background profiles: order_api_pending_schema_read, order_api_amount_rollup, dm_task_status_dashboard, dm_binlog_history_probe, dm_worker_log_tail_probe, archive_reconciliation_decoy, schema_inventory_decoy, dm_task_history_decoy, dm_source_lag_dashboard_decoy, dm_failed_event_fingerprint_decoy, release_region_rollup_probe

@@ -8,36 +8,65 @@ scope: [shared, persistent-scenario, postgres, tidb]
 summary: Defines difficulty through production decisions, recurrence and whole-system reference, no-action and wrong-action paths.
 source_of_truth: contract
 related: [standard.persistent-scenario.architecture, standard.persistent-scenario.evaluation, standard.scenario.difficulty, guide.persistent-scenario.implement-persistent-scenario]
+language: en
 ---
 
-# Persistent Scenario 难度与三路径校准
+# Persistent Scenario Difficulty and Three-path Calibration
 
-## 1. 范围
+## 1. Scope
 
-本规范用于生产型 OLTP、OLAP、HTAP 持续运维；配套 [评估规范](evaluation.standard.md)。它替换按题目组合、事件数量和逐事件可解性推导长任务难度的做法。
+This standard applies to production-oriented OLTP, OLAP, and HTAP continuous operations; see the
+companion [evaluation standard](evaluation.standard.md). It replaces the practice of deriving
+long-task difficulty from case composition, event counts, and per-event solvability.
 
-## 2. 被测能力
+## 2. Capability Under Test
 
-难度来自真实业务取舍、因果解耦、发现路径、跨时间状态保持与防复发。不来自严重程度、事件数、固定修复时限或扩大损失。alert/inspection、高噪声、长时间是实例属性，不足以分别成为不同生产服务。
+Difficulty comes from real business trade-offs, causal decoupling, discovery paths, cross-time
+state retention, and recurrence prevention. It does not come from severity, event counts, fixed
+remediation deadlines, or amplified losses. alert/inspection, high noise, and long duration are
+instance properties and are not, on their own, sufficient to make distinct production services.
 
-## 3. 三条路径是必要证据
+## 3. The Three Paths Are Required Evidence
 
-完整处理路径证明公开工具下可满足端到端业务与安全合同，接受等价修复；零处理证明需要治理，不能依赖所有故障永久存在；错误处理证明表面恢复、片面优化和危险捷径可被拒绝。
+The full-handling path proves that the end-to-end business and safety contracts can be satisfied
+with public tools and accepts equivalent remediations; zero-handling proves that governance is
+needed and cannot rely on all faults persisting forever; wrong-handling proves that superficial
+recovery, one-sided optimization, and dangerous shortcuts can be rejected.
 
-三路径验证的是整个系统，不能用每个 case 单独可解代替组合可解。一个动作解除两故障、第三个故障消除第二个症状、提前保护阻止复发，都必须有合法评价。零动作仍通过全部业务合同则需重审实例，不强行新增事件关闭要求。
+The three paths validate the whole system; per-case solvability must not substitute for combined
+solvability. One action clearing two faults, a third fault eliminating the second symptom, and
+early protection preventing recurrence must all have legitimate evaluations. If zero action still
+passes all business contracts, the instance must be re-reviewed rather than forcibly adding events
+to close the requirement.
 
-## 4. 难度证据
+## 4. Difficulty Evidence
 
-保留可解释向量：业务服务冲突、共享资源、因果遮蔽、事故发现机会、有效修复选择、重复机制、上下文和持久状态。记录真实到达、业务损失、预防、恢复和副作用，不使用全事件关闭率作为难度分数。
+Keep interpretable vectors: business service conflicts, shared resources, causal masking, incident
+discovery opportunities, effective remediation choices, recurrence mechanisms, context, and
+persistent state. Record real arrivals, business losses, prevention, recovery, and side effects;
+do not use an all-event closure rate as a difficulty score.
 
-同机制重复可以测防复发和持续学习；要控制业务量、缓存、数据、故障强度差异，比较配对损失与处理证据，单次第二轮更快不能证明学习。禁止清空会话或撤销已生效保护来保证难度。
+Repeating the same mechanism can measure recurrence prevention and continued learning; control
+differences in business volume, cache, data, and fault intensity, and compare paired losses with
+handling evidence — a single faster second round does not prove learning. Clearing sessions or
+revoking protections that have already taken effect in order to manufacture difficulty is
+forbidden.
 
-## 5. 校准顺序
+## 5. Calibration Order
 
-静态与资源准入 → 重复健康正常/峰值负载 → 零处理 → 完整处理及等价解 → 错误处理 → unresolved/resolved/prevented 组合前缀 → cleanup/账本完整性 → 真实模型重复 pilot。
+Static and resource admission -> repeated healthy normal/peak load -> zero handling -> full
+handling and equivalent solutions -> wrong handling -> unresolved/resolved/prevented combination
+prefixes -> cleanup/ledger integrity -> real-model repeated pilots.
 
-阈值依据业务承诺及资源可行性冻结，不能按模型失败情况回调。无可靠证据保持 measure-only/development_provisional；Hard 需要重复、可归因的决策能力差距。不能通过缩小预算、隐去正常运维证据或压短响应 deadline 创造 Hard。
+Thresholds are frozen based on business commitments and resource feasibility and must not be tuned
+back based on model failures. Without reliable evidence, keep measure-only/development_provisional;
+Hard requires a repeatable, attributable decision-capability gap. Hard must not be created by
+shrinking budgets, hiding normal operations evidence, or compressing response deadlines.
 
-## 6. 正式证据
+## 6. Formal Evidence
 
-保存输入种子、数据/拓扑/资源/代码/spec 版本、三路径 trace、可观测性与账本有效性、模型重复结果、invalid 清单、cleanup、阈值来源。业务交付 deadline 可以影响业务结果，作者的故障修复 deadline 仅作响应观测。分别报告 DP/OP/SP，不计算总 pass 或把 invalid 当模型失败。
+Preserve input seeds, data/topology/resource/code/spec versions, three-path traces, observability
+and ledger validity, model repetition results, the invalid list, cleanup, and threshold provenance.
+Business delivery deadlines may affect business outcomes; the author's fault-remediation deadline
+is response observation only. Report DP/OP/SP separately; do not compute an overall pass or count
+invalid runs as model failures.

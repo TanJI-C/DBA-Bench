@@ -8,26 +8,24 @@ scope: [shared, benchmark, postgres, tidb]
 summary: Defines the reproducible manifest, planning, execution, resume, rerun, aggregation, and evidence workflow for benchmark experiments.
 source_of_truth: code
 related: [standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case, guide.persistent-scenario.implement-persistent-scenario]
+language: en
 ---
 
-# DBA-Bench 正式实验工作流
+# DBA-Bench Formal Experiment Workflow
 
-正式实验由 manifest 定义，运行产物写入 `artifacts/experiments/<experiment_id>/`。bounded
-Scenario 按 `scenario × case × agent × repetition` 展开，Persistent Scenario 按
-`scenario × agent × repetition` 展开；两者都通过稳定的 `run_id` 关联 trace、evaluator、stdout 和聚合结果。
+Formal experiments are defined by a manifest, and run artifacts are written to `artifacts/experiments/<experiment_id>/`. Bounded Scenarios expand along `scenario × case × agent × repetition`, and Persistent Scenarios expand along `scenario × agent × repetition`; both associate traces, evaluators, stdout, and aggregated results through a stable `run_id`.
 
-## 1. 创建实验清单
+## 1. Create the experiment manifest
 
-从 `experiments/pg_smoke.example.yaml` 开始。bounded Scenario 至少明确：
+Start from `experiments/pg_smoke.example.yaml`. A bounded Scenario must specify at minimum:
 
-- `experiment_id`；
-- systems、categories 和 scenarios；
-- agent ID、mode、model 和 `max_turns`；
-- repetitions 与一一对应的 seeds；
-- concurrency、timeout、端口、容器前缀和 fault snapshot 策略。
+- `experiment_id`;
+- systems, categories, and scenarios;
+- agent IDs, mode, model, and `max_turns`;
+- repetitions with one-to-one corresponding seeds;
+- concurrency, timeout, ports, container prefixes, and the fault snapshot policy.
 
-manifest 只接受文档定义的字段，未知字段直接报错。需要从完整矩阵中跳过已经完成或明确
-不运行的单元时，使用顶层 `exclude_cells` 精确指定 scenario、case 和 agent：
+The manifest only accepts fields defined in the documentation and errors directly on unknown fields. To skip cells that are already completed or explicitly not to be run from the full matrix, use the top-level `exclude_cells` to precisely specify scenario, case, and agent:
 
 ```yaml
 exclude_cells:
@@ -36,28 +34,21 @@ exclude_cells:
     agent: agent-a
 ```
 
-每个排除项必须匹配计划中的 bounded Scenario 单元，否则 planner 会报错。Persistent Scenario 不支持 `exclude_cells`。
+Each exclusion must match a bounded Scenario cell in the plan, otherwise the planner errors. Persistent Scenarios do not support `exclude_cells`.
 
-`runtime.concurrency` 是整个实验同时运行的 run 上限。bounded Scenario 会先展开完整的
-`scenario × case × agent × repetition` 矩阵，再按场景调度；Persistent Scenario 要求
-`runtime.concurrency=1`，因为同一个 Persistent Scenario 的环境和持久 session 不能并行复制。
+`runtime.concurrency` is the cap on runs executing simultaneously across the whole experiment. A bounded Scenario first expands the full `scenario × case × agent × repetition` matrix and then schedules by scenario; Persistent Scenarios require `runtime.concurrency=1`, because the environment and persistent session of the same Persistent Scenario cannot be replicated in parallel.
 
-并行实验必须配置 `runtime.isolation`，并且每个所选 Case 都必须声明 `resources`。runner
-根据通用资源合同计算每个 worker 的 CPU、内存需求，并按完整物理核和 NUMA node 分配
-cpuset。标记为 host-exclusive 的 PostgreSQL 场景即使出现在并行 manifest 中也会独占宿主机；
-TiDB QP 场景的 PD/TiKV 数据通过镜像组复用，仍按独立 Compose project、network、端口和容器
-组进入隔离调度。完整配置见
-`experiments/pg_system_failure_parallel.example.yaml`。
+Parallel experiments must configure `runtime.isolation`, and every selected Case must declare `resources`. The runner computes each worker's CPU and memory requirements from the generic resource contract and allocates cpusets by full physical cores and NUMA node. PostgreSQL scenarios marked host-exclusive take over the entire host machine even when they appear in a parallel manifest; TiDB QP scenarios reuse PD/TiKV data via image groups and still enter isolated scheduling as an independent Compose project, network, ports, and container group. For the full configuration see `experiments/pg_system_failure_parallel.example.yaml`.
 
-已存在的 `experiment_id` 不能换用另一份 manifest。实验配置变化时创建新的 ID。
+An existing `experiment_id` cannot be swapped to a different manifest. Create a new ID when the experiment configuration changes.
 
-## 2. 预览运行矩阵
+## 2. Preview the run matrix
 
 ```bash
 conda run -n aiops aiopsbench experiment plan experiments/pg_smoke.example.yaml
 ```
 
-## 3. 启动与恢复
+## 3. Launch and resume
 
 ```bash
 conda run -n aiops aiopsbench experiment run experiments/pg_smoke.example.yaml
@@ -69,13 +60,9 @@ conda run -n aiops aiopsbench experiment rerun <experiment_id> \
   --status succeeded --run-id <run_id>
 ```
 
-`resume` 只执行 `pending` run。`rerun` 必须显式给出原终态，不自动重试；每次重跑增加
-attempt，并永久保留先前产物。正式执行要求 Git worktree clean；恢复或重跑还要求当前
-checkout 与首次运行记录的 Git commit 完全一致。代码、prompt、场景、资源、模型、知识库
-或 evaluator 发生变化时必须创建新的 `experiment_id`。收到 SIGINT/SIGTERM 时，runner
-终止正在运行的子进程并记录 `interrupted`。
+`resume` only executes `pending` runs. `rerun` must be given the original terminal status explicitly and does not retry automatically; each rerun increments the attempt and permanently preserves prior artifacts. Formal execution requires a clean Git worktree; resume and rerun additionally require the current checkout to match exactly the Git commit recorded by the first run. When code, prompts, scenarios, resources, models, the knowledge base, or evaluators change, a new `experiment_id` must be created. On receiving SIGINT/SIGTERM, the runner terminates running child processes and records `interrupted`.
 
-## 4. 产物
+## 4. Artifacts
 
 ```text
 artifacts/experiments/<experiment_id>/
@@ -97,22 +84,18 @@ artifacts/experiments/<experiment_id>/
             └── ...
 ```
 
-每个 attempt 目录写完后不可修改，`attempt.json` 是该次执行的完整状态快照。bounded Scenario 使用 `trace.json` / `evaluator.json`，Persistent Scenario 使用
-`persistent_scenario_trace.json` / `persistent_scenario_evaluation.json`。`run.json`
-只反映逻辑 run 的当前状态和 attempt 索引。`run.json` 区分执行状态、
-`DiagnosisPass`、`OutcomePass`、`SafePass` 和 `valid_for_aggregate`；基础设施失败的三个 Pass
-保持为空，不计入通过率。
-`environment.json` 固定 Git commit/diff hash、manifest/config hash、Python 依赖、Docker
-版本、宿主平台和 worker 分配。每次 run 记录实际 cpuset、NUMA node、worker 容量和容器配额。
+Each attempt directory is immutable once written; `attempt.json` is the complete state snapshot of that execution. Bounded Scenarios use `trace.json` / `evaluator.json`, and Persistent Scenarios use
+`persistent_scenario_trace.json` / `persistent_scenario_evaluation.json`. `run.json` only reflects the logical run's current state and attempt index. `run.json` distinguishes the execution status,
+`DiagnosisPass`, `OutcomePass`, `SafePass`, and `valid_for_aggregate`; for infrastructure failures the three Pass fields stay empty and are not counted in the pass rate.
+`environment.json` pins the Git commit/diff hash, manifest/config hash, Python dependencies, Docker version, host platform, and worker assignment. Each run records the actual cpuset, NUMA node, worker capacity, and container quotas.
 
-聚合结果会在每批运行结束时刷新，也可以单独重建：
+Aggregated results are refreshed at the end of each batch of runs and can also be rebuilt independently:
 
 ```bash
 conda run -n aiops python scripts/aggregate_experiment.py <experiment_id>
 ```
 
-拆分执行的多个 experiment 可以合并为一个新的只读结果集。源实验必须存在、包含 run
-记录并且逻辑单元不能重复，输出目录也不能预先存在：
+Multiple experiments executed in a split fashion can be merged into a new read-only result set. The source experiments must exist, contain run records, and have no duplicate logical cells; the output directory must not already exist:
 
 ```bash
 conda run -n aiops python scripts/aggregate_experiment.py \
@@ -120,11 +103,9 @@ conda run -n aiops python scripts/aggregate_experiment.py \
   --output-experiment-id <combined_experiment_id>
 ```
 
-## 5. 创建和冻结 Dataset
+## 5. Create and freeze a Dataset
 
-Dataset 显式选择每个逻辑格使用的原始 `experiment_id + run_id`，并为跨批次
-命名不一致的 agent 指定稳定 `baseline_id`。统一 compose 入口从原始 `run.json` 按系统、
-分类和 baseline 组合：
+A Dataset explicitly selects the original `experiment_id + run_id` used by each logical cell and assigns a stable `baseline_id` for agents whose names are inconsistent across batches. The unified compose entry combines by system, category, and baseline from the original `run.json`:
 
 ```bash
 conda run -n aiops aiopsbench dataset compose <dataset_id> \
@@ -138,11 +119,7 @@ conda run -n aiops aiopsbench dataset status <dataset_id>
 conda run -n aiops aiopsbench dataset freeze <dataset_id>
 ```
 
-`compose` 只读取 bounded Scenario 的 `artifacts/experiments/*/runs/*/run.json`，按
-`system + scenario + case + baseline` 选择最新终态 run，并要求所选系统、分类和 baseline 的
-矩阵完整。可重复传入 `--system`、`--category` 和 `--baseline` 组合多系统 Dataset。生成的 YAML
-是显式、可 Git diff 的选择清单，不读取 dashboard 或审计报告。其他选择策略可以先生成 JSON
-数组，再使用通用入口：
+`compose` only reads bounded Scenario `artifacts/experiments/*/runs/*/run.json`, selects the latest terminal-status run by `system + scenario + case + baseline`, and requires the matrix of selected systems, categories, and baselines to be complete. `--system`, `--category`, and `--baseline` can be repeated to compose a multi-system Dataset. The generated YAML is an explicit, Git-diffable selection list and does not read dashboards or audit reports. Other selection strategies can first produce a JSON array and then use the generic entry:
 
 ```bash
 conda run -n aiops aiopsbench dataset create <dataset_id> \
@@ -151,24 +128,21 @@ conda run -n aiops aiopsbench dataset create <dataset_id> \
   --data-status provisional
 ```
 
-每个 JSON 元素必须且只能包含 `experiment_id`、`run_id` 和 `baseline_id`。未冻结的 dataset
-是 live 状态。`freeze` 要求所有选中 run 已进入终态，
-并将每个逻辑单元固定到明确的 `run_id + attempt`，同时记录 `attempt.json`、trace、evaluator
-和 stdout 的 SHA-256。生成的 `datasets/<dataset_id>.lock.json` 不允许覆盖。补跑或替换 run
-后创建新的 `dataset_id`，使用以下命令查看差异：
+Each JSON element must contain exactly `experiment_id`, `run_id`, and `baseline_id`. An unfrozen dataset is live. `freeze` requires all selected runs to have reached a terminal status,
+and pins each logical cell to an explicit `run_id + attempt`, while recording the SHA-256 of `attempt.json`, the trace, the evaluator output, and stdout. The generated `datasets/<dataset_id>.lock.json` cannot be overwritten. After re-running or replacing runs, create a new `dataset_id` and use the following command to view the difference:
 
 ```bash
 conda run -n aiops aiopsbench dataset diff <old_dataset_id> <new_dataset_id>
 ```
 
-## 6. 构建作图数据和论文图片
+## 6. Build plotting data and paper figures
 
 ```bash
 conda run -n aiops aiopsbench pipeline build <dataset_id>
 conda run -n aiops aiopsbench pipeline verify <dataset_id>
 ```
 
-`pipeline build` 只接受冻结 dataset，依次生成：
+`pipeline build` only accepts a frozen dataset and generates, in order:
 
 ```text
 artifacts/datasets/<dataset_id>/
@@ -186,28 +160,25 @@ paper/figures/output/datasets/<dataset_id>/
 └── multimodal_temporal.<data_status>.{pdf,png}
 ```
 
-`runs.csv` 每行对应 lock 中明确选择的一个 `run_id + attempt`，同时包含：
+Each row of `runs.csv` corresponds to one explicitly selected `run_id + attempt` in the lock and includes:
 
-- dataset/lock、scenario annotation、trace/evaluator hash 等溯源字段；
-- category、difficulty、diagnostic depth、environmental complexity、evidence modality 和
-  temporal requirement；
-- 执行状态、有效性、Diagnosis/Outcome/Safe Pass、evaluator identity 和完整 evaluation；
-- turn/tool 行为计数、provider 上报或 trace 重建的 input/output token，以及可验证时的 USD cost。
+- provenance fields such as dataset/lock, scenario annotations, and trace/evaluator hashes;
+- category, difficulty, diagnostic depth, environmental complexity, evidence modality, and
+  temporal requirement;
+- execution status, validity, Diagnosis/Outcome/Safe Pass, evaluator identity, and the full evaluation;
+- turn/tool behavior counts, input/output tokens as reported by the provider or reconstructed from the trace, and the USD cost when verifiable.
 
-无效或基础设施失败行保留在 CSV 中，但三个 Pass 字段为空，不按 0 分处理。成本核算使用
-`data/model_token_costs.yaml` 中由 `pricing_version` 标识的冻结价格；每个条目按模型名声明
-tokenizer backend、`cache_key` 与匹配状态（`encoding_proxy` / `family_proxy` /
-`exact_open_model`），单价单位均为 USD / 1M tokens。`runs.csv` 中的成本是按冻结官方标价和
-trace 重建的估算值，不是 provider 账单；必须同时保留 `pricing_version`、
-`token_accounting_method` 和 `tokenizer_match`。任何缺失
-类别、缺失 DP/OP/SP、hash 不一致、未知模型、错误 CSV 语义或过期 provenance 都直接报错。
-五个绘图脚本只读取 `runs.csv`；`views/*.csv`、dashboard HTML、审计 Markdown 都不是正式
-输入，原先解析这些内容的 `build_experiment_results.py` 已移除。
+Invalid or infrastructure-failed rows remain in the CSV, but their three Pass fields are empty and are not treated as zero scores. Cost accounting uses the frozen prices identified by `pricing_version` in `data/model_token_costs.yaml`; each entry declares, by model name, the tokenizer backend, `cache_key`, and match status (`encoding_proxy` / `family_proxy` /
+`exact_open_model`), with all unit prices in USD / 1M tokens. Costs in `runs.csv` are estimates computed from the frozen official list prices and trace reconstruction, not provider bills; `pricing_version`,
+`token_accounting_method`, and `tokenizer_match` must all be retained. Any missing
+category, missing DP/OP/SP, hash mismatch, unknown model, incorrect CSV semantics, or stale provenance errors out directly.
+The five plotting scripts read only `runs.csv`; `views/*.csv`, dashboard HTML, and audit Markdown are not formal
+inputs, and `build_experiment_results.py`, which previously parsed them, has been removed.
 
-## 7. 使用 DVC 管理大体积数据
+## 7. Manage large data with DVC
 
-代码、manifest、dataset definition 和 lock 进入 Git；原始 experiment artifact 和 dataset
-派生目录进入 DVC：
+Code, manifests, dataset definitions, and locks go into Git; raw experiment artifacts and dataset
+derived directories go into DVC:
 
 ```bash
 conda run -n aiops aiopsbench dataset track <dataset_id>
@@ -215,27 +186,25 @@ git add datasets/ artifacts/**/*.dvc .dvc .dvcignore
 git commit -m "data: freeze <dataset_id>"
 ```
 
-仓库已初始化 DVC，但没有预设 remote。确定 NAS、MinIO 或 S3 位置后只配置一次：
+The repository has DVC initialized but no preset remote. Once the NAS, MinIO, or S3 location is decided, configure it only once:
 
 ```bash
 conda run -n aiops dvc remote add -d storage <remote-url>
 conda run -n aiops dvc push
 ```
 
-## 8. 浏览器检索
+## 8. Browser exploration
 
-启动统一可视化服务：
+Start the unified visualization service:
 
 ```bash
 conda run -n aiops python -m src.visualization.server
 ```
 
-- `/`：Trace Viewer；
-- `/raw-traces`：搜索、筛选并查看 `logs/traces` 原始 JSON；
-- `/experiments`：按实验、场景、Agent 和状态检索 run；
-- `/datasets`：按 dataset 查看 baseline × scenario_case 运行矩阵和聚合表；
-- `/dashboard`：项目工作看板。
+- `/`: Trace Viewer;
+- `/raw-traces`: search, filter, and view the raw JSON in `logs/traces`;
+- `/experiments`: search runs by experiment, scenario, Agent, and status;
+- `/datasets`: view the baseline × scenario_case run matrix and aggregate tables per dataset;
+- `/dashboard`: the project work dashboard.
 
-原始日志页面支持服务端分页、日期/场景/Agent/评分筛选、文件内查找、格式化/原文切换、
-复制、下载和跳转 Trace Viewer。Dataset 状态页双击矩阵单元格可查看冻结或 live dataset
-明确选择的 `run.json` 快照和对应 attempt 的 evaluator；聚合宽表支持横向滚动和自定义固定列。
+The raw log page supports server-side pagination, filtering by date/scenario/Agent/score, in-file search, toggling between formatted and raw views, copying, downloading, and jumping to the Trace Viewer. On the dataset status page, double-clicking a matrix cell shows the `run.json` snapshot explicitly selected by the frozen or live dataset and the evaluator for the corresponding attempt; the aggregate wide table supports horizontal scrolling and custom frozen columns.

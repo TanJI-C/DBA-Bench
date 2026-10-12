@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates a capacity review where PostgreSQL runtime settings lag behind the current instance profile amid normal operational noise.
-- Alert/symptom: [Routine Fleet Health] The weekly capacity review for pg-primary-17 shows lower cache headroom and throughput elasticity than peers with the same instance class. The window also includes reporting jobs, connection-pool churn, and post-maintenance notes. Inspect the live instance profile and database state, separate actionable baseline variance from normal operational noise, and submit a production-safe change plan wi
+- Alert/symptom: [Routine Fleet Health] The weekly capacity review for pg-primary-17 shows lower cache headroom and throughput elasticity than peers with the same instance class. The window also includes reporting jobs, connection-pool churn, and post-maintenance notes. Inspect the live instance profile and database state, separate actionable baseline variance from normal operational noise, and submit a production-safe change plan with validation steps.
 - Initial-state fields: `memory_mb`, `postgres_memory_params`, `status`
 - Expected-target fields: `drift_identified`, `recommended_params`, `status`
 - Background profiles: none declared

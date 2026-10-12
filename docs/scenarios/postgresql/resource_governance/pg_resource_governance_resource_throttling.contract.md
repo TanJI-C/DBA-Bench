@@ -8,6 +8,7 @@ scope: [postgres, resource_governance, pg_resource_governance_resource_throttlin
 summary: Current code-backed contract snapshot for pg_resource_governance_resource_throttling; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_resource_governance_resource_throttling`
@@ -39,7 +40,9 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates mixed OLTP and reporting workload contention and requires role-level resource isolation.
-- Alert/symptom: P1 混合业务资源告警：PostgreSQL 单机实例 CPU 使用率持续偏高，核心交易接口 P95 延迟从毫秒级升高到秒级，QPS 明显下降。同实例活跃会话数量上升且存在长耗时 SQL，请排查资源占用来源，在不重启实例且符合安全合规要求的前提下恢复核心交易延迟，并降低复发风险。
+- Alert/symptom: P1 mixed-business resource alert: on a single-node PostgreSQL instance, CPU usage has stayed persistently high, core transaction interface P95 latency has risen from the millisecond level to the second level, and QPS has dropped noticeably. The number of active sessions on the same instance is rising and long-running SQL exists. Investigate the source of the resource consumption, restore core transaction latency without restarting the instance and while complying with security requirements, and reduce the risk of recurrence.
+
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `resource_contention`, `status`, `transaction_latency`
 - Expected-target fields: `report_query`, `resource_isolation`, `status`, `transaction_latency`
 - Background profiles: tenant_dashboard_rollup, customer_segment_export_preview, etl_ledger_backfill_probe, order_api_point_probe, missing_report_cache_log_noise

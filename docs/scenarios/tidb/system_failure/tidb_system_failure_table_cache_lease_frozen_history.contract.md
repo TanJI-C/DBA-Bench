@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_table_cache_lease_frozen_histo
 summary: Current code-backed contract for the TiDB frozen-history table-cache lease history investigation, including its evidence boundary, repair families, and provisional calibration.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_table_cache_lease_frozen_history`
@@ -134,12 +135,12 @@ The diagnosis requires a complete causal explanation, not a keyword. The evaluat
 
 DP reads only the final `StructuredReport.diagnosis`. It does not grant credit for a repair, a successful replay, or safe actions. It does not require a particular SQL spelling or tool order; equivalent evidence-backed wording is accepted by the shared diagnosis matcher.
 
-The intended semantic failure for the requested target LLM evaluation is **未找到根因**: the final diagnosis stops at ordinary `9007`, generic TiKV pressure, a static metadata row, a single cached table, or the quiet current state without establishing the cached-table lease mechanism and complete causal scope.
+The intended semantic failure for the requested target LLM evaluation is **root cause not found**: the final diagnosis stops at ordinary `9007`, generic TiKV pressure, a static metadata row, a single cached table, or the quiet current state without establishing the cached-table lease mechanism and complete causal scope.
 
 This distinction is mandatory for result reporting:
 
 - a valid trace that never establishes the root cause is a diagnosis failure, regardless of whether it also fails OP;
-- a valid trace that establishes the root cause but leaves the final state unresolved is “找到根因但修复失败”, not the requested failure mode;
+- a valid trace that establishes the root cause but leaves the final state unresolved is “root cause found but repair failed”, not the requested failure mode;
 - provider, deployment, readiness, metric capture, history assembly, or trace-export failures are invalid infrastructure runs and are not model failures.
 
 ## 8. OP contract

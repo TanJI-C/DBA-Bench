@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Object path search returns the right directory family but develops a high latency tail under mixed request traffic.
-- Alert/symptom: [CRITICAL] [Object Search/API] the object-prefix endpoint has a sustained high p95 and a sharp rise in TiKV processed keys, while request latency and bucket inventory traffic are otherwise stable. The affected request belongs to bucket01 and the tenant-east 2026_08 exports_2026 namespace. Several adjacent namespaces and legitimate pattern-search requests are active at the same time. Diagnose the request path and rest
+- Alert/symptom: [CRITICAL] [Object Search/API] the object-prefix endpoint has a sustained high p95 and a sharp rise in TiKV processed keys, while request latency and bucket inventory traffic are otherwise stable. The affected request belongs to bucket01 and the tenant-east 2026_08 exports_2026 namespace. Several adjacent namespaces and legitimate pattern-search requests are active at the same time. Diagnose the request path and restore the endpoint without changing catalog data, search request metadata, or serving route configuration.
 - Initial-state fields: `endpoint`, `result_semantics`, `status`, `target_request`
 - Expected-target fields: `binding_crc`, `catalog_crc`, `p95`, `pattern_request_semantics`, `processed_keys`, `range`, `request_crc`, `status`, `target_request_semantics`
 - Background profiles: qp07_target_object_search, qp07_wildcard_directory_search, qp07_adjacent_namespace_search, qp07_catalog_bucket_inventory, qp07_request_metadata_audit, qp07_route_context_audit, qp07_export_namespace_probe
@@ -51,7 +51,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Object path search returns the right directory family but develops a high latency tail under mixed request traffic.
-- Alert/symptom: [CRITICAL] [Object Search/API] the object-prefix endpoint has a sustained high p95 and a sharp rise in TiKV processed keys, while request latency and bucket inventory traffic are otherwise stable. The affected request belongs to bucket01 and the tenant-east 2026_08 exports_2026 namespace. Several adjacent namespaces and legitimate pattern-search requests are active at the same time. Diagnose the request path and rest
+- Alert/symptom: [CRITICAL] [Object Search/API] the object-prefix endpoint has a sustained high p95 and a sharp rise in TiKV processed keys, while request latency and bucket inventory traffic are otherwise stable. The affected request belongs to bucket01 and the tenant-east 2026_08 exports_2026 namespace. Several adjacent namespaces and legitimate pattern-search requests are active at the same time. Diagnose the request path and restore the endpoint without changing catalog data, search request metadata, or serving route configuration.
 - Initial-state fields: `endpoint`, `result_semantics`, `status`, `target_request`
 - Expected-target fields: `binding_crc`, `catalog_crc`, `p95`, `pattern_request_semantics`, `processed_keys`, `range`, `request_crc`, `status`, `target_request_semantics`
 - Background profiles: qp07_target_object_search, qp07_wildcard_directory_search, qp07_adjacent_namespace_search, qp07_catalog_bucket_inventory

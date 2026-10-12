@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_region_unavailable]
 summary: Current code-backed contract snapshot for tidb_system_failure_region_unavailable; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_region_unavailable`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: A misleading Region-unavailable alert during an intermittent order-service incident.
-- Alert/symptom: 告警：订单查询偶发 ERROR 9005 Region is unavailable，部分请求超时，但仍有 TiDB endpoint 可以正常服务。请确定实际受影响的服务边界，在不重启健康 PD/TiKV、不改动业务数据、Region 副本或其他健康实例既有服务和安全边界的前提下恢复订单服务。
+- Alert/symptom: Alert: order queries intermittently hit ERROR 9005 Region is unavailable and some requests time out, but some TiDB endpoints can still serve normally. Determine the actual affected service boundary and restore the order service without restarting healthy PD/TiKV nodes, without changing business data or Region replicas, and without altering the existing service and safety boundaries of other healthy instances.
 - Initial-state fields: `alert`, `business_impact`, `status`
 - Expected-target fields: `all_tidb_targets`, `business_truth`, `pd`, `status`, `tikv`
 - Background profiles: ma01_order_status_region_rollup, ma01_customer_spend_leaderboard, ma01_settlement_reconciliation, ma01_recent_order_search, ma01_region_amount_summary, ma01_active_region_status_mix, ma01_amount_exception_scan, ma01_customer_order_probe, ma01_region_customer_cardinality, ma01_completed_amount_window, ma01_point_lookup_decoy, ma01_status_time_bucket
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A focused Region-unavailable alert during an intermittent order-service incident.
-- Alert/symptom: 告警：订单查询偶发 ERROR 9005 Region is unavailable，tidb/tidb-1 的部分请求超时，但其他 TiDB endpoint 仍可服务。请定位实际服务边界，在不重启健康 PD/TiKV、不改动业务数据和健康实例既有安全边界的前提下恢复订单服务。
+- Alert/symptom: Alert: order queries intermittently hit ERROR 9005 Region is unavailable and some requests to tidb/tidb-1 time out, but other TiDB endpoints can still serve. Locate the actual service boundary and restore the order service without restarting healthy PD/TiKV nodes, without changing business data, and without altering the existing safety boundaries of healthy instances.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `alert`, `business_impact`, `status`
 - Expected-target fields: `all_tidb_targets`, `business_truth`, `pd`, `status`, `tikv`
 - Background profiles: ma01_order_status_region_rollup, ma01_customer_spend_leaderboard, ma01_settlement_reconciliation, ma01_recent_order_search, ma01_region_amount_summary, ma01_active_region_status_mix, ma01_amount_exception_scan, ma01_customer_order_probe

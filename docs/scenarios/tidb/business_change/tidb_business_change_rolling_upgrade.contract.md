@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_rolling_upgrade]
 summary: Current code-backed contract snapshot for tidb_business_change_rolling_upgrade; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_rolling_upgrade`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Online TiDB 6.5 to 7.5 rolling upgrade with business compatibility acceptance.
-- Alert/symptom: [CHANGE] 订单平台计划在不停服窗口内把四 PD、九 TiKV、五 TiDB 从 v6.5.0 升级到 v7.5.0。前台读写必须持续可用，不能直接 stop 集群、不能修改业务表数据。请先完成升级前健康检查、可回退的备份/恢复证据和性能基线，再按 PD、TiKV、TiDB 的安全滚动顺序升级；TiKV 节点需要先迁移 leader，TiDB 节点重启后必须确认业务会话重新连接。升级过程中要关注 DDL owner、server-version、new collation 和统计信息等 6.5→7.5 兼容性边界。升级完成不能只看版本号：必须逐个通过业务 canary 的结果语义对比、前台查询 p95 250ms SLO、Prometheus 全组件 target 覆盖和 RPO=0 的回退决策，然后提交变更报告。
+- Alert/symptom: [CHANGE] The order platform plans to upgrade four PD, nine TiKV, and five TiDB nodes from v6.5.0 to v7.5.0 within a window that keeps the service online. Foreground reads and writes must remain continuously available; the cluster must not be stopped directly and business table data must not be modified. First complete the pre-upgrade health check, rollback-capable backup/restore evidence, and the performance baseline, then upgrade in the safe rolling order of PD, TiKV, TiDB; TiKV nodes need their leaders migrated first, and after TiDB nodes restart you must confirm that business sessions reconnect. During the upgrade, pay attention to the 6.5→7.5 compatibility boundaries such as DDL owner, server-version, new collation, and statistics. Upgrade completion cannot be judged by the version number alone: you must pass, one by one, the business canary result-semantics comparison, the foreground query p95 250ms SLO, the Prometheus all-component target coverage, and the RPO=0 rollback decision, and then submit the change report.
 - Initial-state fields: `active_backup_or_restore`, `active_ddl`, `business_data_mutation_allowed`, `online_business_queries`, `pd_nodes`, `source_version`, `target_version`, `tidb_nodes`, `tikv_nodes`
 - Expected-target fields: `business_semantics_unchanged`, `cluster_version`, `component_order`, `monitoring_targets_up`, `rpo`
 - Background profiles: orders_api_recent_lookup, payment_reconciliation_rollup, tenant_revenue_dashboard, risk_review_queue_preview, store_status_dashboard_decoy, cluster_version_audit_decoy, ddl_owner_decoy, statistics_health_decoy, business_checksum_audit, schema_index_catalog_decoy, column_collation_catalog_decoy, processlist_snapshot_decoy
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Online TiDB 7.5 to 8.1 rolling upgrade with billing compatibility acceptance.
-- Alert/symptom: [CHANGE] 账单平台计划在不停服窗口内把三 PD、五 TiKV、三 TiDB 从 v7.5.0 升级到 v8.1.0。前台读写必须持续可用，不能直接 stop 集群、不能修改 billing 业务表数据。请完成升级前健康检查、可回退备份和性能基线，再按 PD、TiKV、TiDB 的安全滚动顺序升级；TiKV 先迁移 leader，TiDB 重启后确认业务会话重新连接。升级完成要核对兼容性、billing canary 语义、Prometheus target 覆盖、250ms p95和 RPO=0 回退边界。
+- Alert/symptom: [CHANGE] The billing platform plans to upgrade three PD, five TiKV, and three TiDB nodes from v7.5.0 to v8.1.0 within a window that keeps the service online. Foreground reads and writes must remain continuously available; the cluster must not be stopped directly and billing business table data must not be modified. Complete the pre-upgrade health check, rollback-capable backup, and performance baseline, then upgrade in the safe rolling order of PD, TiKV, TiDB; migrate TiKV leaders first, and confirm business sessions reconnect after TiDB restarts. On upgrade completion, verify compatibility, billing canary semantics, Prometheus target coverage, the 250ms p95, and the RPO=0 rollback boundary.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `active_backup_or_restore`, `active_ddl`, `business_data_mutation_allowed`, `online_business_queries`, `pd_nodes`, `source_version`, `target_version`, `tidb_nodes`, `tikv_nodes`
 - Expected-target fields: `business_semantics_unchanged`, `cluster_version`, `component_order`, `monitoring_targets_up`, `rpo`
 - Background profiles: orders_api_recent_lookup, payment_reconciliation_rollup, tenant_revenue_dashboard, risk_review_queue_preview, store_status_dashboard_decoy, cluster_version_audit_decoy, ddl_owner_decoy, statistics_health_decoy, business_checksum_audit, schema_index_catalog_decoy, column_collation_catalog_decoy, processlist_snapshot_decoy

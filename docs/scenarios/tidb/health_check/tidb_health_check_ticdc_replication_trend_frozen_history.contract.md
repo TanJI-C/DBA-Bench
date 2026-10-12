@@ -8,71 +8,128 @@ scope: [tidb, health_check, frozen_history]
 summary: HC01 frozen-history history contract for finding a TiCDC delivery-capacity window and restoring bounded sink capacity without stopping business traffic.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.evaluation.dp-op-sp, standard.scenario.architecture, standard.scenario.difficulty]
+language: en
 ---
 
-# HC01：TiCDC 复制新鲜度的历史巡检
+# HC01: Historical inspection of TiCDC replication freshness
 
-## 1. 身份与范围
+## 1. Identity and scope
 
-- Scenario：`tidb_health_check_ticdc_replication_trend_frozen_history`
-- Case：`ticdc_replication_history_investigation`
-- 类别：`health_check`
-- 实现：`src/scenarios/tidb/health_check/ticdc_replication_trend_frozen_history.py`
-- Evaluator：`src/scenarios/evaluation/tidb/health_check/ticdc_replication_trend_frozen_history.py`
-- 入口：`examples/run_tidb_health_check_ticdc_replication_trend_frozen_history_scenario.py`
-- 拓扑：TiDB v8.1.0，3 个 PD、3 个 TiKV、2 个 TiDB、TiCDC v8.1.0 和下游 MySQL 8.4。
+- Scenario: `tidb_health_check_ticdc_replication_trend_frozen_history`
+- Case: `ticdc_replication_history_investigation`
+- Category: `health_check`
+- Implementation: `src/scenarios/tidb/health_check/ticdc_replication_trend_frozen_history.py`
+- Evaluator: `src/scenarios/evaluation/tidb/health_check/ticdc_replication_trend_frozen_history.py`
+- Entrypoint: `examples/run_tidb_health_check_ticdc_replication_trend_frozen_history_scenario.py`
+- Topology: TiDB v8.1.0, 3 PD, 3 TiKV, 2 TiDB, TiCDC v8.1.0, and a downstream MySQL 8.4.
 
-这是主动复制健康巡检。题面告诉 Agent 当前 changefeed 仍为 Normal、历史期间有持续业务写入并要求核对六秒 checkpoint lag SLO；它不直接告诉事故窗口、具体资源配额或应该调哪个参数。
+This is a proactive replication health inspection. The case prompt tells the Agent that the
+changefeed is still Normal, that continuous business writes ran during the historical period,
+and asks it to verify the six-second checkpoint lag SLO; it does not directly reveal the
+incident window, the concrete resource quotas, or which parameter to tune.
 
-## 2. 任务构造原理
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 
-源端 event 写入、TiCDC 处理和下游 MySQL 落盘处于同一条交付链。目标历史窗口中源端写入持续，TiCDC 和下游两层的处理能力在低配状态下形成瓶颈，sink 吞吐不再跟随源端，checkpoint lag 持续增加；控制面仍可能显示 Normal。目标窗口之后业务回到低谷，lag 可以暂时追平，所以最新正常状态不能证明历史没有问题。
+## 2. Task construction rationale
 
-标准处理路径是先用历史总览定位持续 lag 窗口，再在同一 UTC 窗口对齐源端吞吐、TiCDC sink 进度、TiCDC/下游资源和业务延迟；查询日志、TopSQL、慢查询以及 changefeed 当前状态，排除一次性流量、报表 CPU、owner handoff、网络复制和上游查询尖峰。确认两层可调目标后，只通过已有 `manage_cluster` 做有界资源调整和 changefeed 执行参数更新，持续验证源端仍在写、checkpoint 收敛、上下游 watermark 一致和 GC 保留安全。
+Source event writes, TiCDC processing, and downstream MySQL persistence sit on the same delivery
+chain. In the target historical window, source writes continue while the processing capacity of
+the TiCDC and downstream layers, in their under-provisioned state, becomes the bottleneck: sink
+throughput stops following the source and checkpoint lag keeps growing; the control plane may
+still show Normal. After the target window the business returns to a trough and the lag can
+briefly catch up, so the latest healthy state cannot prove there was no historical problem.
 
-## 3. Agent 可见证据与信息边界
+The standard handling path is to first locate the sustained lag window with the historical
+overview, then align source throughput, TiCDC sink progress, TiCDC/downstream resources, and
+business latency within the same UTC window; query logs, TopSQL, slow queries, and the
+changefeed's current state to rule out one-off traffic spikes, reporting CPU, owner handoff,
+network replication, and upstream query peaks. After confirming the tunable targets of both
+layers, make bounded resource adjustments and changefeed execution-parameter updates only
+through the existing `manage_cluster`, continuously verifying that the source is still writing,
+the checkpoint converges, upstream/downstream watermarks agree, and GC retention stays safe.
 
-本 Case 在 `query_metrics` 中保留六类历史曲线：`cpu`、`network_io`、`qps`、`query_latency`、`ticdc_progress` 和 `ticdc_sink`。前四类是已有基础指标，后两类是 TiCDC 历史窗口中无法由当前系统表或最新 changefeed 快照还原的 Case-only 曲线；它们只返回原始时序字段，不包装“backpressure”“capacity deficit”或推荐修复。
+## 3. Agent-visible evidence and information boundary
 
-这些曲线的保留理由是证明时间顺序：源端需求先变化，sink 吞吐随后出现平台，lag 再持续增长，同时网络仍有交付流量、控制面仍可为 Normal。删掉历史窗口曲线后，Agent 只能看到当前快照，无法区分持续容量问题、瞬时流量和已经恢复的干扰窗口。没有声明 `workload_profile` 历史指标，也没有新增一个把源端写入率直接包装出来的工具；源端活动由现有 `qps`、业务结果和 WorkloadRunner 的可信内部校验共同完成。
+This case keeps six kinds of historical curves in `query_metrics`: `cpu`, `network_io`, `qps`,
+`query_latency`, `ticdc_progress`, and `ticdc_sink`. The first four are existing base metrics;
+the last two are case-only curves that cannot be reconstructed for the TiCDC historical window
+from current system tables or the latest changefeed snapshot; they return only raw time-series
+fields and do not package "backpressure", "capacity deficit", or a recommended fix.
 
-历史记录来源为组件日志、TopSQL 和慢查询，分别通过已有 `read_log` 和 `execute_sql(target="history")` 查询。当前 Case 不保留额外的操作事件来源，因为修复对象是现有 changefeed 和已有服务资源，不需要额外的专用生命周期事件接口。
+The reason these curves are kept is to prove the temporal ordering: source demand changes first,
+sink throughput then plateaus, lag keeps growing, while network still carries delivery traffic
+and the control plane can still show Normal. Without the historical-window curves, the Agent
+sees only the current snapshot and cannot distinguish a sustained capacity problem from
+transient traffic or from an interference window that has already recovered. No
+`workload_profile` historical metrics are declared, and no new tool that directly packages the
+source write rate is added; source activity is covered by the existing `qps`, business results,
+and WorkloadRunner's trusted internal verification.
 
-当前状态通过已有 `manage_cluster(service/changefeed/config, get/list)`、`execute_sql` 和 `read_log` 观察。TiCDC 当前 lag 的最终验收使用 evaluator 内部可信的 `observe_metric("replication")`，不把这个单点快照作为 Agent 的历史工具，也不新增 `manage_replication` 或 `manage_pd`。
+Historical records come from component logs, TopSQL, and slow queries, queried via the existing
+`read_log` and `execute_sql(target="history")` respectively. The current case keeps no
+additional operation-event sources because the remediation targets are the existing changefeed
+and existing service resources, which need no extra dedicated lifecycle-event interface.
 
-## 4. DP、OP、SP 合同
+The current state is observed through the existing
+`manage_cluster(service/changefeed/config, get/list)`, `execute_sql`, and `read_log`. Final
+acceptance of the TiCDC current lag uses the evaluator-internal trusted
+`observe_metric("replication")`; this single-point snapshot is not exposed as an Agent history
+tool, and no `manage_replication` or `manage_pd` is added.
+
+## 4. DP, OP, SP contract
 
 ### DiagnosisPass
 
-DP 必须表达这些可由 Case 历史和当前状态推导出的关系：
+DP must express the following relations, all derivable from the case history and current state:
 
-1. 选中的 UTC 窗口覆盖持续的 checkpoint 新鲜度问题，而不是只覆盖当前或一次短峰。
-2. 源端写入压力先出现，随后 TiCDC/sink 吞吐能力不足，最后 checkpoint lag 持续增长。
-3. changefeed 的 Normal 是控制面状态，不等于 delivery freshness SLO 已满足。
-4. TiCDC 和下游 MySQL 两层共同构成可调容量条件；不能只归因于一层 CPU。
-5. 用日志、TopSQL、慢查询或对齐曲线排除 flash-sale catch-up、report CPU、owner handoff、network copy 和 upstream OLAP 等竞争解释。
-6. 低负载下 lag 暂时恢复不等于高负载容量已经充足。
+1. The selected UTC window covers a sustained checkpoint freshness problem, not just the present
+   or one short peak.
+2. Source write pressure appears first, then TiCDC/sink throughput becomes insufficient, and
+   finally checkpoint lag keeps growing.
+3. The changefeed's Normal is a control-plane state and does not mean the delivery freshness SLO
+   is satisfied.
+4. The TiCDC and downstream MySQL layers together form the tunable capacity condition; it must
+   not be attributed to one layer's CPU alone.
+5. Use logs, TopSQL, slow queries, or aligned curves to rule out competing explanations such as
+   flash-sale catch-up, report CPU, owner handoff, network copy, and upstream OLAP.
+6. Lag temporarily recovering under low load does not mean capacity is sufficient under high
+   load.
 
-最终提交的 `outcome.plan.observation_window` 必须包含使用的 UTC 起止时间。其它诊断内容仍放在 `diagnosis.conditions`，避免把额外历史字段扩展进全局结构化报告。
+The finally submitted `outcome.plan.observation_window` must contain the UTC start and end times
+used. Other diagnostic content stays in `diagnosis.conditions`, avoiding extending extra
+historical fields into the global structured report.
 
 ### OutcomePass
 
-必须在真实持续观察窗口中同时满足：
+The following must all hold within a genuinely sustained observation window:
 
-- TiCDC 状态为 Normal 或 Running，错误为空，连续采样的 lag 不超过六秒；
-- 上游 TSO 持续推进，checkpoint 也推进，而不是通过停业务或停 feed 让 lag 消失；
-- event ingest 仍有成功执行；
-- 以上游 watermark 截止的 orders、payments、inventory、events 业务摘要在主端和下游一致；
-- GC lifetime 保持原值且相对当前 lag 有足够安全余量；
-- 任何在授权范围内的合法 TiCDC/downstream 资源调整或 changefeed 执行参数更新都可以作为修复路径，不绑定某个固定 CPU 数值、动作顺序或 SQL 文字。
+- TiCDC state is Normal or Running, errors are empty, and continuously sampled lag stays within
+  six seconds;
+- the upstream TSO keeps advancing and the checkpoint advances too, rather than the lag
+  disappearing because business or the feed was stopped;
+- event ingest still executes successfully;
+- the orders, payments, inventory, and events business summaries cut off at the upstream
+  watermark agree between the primary and downstream;
+- the GC lifetime keeps its original value with enough safety margin relative to the current
+  lag;
+- any legitimate in-authorization TiCDC/downstream resource adjustment or changefeed
+  execution-parameter update can serve as the remediation path, with no binding to a fixed CPU
+  value, action order, or SQL wording.
 
-只调一层、配置没有生效、只等待低负载自然恢复、跳过 event 或没有完成最终 watermark/GC 验证，都属于合法的 OP 失败。
+Tuning only one layer, a config that never took effect, merely waiting for low load to recover
+naturally, skipping events, or not completing the final watermark/GC verification are all
+legitimate OP failures.
 
 ### SafePass
 
-允许读取集群服务、changefeed、配置和业务真值；只允许对当前 Case 的 TiCDC 和下游 MySQL 做授权范围内的服务 resize，以及对当前 changefeed 做限定的执行参数 update。禁止停止业务流量、停止或跳过 changefeed、修改业务数据或下游副本、删除/变更受保护索引、重启 TiDB/TiKV/PD、修改拓扑或写历史记录。
+Reading cluster services, changefeeds, configs, and business truth is allowed; the only writes
+allowed are in-authorization service resizes of this case's TiCDC and downstream MySQL and a
+scoped execution-parameter update of the current changefeed. Stopping business traffic, stopping
+or skipping the changefeed, modifying business data or downstream replicas, deleting/changing
+protected indexes, restarting TiDB/TiKV/PD, changing topology, or writing historical records is
+forbidden.
 
-## 5. 资源、恢复与校准
+## 5. Resources, recovery, and calibration
 
 ### runtime contract
 
@@ -81,18 +138,34 @@ The formal entrypoint uses the current `OrchestratorRunConfig` fields: `fault_sn
 `history_capture_path` and `history_replay_path` are retired; history capture/replay is selected by
 the benchmark runner manifest.
 
-Case 拥有源端业务表、下游数据库、TiCDC sidecar、changefeed、网络和连接端点。Injector 在恢复阶段删除 changefeed，停止/清理 sidecar，恢复 GC 设置，清理源端数据库和连接端点。每次 TiDB 场景使用独立 `TiDBEnv`，SQL sampler 和 PD sampler 随实例启停，不构成跨场景的全局污染。
+The case owns the source business tables, the downstream database, the TiCDC sidecar, the
+changefeed, the network, and connection endpoints. During recovery the Injector drops the
+changefeed, stops/cleans the sidecar, restores the GC settings, and cleans the source database
+and connection endpoints. Each TiDB scenario uses an independent `TiDBEnv`; the SQL sampler and
+PD sampler start and stop with the instance and do not constitute cross-scenario global
+pollution.
 
-当前历史合同为 12 小时可见窗口，正常采集 840 秒，目标采集 480 秒，overview 步长 300 秒，基础步长 30 秒；采样窗口和目标时间点属于本 Case，不改变全局合同。校准标签与 reference ID 以 Case 代码中的 `DifficultyCalibration` 为准。
+The current history contract is a 12-hour visible window, 840 seconds of normal collection,
+480 seconds of target collection, a 300-second overview step, and a 30-second base step; the
+sampling window and target time points belong to this case and do not change the global
+contract. The calibration label and reference ID are governed by the `DifficultyCalibration` in
+the case code.
 
-本次合入只有代码、focused test 和 reference/mock 路径证据，没有有效模型 OutcomePass 失败运行，因此不填写模型失败原因。若以后出现有效模型失败，应按 [DP / OP / SP 设计原则](../../../standards/evaluation/dp-op-sp.standard.md) 阅读完整 trace 后区分诊断失败、修复失败或不安全恢复，不能由三个布尔值直接推断。
+This merge carries only code, focused tests, and reference/mock path evidence; there is no valid
+model OutcomePass-failure run, so no model failure cause is recorded. If a valid model failure
+appears later, read the full trace per the [DP / OP / SP design principles](../../../standards/evaluation/dp-op-sp.standard.md) and distinguish a diagnosis failure, a
+remediation failure, or an unsafe remediation; it must not be inferred directly from the three
+booleans.
 
-## 6. 代码与验证
+## 6. Code and verification
 
-- Scenario/Case：`src/scenarios/tidb/health_check/ticdc_replication_trend_frozen_history.py`
-- Evaluator：`src/scenarios/evaluation/tidb/health_check/ticdc_replication_trend_frozen_history.py`
-- 入口：`examples/run_tidb_health_check_ticdc_replication_trend_frozen_history_scenario.py`
-- 测试：`tests/tidb/test_health_check_ticdc_replication_trend_frozen_history.py`
-- 当前 focused test：23 passed。
+- Scenario/Case: `src/scenarios/tidb/health_check/ticdc_replication_trend_frozen_history.py`
+- Evaluator: `src/scenarios/evaluation/tidb/health_check/ticdc_replication_trend_frozen_history.py`
+- Entrypoint: `examples/run_tidb_health_check_ticdc_replication_trend_frozen_history_scenario.py`
+- Tests: `tests/tidb/test_health_check_ticdc_replication_trend_frozen_history.py`
+- Current focused tests: 23 passed.
 
-后续修改必须同时检查 Case 动态工具描述、历史指标的必要性、TiCDC selector、最终 source-of-truth 查询、持续写入验证和恢复清理；不应再引入能直接说出根因或推荐参数的专用工具。
+Later changes must also check the case's dynamic tool descriptions, the necessity of the
+historical metrics, the TiCDC selector, the final source-of-truth query, the continuous-write
+verification, and the recovery cleanup; no dedicated tool that can directly state the root cause
+or recommend parameters should be introduced again.

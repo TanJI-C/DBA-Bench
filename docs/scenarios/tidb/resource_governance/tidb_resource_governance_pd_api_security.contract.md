@@ -8,6 +8,7 @@ scope: [tidb, resource_governance, tidb_resource_governance_pd_api_security]
 summary: Current code-backed contract snapshot for tidb_resource_governance_pd_api_security; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_resource_governance_pd_api_security`
@@ -26,7 +27,7 @@ related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.
 
 | case_no | case_id | title | current label |
 | ---: | --- | --- | --- |
-| 0 | `pd_api_access_hardening` | 在不破坏在线业务、管理面与监控可达性的前提下制定访问加固方案。 | `hard` |
+| 0 | `pd_api_access_hardening` | Formulate an access-hardening plan without disrupting online business, the management plane, or monitoring reachability. | `hard` |
 | 1 | `pd_api_staged_route_hardening` | Harden the PD API boundary after reducing stale route inventory. | `hard` |
 
 The Case set above is the current code snapshot. A missing calibration is explicit and must not be inferred from unregistered labels.
@@ -38,8 +39,8 @@ The following fields are the public state boundary exposed by the current Case c
 ### `pd_api_access_hardening`
 
 - Case number: `0`
-- Title: 在不破坏在线业务、管理面与监控可达性的前提下制定访问加固方案。
-- Alert/symptom: [Security Operations] 外部扫描器可以读取分布式数据库管理面的元数据，当前管理访问缺少可靠的边界。请先从真实拓扑、配置、健康指标、日志、业务 workload 和 TiDB 知识库确认影响面，然后提交一份可执行的访问加固方案。方案必须在 outcome.plan 中给出一个主控制、所有消费者映射、每个观测 route identity 的控制与验证、负面/正面访问测试、变更窗口、拓扑健康门、回滚条件和历史处置。在线 SQL、管理控制、数据迁移、Dashboard 与监控路径都必须保持可达；不要直接重启健康组件或修改业务数据。
+- Title: Formulate an access-hardening plan without disrupting online business, the management plane, or monitoring reachability.
+- Alert/symptom: [Security Operations] An external scanner can read metadata of the distributed database management plane, and current management access lacks a reliable boundary. First confirm the impact scope from the real topology, configuration, health metrics, logs, business workload, and the TiDB knowledge base, then submit an executable access-hardening plan. The plan must specify in outcome.plan a primary control, a mapping of all consumers, control and verification for each observed route identity, negative/positive access tests, a change window, topology health gates, rollback conditions, and historical remediation. Online SQL, management control, data migration, Dashboard, and monitoring paths must all remain reachable; do not directly restart healthy components or modify business data.
 - Initial-state fields: `dependent_paths`, `status`, `topology`
 - Expected-target fields: `authorized_operations`, `business_and_dashboard`, `primary_control`, `status`, `unauthenticated_api`
 - Background profiles: account_lookup, order_lookup, region_rollup, status_rollup, event_timeline, event_type_rollup, event_source_rollup, daily_order_rollup, daily_event_rollup, platform_snapshot, platform_members, ops_event_feed
@@ -52,6 +53,9 @@ The following fields are the public state boundary exposed by the current Case c
 - Case number: `1`
 - Title: Harden the PD API boundary after reducing stale route inventory.
 - Alert/symptom: [Security Operations] The PD client API is reachable beyond the intended management boundary, and a staged route inventory contains both active and candidate paths. Correlate current route identity, topology, access tests, and dependency health; submit an executable boundary-hardening plan that preserves authorized SQL, control, backup, import, dashboard, and monitoring paths.
+
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `dependent_paths`, `route_inventory`, `status`, `topology`
 - Expected-target fields: `authorized_operations`, `business_and_dashboard`, `primary_control`, `route_inventory`, `status`, `unauthenticated_api`
 - Background profiles: account_lookup, order_lookup, region_rollup, status_rollup, event_timeline, event_type_rollup, event_source_rollup, daily_order_rollup, daily_event_rollup, platform_snapshot, platform_members, ops_event_feed

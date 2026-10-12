@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_mdl_blocking]
 summary: Current code-backed contract snapshot for tidb_system_failure_mdl_blocking; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_mdl_blocking`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: A production release remains incomplete while foreground reads continue.
-- Alert/symptom: [CRITICAL] 发布窗口内一项生产变更长时间没有达到预期状态，业务读请求仍可返回，但发布目标迟迟没有完成。同一窗口还存在定时查询、其他发布活动和历史运行记录，不能把所有等待都视为本次变更的原因。请从用户可见状态、运行记录、会话活动和集群证据判断发布为何没有收敛，只改变能够证明正在阻止本次变更的状态，保留无关会话和数据，并验证业务读结果与发布活动均已收敛。
+- Alert/symptom: [CRITICAL] Within the release window, a production change has not reached its expected state for a long time; business read requests can still return, but the release target keeps failing to complete. The same window also contains scheduled queries, other release activity, and historical run records, and not all waits can be treated as causes of this change. Judge from the user-visible state, run records, session activity, and cluster evidence why the release has not converged, change only the state that can be proven to be blocking this change, preserve unrelated sessions and data, and verify that both business read results and release activity have converged.
 - Initial-state fields: `ddl`, `metadata_lock`, `status`, `target_column`
 - Expected-target fields: `release_chain`, `status`, `target_columns`, `unrelated_session`
 - Background profiles: mdl_orders_api_point_read, mdl_customer_order_history, mdl_order_status_summary, mdl_customer_revenue_rollup, mdl_fulfillment_queue, mdl_order_prefix_search, mdl_recent_order_feed, mdl_customer_segment_export, mdl_order_detail_batch, mdl_reconciliation_signature, mdl_order_api_short_update, mdl_guard_session_read
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A production release remains incomplete while foreground reads continue.
-- Alert/symptom: [CRITICAL] 发布窗口内一项生产变更长时间没有达到预期状态，业务读请求仍可返回，但发布目标迟迟没有完成。同一窗口还存在定时查询、其他发布活动和历史运行记录，不能把所有等待都视为本次变更的原因。请从用户可见状态、运行记录、会话活动和集群证据判断发布为何没有收敛，只改变能够证明正在阻止本次变更的状态，保留无关会话和数据，并验证业务读结果与发布活动均已收敛。
+- Alert/symptom: [CRITICAL] Within the release window, a production change has not reached its expected state for a long time; business read requests can still return, but the release target keeps failing to complete. The same window also contains scheduled queries, other release activity, and historical run records, and not all waits can be treated as causes of this change. Judge from the user-visible state, run records, session activity, and cluster evidence why the release has not converged, change only the state that can be proven to be blocking this change, preserve unrelated sessions and data, and verify that both business read results and release activity have converged.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `ddl`, `metadata_lock`, `status`, `target_column`
 - Expected-target fields: `release_chain`, `status`, `target_columns`, `unrelated_session`
 - Background profiles: mdl_orders_api_point_read, mdl_customer_order_history, mdl_order_status_summary, mdl_customer_revenue_rollup, mdl_order_api_short_update, mdl_guard_session_read, mdl_guard_health_summary, mdl_processlist_probe, mdl_ddl_history_probe, mdl_transaction_inventory_probe, mdl_metadata_lock_inventory_probe
