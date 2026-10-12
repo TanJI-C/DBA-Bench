@@ -1,162 +1,166 @@
-# D-Bot Baseline 实现文档
+---
+language: en
+---
 
-## 实现原则
+# D-Bot Baseline Implementation Document
 
-本实现以 `DB-GPT/` 开源代码为优先依据，而不是以论文描述优先。若论文和开源代码有差异，以开源代码中的实际运行路径为准。
+## Implementation Principles
 
-上游 DB-GPT 的 D-Bot 主路径是：
+This implementation treats the `DB-GPT/` open-source code as the primary source of truth, rather than prioritizing the paper's description. Where the paper and the open-source code differ, the actual execution path in the open-source code prevails.
+
+The main path of D-Bot in upstream DB-GPT is:
 
 ```text
 run_diagnose.py / batch_main.py
   -> MultiAgents.from_task(config.yaml)
   -> DBAEnvironment.step()
-  -> ReporterAgent initialize_report 生成 anomaly description / title
-  -> RoleAssignerAgent 选择专家
-  -> VerticalDecisionMaker 并发运行选中的 SolverAgent
-  -> 每个 SolverAgent 内部用 UCT_vote_function 做 Thought/Action/Action Input 轨迹搜索
-  -> 每个专家输出 root cause / solutions / knowledge
+  -> ReporterAgent initialize_report generates the anomaly description / title
+  -> RoleAssignerAgent selects experts
+  -> VerticalDecisionMaker runs the selected SolverAgents concurrently
+  -> Each SolverAgent internally uses UCT_vote_function to search Thought/Action/Action Input trajectories
+  -> Each expert outputs root cause / solutions / knowledge
   -> roundtable review
-  -> ReporterAgent refine root cause / labels / solutions / citations
+  -> ReporterAgent refines root cause / labels / solutions / citations
 ```
 
-因此 DBA-Bench 的 D-Bot baseline 现在实现为 `dbot_code` 模式：在 `BaseAgent` 的逐 turn 接口内适配 DB-GPT 的多专家诊断流水线。专家内部不是固定脚本，而是在 `DbotAgent` 内保留 `Thought / Action / Action Input / Observation` 轨迹搜索：LLM 选择 PGEnv 当前 profile 暴露的工具，Orchestrator 执行对应 DBA-Bench action，observation 回写后继续下一步。
+Therefore the D-Bot baseline in DBA-Bench is now implemented as `dbot_code` mode: DB-GPT's multi-expert diagnosis pipeline is adapted inside `BaseAgent`'s turn-by-turn interface. The expert internals are not a fixed script; `DbotAgent` retains the `Thought / Action / Action Input / Observation` trajectory search: the LLM picks a tool exposed by PGEnv's current profile, the Orchestrator executes the corresponding DBA-Bench action, and the search proceeds to the next step after the observation is written back.
 
-## DB-GPT 创新点边界
+## DB-GPT Innovation Boundary
 
-当前实现把 DB-GPT 的方法贡献和工具链拆开：
+The current implementation separates DB-GPT's methodological contributions from its tooling:
 
-| 类别 | 是否属于 D-Bot 方法核心 | 当前实现 |
+| Category | Part of D-Bot's methodological core? | Current implementation |
 |---|---:|---|
-| RoleAssigner 根据 anomaly description 招募专家 | 是 | `DbotAgent._select_experts()` + `DBOT_ROLE_ASSIGNER_PROMPT` |
-| 多专家独立诊断 | 是 | `DbotAgent` 顺序运行每个 selected expert 的独立搜索状态 |
-| UCT trajectory search | 是 | `DbotAgent` + `mcts.py` 保留 `Thought -> Action -> Action Input -> Observation` tree、softmax UCT branch selection、candidate vote、value backpropagation |
-| Reflection | 是 | 每条 terminal candidate 后执行 expert reflection prompt |
-| Candidate vote | 是 | 每轮 simulation 后按 DB-GPT vote prompt 更新 terminal 和 ancestor value |
-| Roundtable review | 是 | `DBOT_ROUND_TABLE_PROMPT` 顺序审核全部专家结果 |
-| ChiefDBA / Reporter 汇总报告、标签、citation marking | 是 | reporter 初始化 anomaly description/title，最终 refine root cause/solutions/labels/citations |
-| `whether_is_abnormal_metric` / `match_diagnose_knowledge` / `optimize_index_selection` / `finish` / `mark_citations` / `submit` | 不是算法创新点本身，是上游工具链和交互协议 | `PGEnv(tool_profile="db_gpt")` 暴露 DB-GPT semantic tools 和 benchmark `submit`；`DbotAgent` 在专家阶段额外注册内部虚拟 `finish`，报告阶段用内部虚拟 `mark_citations` 提交标注后的两段文本，最终才向 Orchestrator 返回 `submit` |
+| RoleAssigner recruits experts based on the anomaly description | Yes | `DbotAgent._select_experts()` + `DBOT_ROLE_ASSIGNER_PROMPT` |
+| Multiple experts diagnose independently | Yes | `DbotAgent` sequentially runs each selected expert's independent search state |
+| UCT trajectory search | Yes | `DbotAgent` + `mcts.py` retain the `Thought -> Action -> Action Input -> Observation` tree, softmax UCT branch selection, candidate vote, and value backpropagation |
+| Reflection | Yes | The expert reflection prompt runs after each terminal candidate |
+| Candidate vote | Yes | After each simulation round, terminal and ancestor values are updated per the DB-GPT vote prompt |
+| Roundtable review | Yes | `DBOT_ROUND_TABLE_PROMPT` sequentially reviews all expert results |
+| ChiefDBA / Reporter consolidated report, labels, citation marking | Yes | The reporter initializes the anomaly description/title, then finally refines root cause/solutions/labels/citations |
+| `whether_is_abnormal_metric` / `match_diagnose_knowledge` / `optimize_index_selection` / `finish` / `mark_citations` / `submit` | Not algorithmic innovations themselves; they are the upstream tooling and interaction protocol | `PGEnv(tool_profile="db_gpt")` exposes the DB-GPT semantic tools and the benchmark `submit`; `DbotAgent` additionally registers an internal virtual `finish` during the expert stage, uses the internal virtual `mark_citations` during the report stage to submit the two annotated text fields, and only then returns `submit` to the Orchestrator |
 
-因此实验时通过 PGEnv 的工具 profile 比较两类暴露方式：
+Experiments therefore compare the two exposure styles via PGEnv tool profiles:
 
-- `PGEnv(tool_profile="db_gpt")`：专家 LLM 看到 DB-GPT semantic tools；这些工具是 PGEnv 的 `@Tool` 方法，schema/help/native tool calling 都走现有环境工具机制。
-- `PGEnv(tool_profile="no_knowledge" / "general_knowledge" / "hierarchical_knowledge")`：专家 LLM 直接看到该 PGEnv profile 下的全部原生工具；D-Bot 算法流程仍然是 role assignment、多专家、UCT、roundtable 和 reporter。
+- `PGEnv(tool_profile="db_gpt")`: the expert LLM sees DB-GPT semantic tools; these tools are PGEnv `@Tool` methods, and their schema/help/native tool calling all go through the existing environment tool mechanism.
+- `PGEnv(tool_profile="no_knowledge" / "general_knowledge" / "hierarchical_knowledge")`: the expert LLM directly sees all native tools under that PGEnv profile; the D-Bot algorithmic flow is still role assignment, multiple experts, UCT, roundtable, and reporter.
 
-## 与旧实现的冲突和处理
+## Conflicts with the Old Implementation and Their Resolution
 
-旧 DBA-Bench D-Bot 实现偏向论文复现，存在以下与 DB-GPT 开源代码冲突的机制：
+The old DBA-Bench D-Bot implementation leaned toward paper reproduction and contained the following mechanisms that conflict with the DB-GPT open-source code:
 
-| 旧机制 | DB-GPT 开源代码事实 | 当前处理 |
+| Old mechanism | DB-GPT open-source reality | Current handling |
 |---|---|---|
-| `dbot_tree` 作为外部持久树，每个 Orchestrator turn 扩展一个环境 action | 上游树搜索在每个 `SolverAgent` 内部运行，搜索的是 `Thought -> Action -> Action Input -> Observation` 轨迹 | 删除外部持久 benefit tree，改为专家内 DB-GPT turn-based trajectory search |
-| `BenefitScorer` 的 instant/long-term/UCT 三分量评分 | 上游 `tree_node` 只有投票产生的 `values`，选择由 `softmax(child.compute_weight(), epsilon_new_node)` 决定 | 删除 `BenefitScorer` / `Reflector` |
-| `dbot_collab` 自造 CPU/QUERY/STORAGE/CONFIG 四专家面板 | 上游从知识库专家名动态选择，如 `CpuExpert`、`QueryExpert`、`IndexExpert` 等 | 改成 DB-GPT 专家名体系 |
-| `ReadOnlyEnvProxy` 让 D-Bot 侧绕过 Orchestrator 模拟环境 | 上游工具在 DB-GPT runtime 内执行；DBA-Bench 要保持统一工具边界 | 删除执行代理；DB-GPT semantic tools 注册为 PGEnv `@Tool` 方法，由 Orchestrator 调度 |
-| native function calling 优先 | 上游 prompt 使用 `Thought / Action / Action Input` 文本协议 | 同时支持文本 ReAct 和 SDK native tools；工具 schema 均来自 PGEnv，不在 D-Bot 内维护第二套工具说明 |
-| LLM 自由决定 `query_metrics/execute_sql/manage_instance` | 上游专家默认看到 DB-GPT semantic tools | 由 `PGEnv.tool_profile` 决定暴露 DB-GPT semantic tools 还是 PGEnv 原生工具 |
-| 知识库是任意文本关键词 RAG | 上游知识按专家知识库组织，记录含 `cause_name/desc/metrics/steps/source` | `DbotKnowledge` 改为专家知识条目加载和检索 |
+| `dbot_tree` as an external persistent tree that expands one environment action per Orchestrator turn | Upstream tree search runs inside each `SolverAgent`, searching `Thought -> Action -> Action Input -> Observation` trajectories | The external persistent benefit tree was removed, replaced by DB-GPT turn-based trajectory search inside the expert |
+| `BenefitScorer`'s instant/long-term/UCT three-component scoring | Upstream `tree_node` only has vote-produced `values`; selection is decided by `softmax(child.compute_weight(), epsilon_new_node)` | `BenefitScorer` / `Reflector` removed |
+| `dbot_collab`'s homegrown CPU/QUERY/STORAGE/CONFIG four-expert panel | Upstream selects dynamically from knowledge base expert names, such as `CpuExpert`, `QueryExpert`, `IndexExpert`, etc. | Switched to the DB-GPT expert naming system |
+| `ReadOnlyEnvProxy` let the D-Bot side bypass the Orchestrator and simulate the environment | Upstream tools execute inside the DB-GPT runtime; DBA-Bench must keep a unified tool boundary | The execution proxy was removed; DB-GPT semantic tools are registered as PGEnv `@Tool` methods and dispatched by the Orchestrator |
+| Native function calling prioritized | The upstream prompt uses the `Thought / Action / Action Input` text protocol | Both text ReAct and SDK native tools are supported; tool schemas all come from PGEnv, and no second set of tool descriptions is maintained inside D-Bot |
+| The LLM freely decides among `query_metrics/execute_sql/manage_instance` | Upstream experts see DB-GPT semantic tools by default | `PGEnv.tool_profile` decides whether DB-GPT semantic tools or PGEnv native tools are exposed |
+| The knowledge base was arbitrary-text keyword RAG | Upstream knowledge is organized as expert knowledge bases, with records containing `cause_name/desc/metrics/steps/source` | `DbotKnowledge` was changed to expert knowledge entry loading and retrieval |
 
-## 当前组件
+## Current Components
 
 ```text
 src/agents/baselines/dbot/
-  agent.py       DbotAgent 与 ExpertSolver，DB-GPT code-first pipeline adapter；包含角色选择、专家轨迹搜索、roundtable 和报告状态
-  tools.py       schema-derived ReAct helper、内部虚拟工具 schema（finish / mark_citations）与 TiDB 工具面判定
-  prompts.py     DB-GPT role assigner、expert、roundtable、report prompts
+  agent.py       DbotAgent and ExpertSolver, the DB-GPT code-first pipeline adapter; covers role selection, expert trajectory search, roundtable, and reporting state
+  tools.py       Schema-derived ReAct helper, internal virtual tool schemas (finish / mark_citations), and TiDB tool-surface detection
+  prompts.py     DB-GPT role assigner, expert, roundtable, and report prompts
   types.py       DbotToolStep / ExpertDiagnosis / DbotReport
   knowledge.py   expert knowledge loader and retriever
-  mcts.py        DB-GPT trajectory tree helper，不再是外部 remediation MCTS
+  mcts.py        DB-GPT trajectory tree helper, no longer an external remediation MCTS
   experts.py     DB-GPT expert metadata
 ```
 
-## 运行模式
+## Run Modes
 
-仅支持：
+Only the following are supported:
 
 ```python
 DbotAgent(mode="dbot_code", use_native_tools=False)
 DbotAgent(mode="dbot_code", use_native_tools=True)
 ```
 
-旧模式 `dbot_prompt`、`dbot_rag`、`dbot_tree`、`dbot_collab` 会直接报错。这样可以避免旧论文优先语义被误用。
+The old modes `dbot_prompt`, `dbot_rag`, `dbot_tree`, and `dbot_collab` raise an error immediately. This prevents the old paper-first semantics from being misused.
 
-工具暴露方式由 PGEnv 控制，不由 DbotAgent 维护：
+Tool exposure is controlled by PGEnv, not maintained by DbotAgent:
 
 ```python
 PGEnv(tool_profile="db_gpt")       # DB-GPT semantic tools
-PGEnv(tool_profile="no_knowledge") # PGEnv 原生工具，无知识库
+PGEnv(tool_profile="no_knowledge") # PGEnv native tools, no knowledge base
 PGEnv(tool_profile="general_knowledge")
 PGEnv(tool_profile="hierarchical_knowledge")
 ```
 
-`use_native_tools=True` 时，Orchestrator 把 `env.get_tool_schemas()` 下发给 DbotAgent，DbotAgent 再通过 `LLMAgent.set_tools()` 把 schema 放进 SDK 的 `tools` 参数；工具用法不写进 system prompt。`use_native_tools=False` 时，D-Bot 仍使用 `Thought / Action / Action Input` 文本协议，但可用工具列表从同一份 schema 派生。专家诊断阶段会过滤全局控制工具 `submit/exit`，并追加内部虚拟工具 `finish`；最终报告阶段才返回 DBA-Bench 全局 `submit`。
+With `use_native_tools=True`, the Orchestrator passes `env.get_tool_schemas()` down to DbotAgent, and DbotAgent then puts the schemas into the SDK's `tools` parameter via `LLMAgent.set_tools()`; tool usage is not written into the system prompt. With `use_native_tools=False`, D-Bot still uses the `Thought / Action / Action Input` text protocol, but the list of available tools is derived from the same schemas. During the expert diagnosis stage, the global control tools `submit/exit` are filtered out and the internal virtual tool `finish` is appended; only the final report stage returns the DBA-Bench global `submit`.
 
-## 工具暴露与映射
+## Tool Exposure and Mapping
 
 ### `PGEnv(tool_profile="db_gpt")`
 
-| DB-GPT 工具 | PGEnv 执行 | 说明 |
+| DB-GPT tool | PGEnv execution | Notes |
 |---|---|---|
-| `whether_is_abnormal_metric` | PGEnv 内调用 `query_metrics(...)` | 复现上游专家先查核心指标的约束 |
-| `match_diagnose_knowledge` | PGEnv 内聚合多个 `query_metrics(...)` 和可选 `query_knowledge_base(...)` | 按上游专家名规则选择 `cpu/io/memory` metric prefix，聚合系统指标、`topsql`、`slow_queries` 和知识库 |
-| `optimize_index_selection` | PGEnv 内执行多条 `execute_sql(...)` | 收集 workload、schema、column statistics、已有索引和 `hypopg` 可用性证据 |
-| `finish` | DbotAgent 内部虚拟动作 | expert diagnosis 阶段结束当前 simulation，并保存 `diagnose` / `solution` / `knowledge` payload；不进入环境 action history |
-| `submit` | DBA-Bench 全局控制动作 | 只在 report 阶段作为真实 benchmark submit 返回给 Orchestrator |
+| `whether_is_abnormal_metric` | Calls `query_metrics(...)` inside PGEnv | Reproduces the upstream constraint that experts query core metrics first |
+| `match_diagnose_knowledge` | Aggregates multiple `query_metrics(...)` calls and an optional `query_knowledge_base(...)` inside PGEnv | Selects the `cpu/io/memory` metric prefix per the upstream expert-name rules, aggregating system metrics, `topsql`, `slow_queries`, and the knowledge base |
+| `optimize_index_selection` | Runs multiple `execute_sql(...)` calls inside PGEnv | Collects workload, schema, column statistics, existing indexes, and `hypopg` availability evidence |
+| `finish` | Internal virtual action inside DbotAgent | Ends the current simulation during the expert diagnosis stage and saves the `diagnose` / `solution` / `knowledge` payload; does not enter the environment action history |
+| `submit` | DBA-Bench global control action | Returned to the Orchestrator only in the report stage, as the real benchmark submit |
 
-### PGEnv 原生 profiles
+### PGEnv Native Profiles
 
-| Profile | 暴露给 SolverAgent 的工具 |
+| Profile | Tools exposed to the SolverAgent |
 |---|---|
-| `no_knowledge` | `query_metrics`、`execute_sql`、`manage_instance`、`read_log`、`help`、`submit`、`exit` |
+| `no_knowledge` | `query_metrics`, `execute_sql`, `manage_instance`, `read_log`, `help`, `submit`, `exit` |
 | `general_knowledge` | `no_knowledge` + `query_knowledge_base` |
 | `hierarchical_knowledge` | `no_knowledge` + typed `query_knowledge_base` |
 
-这让实验可以区分“DB-GPT 的多专家 UCT 诊断流程”与“DB-GPT semantic tools”各自的贡献，而且无需在 D-Bot 内维护第二套 DBA-Bench 工具清单。
+This lets experiments separate the contributions of "DB-GPT's multi-expert UCT diagnosis flow" and "DB-GPT semantic tools", without maintaining a second DBA-Bench tool inventory inside D-Bot.
 
 ## Expert Trajectory Search
 
-DB-GPT 上游 `SolverAgent.step()` 会运行 `UCT_vote_function.start(simulation_count=2, epsilon_new_node=0.3, choice_count=1, vote_candidates=2, vote_count=1, single_chain_max_step=24)`。DBA-Bench 不能在 agent 内直接执行环境工具，所以当前实现采用逐 turn 适配：
+Upstream DB-GPT's `SolverAgent.step()` runs `UCT_vote_function.start(simulation_count=2, epsilon_new_node=0.3, choice_count=1, vote_candidates=2, vote_count=1, single_chain_max_step=24)`. DBA-Bench cannot execute environment tools directly inside the agent, so the current implementation uses a turn-by-turn adaptation:
 
-1. `DbotAgent` 为当前 expert 维护 DB-GPT trajectory tree 和候选轨迹；
-2. expert LLM 输出 `Thought / Action / Action Input`，或在 native mode 下调用 SDK tool；
-3. `Action` 必须属于 expert tool schema：当前 PGEnv profile 工具去掉 `submit/exit` 后再加内部 `finish`；
-4. 非 `finish` action 原样作为环境 action，由 Orchestrator 执行；
-5. observation 回写到 trajectory 的 `Action Input` 节点；
-6. expert diagnosis 阶段调用 `finish` 或达到单链步数上限后形成 terminal candidate，调用 reflection prompt；
-7. 每轮 simulation 结束后执行 DB-GPT 式 candidate vote，把 value 回传到 terminal 和 ancestor 节点；
-8. 下一轮 simulation 从 root 按 DB-GPT 的 `softmax(child.compute_weight(), epsilon_new_node)` 随机采样，选择复用已有分支或扩展新分支；vote 候选也按 DB-GPT 先随机 shuffle 再取 `vote_candidates` 个；
-9. 最终按 terminal node 累计 value 选择 trajectory。
+1. `DbotAgent` maintains the DB-GPT trajectory tree and candidate trajectories for the current expert;
+2. The expert LLM outputs `Thought / Action / Action Input`, or calls an SDK tool in native mode;
+3. The `Action` must belong to the expert tool schema: the current PGEnv profile tools minus `submit/exit`, plus the internal `finish`;
+4. A non-`finish` action is passed through as the environment action and executed by the Orchestrator;
+5. The observation is written back to the trajectory's `Action Input` node;
+6. In the expert diagnosis stage, once `finish` is called or the single-chain step cap is reached, a terminal candidate forms and the reflection prompt runs;
+7. After each simulation round, a DB-GPT-style candidate vote runs, propagating values back to the terminal and ancestor nodes;
+8. The next simulation round samples from the root using DB-GPT's `softmax(child.compute_weight(), epsilon_new_node)`, choosing to reuse an existing branch or expand a new one; vote candidates are likewise first randomly shuffled per DB-GPT before taking `vote_candidates` of them;
+9. The final trajectory is selected by the accumulated terminal node value.
 
-### Prompt 预算
+### Prompt Budget
 
-上游只规定了搜索机制，没有规定每一步 prompt 里要重发多少历史。适配层按下面的规则控制 prompt 体积，完整证据仍保留在 `DbotToolStep.observation`、`ExpertDiagnosis` 和 trace 导出里：
+Upstream specifies only the search mechanism, not how much history each step's prompt should resend. The adaptation layer controls prompt size with the rules below; full evidence is still preserved in `DbotToolStep.observation`, `ExpertDiagnosis`, and the trace export:
 
-- trajectory tree 的 `Action Input` 节点只写紧凑的 `db_gpt_observation`（环境工具和 `whether_is_abnormal_metric` 的结果文本上限 1200 字符），不写环境原始返回；
-- expansion prompt 的 former candidates 和 vote prompt 使用候选摘要：工具调用序列 + `finish` 的 `diagnose/solution/knowledge`；expansion prompt 的 reflection 只出现在独立的 reflections 段，不再随候选重复；
-- 环境工具 step 只产生一条 citation（由 `_prepare_expert_diagnosis` 生成），不再额外写入 `knowledge_items`。
+- The trajectory tree's `Action Input` nodes store only a compact `db_gpt_observation` (result text from environment tools and `whether_is_abnormal_metric` is capped at 1200 characters), not the environment's raw return;
+- The expansion prompt's former candidates and the vote prompt use candidate summaries: the tool-call sequence plus `finish`'s `diagnose/solution/knowledge`; reflections in the expansion prompt appear only in a separate reflections section and are no longer repeated alongside each candidate;
+- Each environment tool step produces a single citation (generated by `_prepare_expert_diagnosis`) and no longer additionally writes `knowledge_items`.
 
-## Expert 输出
+## Expert Output
 
-DB-GPT 上游 `SolverAgent.step()` 在 UCT 工具轨迹结束后，会再次调用 LLM：
+After the UCT tool trajectory ends, upstream DB-GPT's `SolverAgent.step()` calls the LLM again:
 
-- `expert_root_cause`：只分析根因，不写解决方案；
-- `expert_solution`：只写解决方案，不重复根因。
+- `expert_root_cause`: analyzes only the root cause, without writing solutions;
+- `expert_solution`: writes only the solution, without repeating the root cause.
 
-DBA-Bench 适配层保持这个行为。两个 prompt 只带 vote 选中的 candidate trajectory（含紧凑 observation），不再附带全部步骤的 diagnosis process；如果专家 LLM 返回空 root cause 或空 solution，直接报错，不生成本地默认建议。
+The DBA-Bench adaptation layer preserves this behavior. The two prompts carry only the candidate trajectory selected by the vote (with compact observations) and no longer attach the full step-by-step diagnosis process; if the expert LLM returns an empty root cause or empty solution, an error is raised immediately and no local default recommendation is generated.
 
-## Roundtable 与 Reporter
+## Roundtable and Reporter
 
-DB-GPT 上游会先让 `ReporterAgent.initialize_report()` 根据原始 alert 生成 anomaly description 和 title；role assignment 使用生成后的 anomaly description。随后会把所有专家诊断摘要广播给每个专家，再逐个执行 cross review；每个已生成的 review 会追加到后续专家和 reporter 的消息里。DBA-Bench 适配层保持这个信息流：
+Upstream DB-GPT first has `ReporterAgent.initialize_report()` generate the anomaly description and title from the raw alert; role assignment uses the generated anomaly description. It then broadcasts all expert diagnosis summaries to every expert and runs cross reviews one by one; each already-generated review is appended to the messages of the subsequent experts and the reporter. The DBA-Bench adaptation layer preserves this information flow:
 
-- role assignment、expert diagnosis 和 final report 使用 reporter 生成的 anomaly description；
-- final report title 使用 reporter 生成的 title；
-- 每个 roundtable prompt 都包含全部专家诊断上下文（selected trajectory 截取末尾 1500 字符）；
-- 后续专家的 roundtable prompt 会包含已经生成的 review advice；
-- final report 的 refine root cause / refine solution prompt 会包含 roundtable reviews、citations 和 topMetrics；工具级 diagnosis process 只保留在报告对象和 trace 中，不进入 reporter prompt；
-- 若有 citations，Reporter 通过内部虚拟工具 `mark_citations`（与专家阶段的 `finish` 同一种机制）一次性提交标注后的 `root_cause` 和 `solutions` 两个参数：native mode 走 SDK tool calling，文本 mode 走 ReAct `Action / Action Input`；未调用该工具、调用多于一次或字段缺失/为空直接报错。
+- Role assignment, expert diagnosis, and the final report use the reporter-generated anomaly description;
+- The final report title uses the reporter-generated title;
+- Every roundtable prompt includes all expert diagnosis context (the selected trajectory's last 1500 characters);
+- Subsequent experts' roundtable prompts include the review advice already generated;
+- The final report's refine root cause / refine solution prompts include the roundtable reviews, citations, and topMetrics; the tool-level diagnosis process is kept only in the report object and the trace, not in the reporter prompt;
+- If there are citations, the Reporter submits the annotated `root_cause` and `solutions` parameters in one shot via the internal virtual tool `mark_citations` (the same mechanism as the expert stage's `finish`): native mode uses SDK tool calling, text mode uses ReAct `Action / Action Input`; not calling the tool, calling it more than once, or missing/empty fields raise an error immediately.
 
-## 验证
+## Verification
 
-在仓库根目录运行：
+Run from the repository root:
 
 ```bash
 PYTHONPATH=$PWD conda run -n aiops pytest tests/test_dbot_agent.py tests/test_dbot_mcts.py
@@ -164,20 +168,20 @@ PYTHONPATH=$PWD conda run -n aiops pytest tests/test_andromeda_agent.py tests/te
 PYTHONPATH=$PWD conda run -n aiops python tests/test_mock_llm.py
 ```
 
-当前验证覆盖：
+Current verification coverage:
 
-- role assignment 必须解析出 DB-GPT 专家名，空选择直接抛错；超过 `max_hired_experts` 时按回复中的出现顺序裁剪，保留 role assigner 的优先级；
-- reporter 初始化会先生成 anomaly description / title，并进入 role assignment 和 final report；
-- expert diagnosis 由 DB-GPT-style `Thought / Action / Action Input` 输出选择工具，不再固定顺序；
-- tool observation 写入 `ExpertDiagnosis`；
-- `match_diagnose_knowledge` 按 DB-GPT 的 `cpu/io/memory` metric prefix 规则聚合系统指标、workload、slow queries、专家知识和 topMetrics；
-- `PGEnv(tool_profile="db_gpt")` 暴露 DB-GPT semantic tools，`PGEnv(tool_profile="no_knowledge")` 暴露 PGEnv 原生工具；
-- `optimize_index_selection` 由 PGEnv 收集 workload、schema、column statistics、已有索引、`hypopg` 可用性证据，不再查询 `pg_stat_user_indexes` 或正则生成伪索引建议；
-- D-Bot schema 校验来自 PGEnv tool schemas，不再维护 `tool_mode` 或私有 DBA-Bench 工具列表；
-- expert trajectory search 覆盖 terminal candidate、DB-GPT stochastic branch selection、random vote candidates、vote value 回传和 value-based final selection；
-- expert root cause / solution 由 LLM 从工具轨迹生成，空输出直接抛错；
-- roundtable review 使用全部专家诊断上下文，并把已生成 review 传给后续专家和 ChiefDBA report；
-- 旧 `dbot_tree` 被显式拒绝，native tools 通过现有 `LLMAgent.set_tools()` / SDK `tools` 参数支持；
-- native mode 下模型未返回 tool call、退回文本 ReAct 解析时，user/assistant 消息同样成对写入 conversation，供 `token_accounting` 重放；
-- trajectory tree 只存紧凑 observation，former candidates / vote 使用候选摘要，reporter prompt 不含 diagnosis process，citation marking 通过 `mark_citations` 工具的两个参数提交（文本 mode 和 native mode 各有用例）；
-- DB-GPT trajectory tree helper 保留 `Thought/Action/Action Input/Observation` 结构。
+- Role assignment must parse DB-GPT expert names; an empty selection raises an error immediately. When the selection exceeds `max_hired_experts`, it is trimmed in order of appearance in the reply, preserving the role assigner's priorities;
+- Reporter initialization first generates the anomaly description / title, which then feed into role assignment and the final report;
+- Expert diagnosis selects tools from DB-GPT-style `Thought / Action / Action Input` output instead of a fixed order;
+- Tool observations are written into `ExpertDiagnosis`;
+- `match_diagnose_knowledge` aggregates system metrics, workload, slow queries, expert knowledge, and topMetrics following DB-GPT's `cpu/io/memory` metric prefix rules;
+- `PGEnv(tool_profile="db_gpt")` exposes DB-GPT semantic tools, and `PGEnv(tool_profile="no_knowledge")` exposes PGEnv native tools;
+- `optimize_index_selection` collects workload, schema, column statistics, existing indexes, and `hypopg` availability evidence via PGEnv, and no longer queries `pg_stat_user_indexes` or regex-generates pseudo index recommendations;
+- D-Bot schema validation comes from the PGEnv tool schemas; `tool_mode` and a private DBA-Bench tool list are no longer maintained;
+- Expert trajectory search covers terminal candidates, DB-GPT stochastic branch selection, random vote candidates, vote value backpropagation, and value-based final selection;
+- Expert root cause / solution are generated by the LLM from the tool trajectory; empty outputs raise an error immediately;
+- Roundtable review uses all expert diagnosis context and passes already-generated reviews to subsequent experts and the ChiefDBA report;
+- The old `dbot_tree` is explicitly rejected; native tools are supported via the existing `LLMAgent.set_tools()` / SDK `tools` parameter;
+- In native mode, when the model returns no tool call and parsing falls back to text ReAct, user/assistant messages are still written into the conversation in pairs for `token_accounting` replay;
+- The trajectory tree stores only compact observations, former candidates / vote use candidate summaries, the reporter prompt contains no diagnosis process, and citation marking is submitted through the two parameters of the `mark_citations` tool (with test cases for both text mode and native mode);
+- The DB-GPT trajectory tree helper retains the `Thought/Action/Action Input/Observation` structure.

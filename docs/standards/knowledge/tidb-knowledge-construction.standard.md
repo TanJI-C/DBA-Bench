@@ -8,43 +8,50 @@ scope: [tidb, knowledge]
 summary: Defines the TiDB unified knowledge-base construction model, three corpus layers, provenance projection, index builders, manifest validation, and code-level ownership boundaries.
 source_of_truth: code
 related: [standard.knowledge.tidb-knowledge-usage]
+language: en
 ---
 
-# TiDB 统一知识库构建原理与实现规范
+# TiDB Unified Knowledge Base Construction Principles and Implementation Standard
 
-本文是当前 TiDB 8.1 统一知识库的构建规范，面向语料维护者、知识库实现者和需要开发
-知识驱动场景的工程师。重点不是某次构建的结果，而是构建链路为什么分层、每一层保存什么、
-代码如何把层间数据转换，以及 SQLite、Chroma 和 Agent projection 如何共享同一份 serving
-corpus。
+This document is the construction standard for the current TiDB 8.1 unified knowledge base,
+aimed at corpus maintainers, knowledge-base implementers, and engineers who need to develop
+knowledge-driven scenarios. The focus is not the result of any particular build, but why the
+construction pipeline is layered, what each layer stores, how the code transforms data between
+layers, and how SQLite, Chroma, and the Agent projection share the same serving corpus.
 
-知识库的实际查询方法、embedding service 的显式启动命令、CLI/Python/Agent 接口和烟测入口
-见 [TiDB 统一知识库使用规范](./tidb-knowledge-usage.standard.md)。本文不定义场景合同和评估合同。
+For the actual query methods of the knowledge base, the explicit embedding service startup
+command, the CLI/Python/Agent interfaces, and the smoke-test entry point, see the
+[TiDB Unified Knowledge Base Usage Standard](./tidb-knowledge-usage.standard.md). This document
+does not define scenario contracts or evaluation contracts.
 
-## 1. 构建目标与不变量
+## 1. Construction Goals and Invariants
 
-统一知识库要同时满足三个要求：
+The unified knowledge base must satisfy three requirements at once:
 
-1. 维护侧能知道每个 chunk 的真实来源，能够审计、更新和重建；
-2. 官方语料与 curated 语料进入同一套检索空间，不让 Agent 因物理路径看到来源差异；
-3. serving 和索引只接收经过校验、哈希可追踪、来源中立的内容。
+1. The maintenance side can know the true provenance of every chunk and can audit, update, and
+   rebuild;
+2. Official and curated corpora enter the same retrieval space, so the Agent never sees provenance
+   differences through physical paths;
+3. Serving and indexes only receive validated, hash-traceable, source-neutral content.
 
-因此，来源身份不能简单地全部删除，也不能直接暴露给 Agent。当前实现把它分成：
+Therefore, source identity can neither be simply deleted outright nor exposed directly to the
+Agent. The current implementation splits it into:
 
 ~~~
-原始层（身份清楚）
+Raw layer (identity clear)
   knowledge/tidb
   knowledge/tidb/curated
           |
           | merge_tidb_curated_knowledge.py
           v
-processed 层（统一 chunk + provenance）
+processed layer (unified chunks + provenance)
   knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
   knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
   knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
           |
           | serving projection
           v
-serving 层（来源中立）
+serving layer (source neutral)
   knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
           |
           +--> SQLite FTS5
@@ -54,40 +61,42 @@ serving 层（来源中立）
                  data/knowledge_bases/tidb81_unified_chroma
 ~~~
 
-三层不是三份可任选的知识库，而是一条单向生成链：
+The three layers are not three interchangeable knowledge bases; they are a one-way generation
+chain:
 
-| 层 | 生成方式 | 主要读者 | 是否可作为 Agent 默认输入 | 是否保留物理来源 |
+| Layer | How it is generated | Primary consumers | Usable as Agent default input | Keeps physical provenance |
 |---|---|---|---:|---:|
-| 原始层 | 官方处理产物和审核后的 curated source | 语料作者、评审者 | 否 | 是 |
-| processed 层 | merge 脚本合并并补充 provenance | 构建器、审计工具 | 否 | 是 |
-| serving 层 | 从 processed 投影并清洗 | 索引构建器、runtime | 是，通过索引 | 否 |
+| Raw layer | Official processing artifacts and reviewed curated sources | Corpus authors, reviewers | No | Yes |
+| processed layer | Merged by the merge script and enriched with provenance | Builders, audit tooling | No | Yes |
+| serving layer | Projected from processed and sanitized | Index builders, runtime | Yes, via the indexes | No |
 
-正式索引只能从 serving 层构建。不能直接把 raw source、provenance 或某个场景目录建成
-正式 Agent index。
+Official indexes can only be built from the serving layer. Do not build an official Agent index
+directly from raw sources, provenance, or a scenario directory.
 
-## 2. 原始层：两类内容先分开
+## 2. Raw Layer: Separate the Two Kinds of Content First
 
-### 2.1 官方语料
+### 2.1 Official corpus
 
-当前官方 TiDB 处理语料的 chunk 输入是：
+The chunk input of the current official TiDB processed corpus is:
 
 ~~~
 knowledge/tidb/mappings/tidb81_chunks.jsonl
 ~~~
 
-这份文件已经是官方文档处理后的结构化 chunk，不是 Agent runtime 直接读取的最终 serving
-projection。每条记录包含标题、分类、组件、部署范围、版本、检索字段、正文和内容 hash，
-并且保留官方 source id、source file、source URL 等维护信息。
+This file already contains structured chunks produced by official-document processing; it is not
+the final serving projection read directly by the Agent runtime. Each record contains the title,
+category, component, deployment scope, version, retrieval fields, body, and content hash, and
+keeps maintenance information such as the official source id, source file, and source URL.
 
-### 2.2 curated 语料
+### 2.2 Curated corpus
 
-审核后的扩展内容位于：
+The reviewed extended content lives in:
 
 ~~~
 knowledge/tidb/curated/
 ~~~
 
-当前 merge 实现读取：
+The current merge implementation reads:
 
 ~~~
 knowledge/tidb/curated/*/*chunks.jsonl
@@ -95,24 +104,26 @@ knowledge/tidb/curated/tidb_system_failure_gc_mvcc_recovery/*.md
 knowledge/tidb/curated/tidb_system_failure_pending_offline/*.md
 ~~~
 
-JSONL source 必须满足统一 required fields；Markdown source 由
-scripts/merge_tidb_curated_knowledge.py 中的 markdown_record() 映射到统一结构。
-Markdown 的文件名映射决定 title、kb_type、component 和 topic tags，正文本身仍需经过
-清洗和 hash。
+JSONL sources must satisfy the unified required fields; Markdown sources are mapped to the unified
+structure by markdown_record() in scripts/merge_tidb_curated_knowledge.py. The Markdown file-name
+mapping determines the title, kb_type, component, and topic tags; the body itself still goes
+through sanitization and hashing.
 
-curated 原始内容应描述可复用的 TiDB 8.1 机制、状态语义、操作前置、危险边界和验收不变量。
-它不能依赖某次 run 的动态 Store、Region、表、TSO、secret、fixture 常量或 evaluator 结论。
-场景的动态事实必须由 Agent 通过现场工具取得，不能在 source 中预先写成答案。
+Curated raw content should describe reusable TiDB 8.1 mechanisms, state semantics, operational
+prerequisites, danger boundaries, and acceptance invariants. It must not depend on the dynamic
+Stores, Regions, tables, TSO, secrets, fixture constants, or evaluator conclusions of a particular
+run. A scenario's dynamic facts must be obtained by the Agent through live tools and must not be
+pre-written as answers in the source.
 
-## 3. processed 层：merge 的代码路径
+## 3. processed Layer: The Merge Code Path
 
-构建入口是：
+The build entry point is:
 
 ~~~bash
 conda run -n aiops python scripts/merge_tidb_curated_knowledge.py
 ~~~
 
-脚本默认：
+The script defaults:
 
 ~~~
 official input:
@@ -122,50 +133,54 @@ output root:
   knowledge/tidb_unified
 ~~~
 
-核心实现位于 scripts/merge_tidb_curated_knowledge.py，转换过程如下。
+The core implementation lives in scripts/merge_tidb_curated_knowledge.py; the transformation
+proceeds as follows.
 
-### 3.1 读取与校验官方记录
+### 3.1 Reading and validating official records
 
-official_records() 逐行读取官方 JSONL：
+official_records() reads the official JSONL line by line:
 
-- 检查 required fields 是否齐全；
-- 拒绝空行和非法 JSON；
-- 重新计算 content 的 SHA-256；
-- content_sha256 不匹配时直接抛错；
-- 记录 source class 为 official；
-- 把原始 source_id、source_file、source_url 和 pinned URL 写入 provenance sidecar。
+- checks that required fields are present;
+- rejects empty lines and invalid JSON;
+- recomputes the SHA-256 of content;
+- raises immediately when content_sha256 does not match;
+- records the source class as official;
+- writes the original source_id, source_file, source_url, and pinned URL into the provenance
+  sidecar.
 
-官方记录的 chunk_id 保持不变，便于追踪同一个官方 chunk 在 processed 和 serving 层的
-对应关系。
+The chunk_id of official records stays unchanged, making it easy to trace the correspondence of
+the same official chunk across the processed and serving layers.
 
-### 3.2 读取与规范化 curated 记录
+### 3.2 Reading and normalizing curated records
 
-load_existing_records() 读取现有 curated JSONL，load_markdown_records() 读取受支持的
-Markdown 目录。每一条扩展记录都带有原始位置的 path 和 line metadata，供 provenance 使用。
+load_existing_records() reads the existing curated JSONL, and load_markdown_records() reads the
+supported Markdown directories. Every extended record carries path and line metadata of its
+original location, for provenance use.
 
-对于 curated 内容，脚本会：
+For curated content, the script:
 
-1. 用 title、原始 source id 和清洗后的 content 计算稳定 digest；
-2. 生成统一的 tidb81 chunk id 和 source id；
-3. 强制 version 为 8.1；
-4. 保留 kb_type、component、related_components、source_scope、topic_tags、
-   use_when、retrieval_keywords 和 follow_up；
-5. 标记 source_kind 为 curated；
-6. 把原始 source path、source id 和 URL 写入 provenance，而不是写进 serving 正文。
+1. computes a stable digest from the title, the original source id, and the sanitized content;
+2. generates the unified tidb81 chunk id and source id;
+3. forces version to 8.1;
+4. keeps kb_type, component, related_components, source_scope, topic_tags, use_when,
+   retrieval_keywords, and follow_up;
+5. marks source_kind as curated;
+6. writes the original source path, source id, and URL into provenance rather than into the
+   serving body.
 
-如果新 chunk 与已有 chunk_id 冲突，脚本直接失败。这里不做覆盖式兼容，也不静默选取其中
-一条记录。
+If a new chunk conflicts with an existing chunk_id, the script fails immediately. There is no
+overwrite-style compatibility here, and no record is silently picked over another.
 
-### 3.3 生成 processed JSONL 和 provenance
+### 3.3 Generating the processed JSONL and provenance
 
-processed 输出：
+The processed outputs:
 
 ~~~
 knowledge/tidb_unified/mappings/tidb81_chunks.jsonl
 knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
 ~~~
 
-processed chunk 仍然拥有完整的维护字段，并额外包含：
+A processed chunk still carries the complete maintenance fields, plus:
 
 ~~~
 source_class
@@ -175,7 +190,7 @@ source_origin_url
 source_origin_pinned_url
 ~~~
 
-provenance 一条一条地记录：
+provenance records, one entry per chunk:
 
 ~~~
 chunk_id
@@ -185,30 +200,31 @@ source_origin_path
 source_origin_url
 ~~~
 
-这使得官方语料和 curated 语料已经在第二层混合，但它们的身份仍然可审计。processed 层
-不直接交给 Agent。
+This means the official and curated corpora are already mixed at the second layer, but their
+identities remain auditable. The processed layer is never handed to the Agent directly.
 
-## 4. serving 层：来源中立投影
+## 4. serving Layer: Source-neutral Projection
 
-### 4.1 字段投影
+### 4.1 Field projection
 
-serving 输出是：
+The serving output is:
 
 ~~~
 knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl
 ~~~
 
-脚本只从 unified record 中取统一 required fields，然后执行以下投影：
+The script takes only the unified required fields from the unified record and then applies this
+projection:
 
-- source_id 置为空；
-- source_file 置为空；
-- source_url 置为空；
-- pinned_source_url 置为空；
-- title、heading path、use_when、retrieval_keywords、follow_up 和 content 清洗；
-- 重新计算 content_sha256；
-- 检查清洗后的全部语义字段是否仍包含禁止 token。
+- source_id is set to empty;
+- source_file is set to empty;
+- source_url is set to empty;
+- pinned_source_url is set to empty;
+- title, heading path, use_when, retrieval_keywords, follow_up, and content are sanitized;
+- content_sha256 is recomputed;
+- all sanitized semantic fields are checked for remaining forbidden tokens.
 
-serving 仍保留影响检索和使用判断的语义字段：
+serving still keeps the semantic fields that affect retrieval and usage decisions:
 
 ~~~
 chunk_id
@@ -227,58 +243,62 @@ content
 content_sha256
 ~~~
 
-source identity 与 semantic metadata 必须区分：version、component 和 source_scope 会改变
-知识适用范围，不能为了隐藏来源而删除；source_file、source_url 和 source class 只是维护
-身份，不能进入 Agent-facing 内容。
+Source identity and semantic metadata must be distinguished: version, component, and source_scope
+change the applicability of the knowledge and must not be deleted to hide provenance; source_file,
+source_url, and source class are only maintenance identity and must not enter Agent-facing
+content.
 
-### 4.2 泄漏检查
+### 4.2 Leakage checks
 
-scripts/merge_tidb_curated_knowledge.py 的 FORBIDDEN_SERVING_TOKENS 会拒绝常见的
-benchmark、场景编号、source class、物理路径和 provenance 标识。清洗会去除 Markdown URL、
-HTTP URL 和 file URL，并把已知内部 case token 改写成一般语义。
+FORBIDDEN_SERVING_TOKENS in scripts/merge_tidb_curated_knowledge.py rejects common benchmark
+names, scenario numbers, source classes, physical paths, and provenance identifiers. Sanitization
+removes Markdown URLs, HTTP URLs, and file URLs, and rewrites known internal case tokens into
+generic semantics.
 
-这不是把答案改写成另一种答案的机制。清洗的目标是移除来源和 benchmark 身份；如果正文仍
-依赖本题动态对象、固定答案或 evaluator 条件，应当直接修改 raw source，而不是继续扩展
-sanitize_serving_text() 的替换表。
+This is not a mechanism for rewriting one answer into another. The goal of sanitization is to
+remove provenance and benchmark identity; if a body still depends on this problem's dynamic
+objects, fixed answers, or evaluator conditions, fix the raw source directly instead of extending
+the replacement table of sanitize_serving_text().
 
 ### 4.3 manifest
 
-merge 会生成：
+The merge generates:
 
 ~~~
 knowledge/tidb_unified/manifests/tidb81_unified_manifest.json
 ~~~
 
-manifest 至少记录：
+The manifest records at least:
 
-- schema_version、corpus_id、target_version；
-- processed 和 serving 的相对路径、记录数和 SHA-256；
-- provenance 的 SHA-256；
-- official 和 curated 的数量；
-- 官方输入文件及其 SHA-256；
-- Agent projection 允许的字段集合。
+- schema_version, corpus_id, target_version;
+- the relative paths, record counts, and SHA-256 of processed and serving;
+- the SHA-256 of provenance;
+- the counts of official and curated records;
+- the official input files and their SHA-256;
+- the field set allowed in the Agent projection.
 
-serving hash、processed hash 和 provenance hash 是构建证据，不是 Agent 知识答案。
+The serving hash, processed hash, and provenance hash are build evidence, not Agent knowledge
+answers.
 
-## 5. TiDBKnowledgeBase 的配置和路径解析
+## 5. TiDBKnowledgeBase Configuration and Path Resolution
 
-### 5.1 主仓库路径
+### 5.1 Main repository path
 
-src/project_paths.py 在模块加载时运行：
+src/project_paths.py runs at module load time:
 
 ~~~bash
 git rev-parse --git-common-dir
 ~~~
 
-再由 Git common directory 得到主仓库根目录。resolve_project_path() 将所有相对 source、
-persist dir 和脚本路径解析到这个根目录。因此 linked WorkTree 不会生成第二份正式语料或
-索引。
+and derives the main repository root from the Git common directory. resolve_project_path()
+resolves all relative source, persist dir, and script paths against this root. As a result, a
+linked WorkTree never produces a second official corpus or index.
 
-### 5.2 TiDB 默认配置
+### 5.2 TiDB default configuration
 
-src/knowledge/tidb_knowledge_base.py 定义：
+src/knowledge/tidb_knowledge_base.py defines:
 
-| 常量或配置 | 默认值 |
+| Constant or configuration | Default value |
 |---|---|
 | DEFAULT_COLLECTION_NAME | tidb81_unified_docs |
 | hierarchical source | knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl |
@@ -288,7 +308,7 @@ src/knowledge/tidb_knowledge_base.py 定义：
 | embedding device | cuda |
 | knowledge mode | hierarchical |
 
-运行时可以通过明确的环境变量覆盖：
+At runtime these can be overridden through explicit environment variables:
 
 ~~~
 AIOPS_TIDB_HIERARCHICAL_KB_SOURCE
@@ -302,137 +322,148 @@ AIOPS_TIDB_KB_EMBED_BATCH_SIZE
 AIOPS_TIDB_KB_EMBED_WORKERS
 ~~~
 
-正式 TiDB Agent 不通过环境变量切换到 general mode，也不创建场景私有 collection。
+The official TiDB Agent does not switch to general mode through environment variables, nor does it
+create scenario-private collections.
 
-### 5.3 source mode 的边界
+### 5.3 Source mode boundaries
 
-TiDBKnowledgeBase 的 hierarchical mode 读取 serving JSONL，general mode 才会读取
-`knowledge/tidb_src` 目录（上游 PingCAP docs 固定 commit 的本地镜像，不随仓库分发，见 `knowledge/tidb/ATTRIBUTION.md`）并结合官方 inventory、source lock 和 Markdown parser 生成 section
-records。两种 mode 的 source schema 和用途不同。
+The hierarchical mode of TiDBKnowledgeBase reads the serving JSONL; only general mode reads the
+`knowledge/tidb_src` directory (a local mirror of the upstream PingCAP docs at a pinned commit,
+not distributed with the repository, see `knowledge/tidb/ATTRIBUTION.md`) and combines the
+official inventory, source lock, and Markdown parser to produce section records. The two modes
+have different source schemas and purposes.
 
-知识驱动场景使用 hierarchical mode，因为 curated 内容已经由 merge 脚本进入统一 serving
-corpus。不要把 curated Markdown 直接放进 general 目录，绕过三层合并和 serving 清洗。
+Knowledge-driven scenarios use hierarchical mode, because curated content has already entered the
+unified serving corpus through the merge script. Do not put curated Markdown directly into the
+general directory to bypass the three-layer merge and serving sanitization.
 
-## 6. 索引构建的代码实现
+## 6. Index Building Code
 
-统一 CLI 是：
+The unified CLI is:
 
 ~~~
 scripts/build_tidb_knowledge_base.py
 ~~~
 
-它解析 backend、knowledge mode、source file、persist dir、collection、embedding model、
-device、batch size 和 workers，然后实例化 TiDBKnowledgeBase 并调用 build()。build() 的
-共同前置步骤是：
+It parses the backend, knowledge mode, source file, persist dir, collection, embedding model,
+device, batch size, and workers, then instantiates TiDBKnowledgeBase and calls build(). The common
+prerequisite steps of build() are:
 
-1. resolve source path；
-2. _load_records() 逐行校验字段、分类、组件、范围、正文 hash 和 chunk id 唯一性；
-3. 按 backend 调用 SQLite 或 Chroma builder；
-4. 写入索引目录下的 manifest.json；
-5. 按 verify-query 运行一次查询验证。
+1. resolve the source path;
+2. _load_records() validates line by line the fields, category, component, scope, body hash, and
+   chunk id uniqueness;
+3. invoke the SQLite or Chroma builder according to the backend;
+4. write manifest.json into the index directory;
+5. run one query verification with verify-query.
 
 ### 6.1 SQLite FTS5
 
-SQLite builder 在 src/knowledge/markdown_knowledge_base.py 的 _build_sqlite()：
+The SQLite builder is _build_sqlite() in src/knowledge/markdown_knowledge_base.py:
 
-- 创建 chunks 表保存完整 serving record；
-- 创建 chunks_fts FTS5 虚拟表，索引 title、use_when、retrieval_keywords 和 content；
-- 默认 reset 时删除旧数据库并重建；
-- 每条 chunk 以 chunk_id 作为主键；
-- 在 FTS 表中使用同一个 chunk_id 与正文建立关联。
+- creates a chunks table storing the complete serving record;
+- creates the chunks_fts FTS5 virtual table indexing title, use_when, retrieval_keywords, and
+  content;
+- on reset (the default), deletes the old database and rebuilds;
+- uses chunk_id as the primary key of every chunk;
+- associates with the body through the same chunk_id in the FTS table.
 
-查询由 _query_sqlite() 执行：
+Queries are executed by _query_sqlite():
 
-- 将 query 拆成可索引 token；
-- 以 OR 组合 FTS5 MATCH；
-- 按 source_scope、kb_type 和 component 添加过滤；
-- 用 bm25 distance 排序；
-- 将 distance 转成统一 score；
-- 返回截断后的 content。
+- splits the query into indexable tokens;
+- combines FTS5 MATCH with OR;
+- adds filters by source_scope, kb_type, and component;
+- orders by bm25 distance;
+- converts distance into the unified score;
+- returns truncated content.
 
-SQLite 不需要 embedding service。它是明确选择的全文检索后端，不是 Chroma 失败时的 fallback。
+SQLite needs no embedding service. It is a deliberately chosen full-text retrieval backend, not a
+fallback when Chroma fails.
 
-### 6.2 Chroma 向量索引
+### 6.2 Chroma vector index
 
-Chroma builder 在 _build_chroma()：
+The Chroma builder is _build_chroma():
 
-1. 创建 PersistentClient，路径是 hierarchical Chroma persist dir；
-2. reset 时删除同名 collection；
-3. 按 embedding_text 长度排序，降低批处理中的长度差异；
-4. 按 embed_batch_size 和 embed_workers 组织请求；
-5. 通过 request_embeddings() 调用共享 embedding service；
-6. 用 chunk_id、embedding、正文 document 和 metadata upsert 到 collection。
+1. creates a PersistentClient whose path is the hierarchical Chroma persist dir;
+2. on reset, deletes the same-named collection;
+3. sorts by embedding_text length to reduce length variance within batches;
+4. organizes requests by embed_batch_size and embed_workers;
+5. calls the shared embedding service through request_embeddings();
+6. upserts chunk_id, embedding, body document, and metadata into the collection.
 
-KnowledgeRecord.embedding_text 由以下信息组成：
+KnowledgeRecord.embedding_text consists of:
 
 ~~~
 title
 use_when
 Keywords: retrieval_keywords
 follow_up
-content 的前 2048 个字符
+the first 2048 characters of content
 ~~~
 
-正文完整内容作为 Chroma document 保存，但 embedding 输入只取前 2048 个字符。这个差异是
-有意的：标题、适用条件、关键词和后续检查先进入向量，返回结果仍然保留完整正文。
+The complete body is stored as the Chroma document, but the embedding input takes only the first
+2048 characters. This difference is intentional: the title, applicability conditions, keywords,
+and follow-up checks enter the vector first, while returned results still keep the complete body.
 
-Chroma metadata 包含 chunk_id、source identity 字段、title、分类、组件、范围、版本和
-has_component_* 过滤字段。由于正式输入是 serving projection，source_id、source_file、
-source_url 和 pinned_source_url 在这里为空；即使内部索引 metadata 存在，Agent projection
-也不会把它们返回。
+Chroma metadata includes chunk_id, the source identity fields, title, category, component, scope,
+version, and the has_component_* filter fields. Because the official input is the serving
+projection, source_id, source_file, source_url, and pinned_source_url are empty here; even though
+the internal index metadata contains them, the Agent projection never returns them.
 
-查询由 _query_chroma() 执行：
+Queries are executed by _query_chroma():
 
-- 先通过 request_embeddings() 生成 query vector；
-- 根据 source_scope、kb_type、component 生成 Chroma where；
-- 请求 top_k、metadatas、distances 和 documents；
-- 将 distance 转换成统一 score；
-- 返回来源中立的结果。
+- first generates the query vector through request_embeddings();
+- builds the Chroma where from source_scope, kb_type, and component;
+- requests top_k, metadatas, distances, and documents;
+- converts distance into the unified score;
+- returns source-neutral results.
 
-正式 Agent-facing 默认是 Chroma hierarchical index。批量建库可以通过
-AIOPS_EMBEDDING_MODEL_URLS 显式提供多个 endpoint，但这只是建库并行配置，不是查询时的
-后端 fallback。
+The official Agent-facing default is the Chroma hierarchical index. Bulk index builds can
+explicitly supply multiple endpoints through AIOPS_EMBEDDING_MODEL_URLS, but that is only
+build-time parallelism configuration, not a query-time backend fallback.
 
-## 7. manifest 和 stale index
+## 7. manifest and stale index
 
-每个 backend 的 persist dir 都有一个 manifest.json。build() 写入的 manifest 合并了：
+Every backend's persist dir has a manifest.json. The manifest written by build() merges:
 
-- backend、collection、knowledge_base_mode；
-- source_file、source corpus hash、document_count、node_count；
-- source commit、processing prompt hash（如果 source manifest 提供）；
-- Chroma 的 embedding model；
-- build timestamp。
+- backend, collection, knowledge_base_mode;
+- source_file, source corpus hash, document_count, node_count;
+- source commit and processing prompt hash (if the source manifest provides them);
+- the Chroma embedding model;
+- the build timestamp.
 
-查询前 _validated_manifest() 必须通过：
+Before querying, _validated_manifest() must pass:
 
-1. manifest 文件存在；
-2. manifest backend 和 collection 与当前对象一致；
-3. manifest source file 仍存在；
-4. source file 当前 SHA-256 与构建时一致；
-5. 若 manifest 声明 source_commit 且 source lock 存在，commit 仍一致。
+1. the manifest file exists;
+2. the manifest backend and collection match the current object;
+3. the manifest source file still exists;
+4. the source file's current SHA-256 matches the build-time hash;
+5. if the manifest declares a source_commit and the source lock exists, the commit still matches.
 
-任一步骤失败都直接抛出带路径、backend、collection 和 hash 的错误。实现不允许：
+Any failed step raises an error immediately, carrying the path, backend, collection, and hash. The
+implementation must not:
 
-- 继续使用旧索引；
-- 自动切换另一 backend；
-- 自动读取 raw corpus 或网络文档；
-- 用硬编码摘要代替空结果；
-- 由 Scenario 代码自行修补 manifest。
+- keep using the stale index;
+- switch to another backend automatically;
+- read the raw corpus or web documents automatically;
+- substitute hardcoded summaries for empty results;
+- let Scenario code patch the manifest itself.
 
-内容、元数据、serving 清洗规则、embedding model、collection 或 source commit 发生变化时，
-应重新 merge（如果是语料或投影变化）并重新构建受影响 backend。
+When content, metadata, serving sanitization rules, the embedding model, the collection, or the
+source commit changes, re-run the merge (for corpus or projection changes) and rebuild the
+affected backends.
 
-## 8. 标准构建流程
+## 8. Standard Build Procedure
 
-在主仓库或任意 linked WorkTree 执行都可以，但产物最终写入主仓库。
+You may execute from the main repository or any linked WorkTree, but the artifacts end up written
+to the main repository.
 
-### 8.1 重新物化三层语料
+### 8.1 Re-materialize the three corpus layers
 
 ~~~bash
 conda run -n aiops python scripts/merge_tidb_curated_knowledge.py
 ~~~
 
-### 8.2 构建 SQLite
+### 8.2 Build SQLite
 
 ~~~bash
 conda run -n aiops python scripts/build_tidb_knowledge_base.py \
@@ -444,7 +475,7 @@ conda run -n aiops python scripts/build_tidb_knowledge_base.py \
   --no-progress
 ~~~
 
-### 8.3 确保 embedding service 并构建 Chroma
+### 8.3 Ensure the embedding service and build Chroma
 
 ~~~bash
 conda run -n aiops python scripts/start_embedding_model.py \
@@ -466,28 +497,29 @@ conda run -n aiops python scripts/build_tidb_knowledge_base.py \
   --no-progress
 ~~~
 
-### 8.4 验证
+### 8.4 Verification
 
 ~~~bash
 AIOPS_EMBEDDING_MODEL_URL=http://127.0.0.1:8765 \
 conda run -n aiops python scripts/smoke_tidb_unified_knowledge.py
 ~~~
 
-验证重点是：
+The verification focuses on:
 
-- processed 和 serving 记录数、hash、provenance 数量一致；
-- serving 不含 source/provenance/benchmark 泄漏；
-- 两个 index 的 manifest 与 serving hash 一致；
-- 标准 query 能召回目标语义；
-- Agent projection 没有 source_id、source_file、source_url、persist_dir 或 commit；
-- embedding health 的 model、device 和 dimension 正确。
+- processed and serving record counts, hashes, and the provenance count are consistent;
+- serving contains no source/provenance/benchmark leakage;
+- both indexes' manifests match the serving hash;
+- standard queries recall the target semantics;
+- the Agent projection has no source_id, source_file, source_url, persist_dir, or commit;
+- the embedding health model, device, and dimension are correct.
 
-## 9. runtime projection 的两道边界
+## 9. The Two Boundaries of the runtime projection
 
-统一知识库有两道来源隔离：
+The unified knowledge base has two provenance isolation boundaries:
 
-1. serving projection 在物理数据层将 source identity 置空并检查泄漏；
-2. src/execution/environment.py 的 _search_tidb_knowledge() 只允许返回：
+1. the serving projection blanks source identity at the physical data layer and checks for
+   leakage;
+2. _search_tidb_knowledge() in src/execution/environment.py only allows returning:
 
 ~~~
 rank
@@ -500,34 +532,40 @@ source_scope
 content
 ~~~
 
-内部 TiDBKnowledgeBase.query() 仍可返回 index metadata，供维护者检查 manifest 和延迟；
-Agent 工具在返回 JSON 前会移除这些字段。Scenario/ScenarioCase 不得绕过这两道边界直接读取
-JSONL、SQLite 表、Chroma metadata 或 provenance sidecar。
+The internal TiDBKnowledgeBase.query() may still return index metadata for maintainers to inspect
+the manifest and latency; the Agent tool removes those fields before returning JSON.
+Scenario/ScenarioCase must not bypass these two boundaries to read the JSONL, SQLite tables,
+Chroma metadata, or the provenance sidecar directly.
 
-## 10. 变更边界和代码归属
+## 10. Change Boundaries and Code Ownership
 
-| 责任 | 当前实现 |
+| Responsibility | Current implementation |
 |---|---|
-| 主仓库根目录和 WorkTree 解析 | src/project_paths.py |
-| TiDB mode、source、collection、persist dir | src/knowledge/tidb_knowledge_base.py |
-| record schema、SQLite、Chroma、manifest、query | src/knowledge/markdown_knowledge_base.py |
-| embedding health、锁、自动拉起、HTTP client | src/knowledge/embedding_model_runtime.py |
+| Main repository root and WorkTree resolution | src/project_paths.py |
+| TiDB mode, source, collection, persist dir | src/knowledge/tidb_knowledge_base.py |
+| record schema, SQLite, Chroma, manifest, query | src/knowledge/markdown_knowledge_base.py |
+| embedding health, locks, auto-start, HTTP client | src/knowledge/embedding_model_runtime.py |
 | embedding HTTP server | scripts/start_embedding_model.py |
 | raw -> processed -> serving | scripts/merge_tidb_curated_knowledge.py |
 | SQLite/Chroma build CLI | scripts/build_tidb_knowledge_base.py |
-| 人工查询 CLI | scripts/query_tidb_unified_knowledge.py |
+| manual query CLI | scripts/query_tidb_unified_knowledge.py |
 | Agent-facing projection | src/execution/environment.py |
-| 工具 schema | src/execution/tidb_tool_definitions.py |
-| 统一 smoke | scripts/smoke_tidb_unified_knowledge.py |
+| tool schema | src/execution/tidb_tool_definitions.py |
+| unified smoke test | scripts/smoke_tidb_unified_knowledge.py |
 
-后续开发应遵循以下边界：
+Follow these boundaries going forward:
 
-- 新增语料修改 raw source 或 merge 规则，不直接编辑 SQLite、Chroma 或 serving 产物；
-- 新增字段先修改统一 record schema、merge projection 和 builder，再修改调用方；
-- 新的过滤条件必须同时有 serving 字段、SQLite 条件、Chroma metadata 和 Agent 参数合同；
-- 新的 embedding 生命周期行为只能进入 embedding_model_runtime.py；
-- Scenario 只调用 search_knowledge，不复制构建和查询逻辑；
-- 任何 index 产物都只在主仓库保留一份正式副本。
+- New corpus goes through raw source or merge rule changes; do not edit SQLite, Chroma, or serving
+  artifacts directly;
+- New fields change the unified record schema, merge projection, and builder first, then the
+  callers;
+- New filter conditions must come with a serving field, a SQLite condition, Chroma metadata, and an
+  Agent parameter contract at the same time;
+- New embedding lifecycle behavior only goes into embedding_model_runtime.py;
+- Scenarios only call search_knowledge and do not copy build or query logic;
+- Every index artifact keeps exactly one official copy in the main repository.
 
-本规范描述的是构建和物理边界，不包含知识驱动场景交付 checklist。场景开发时仍应另行
-依据场景合同、知识驱动设计哲学和项目的 Scenario 实现规范完成场景级审查。
+This standard describes construction and physical boundaries; it does not include the
+knowledge-driven scenario delivery checklist. During scenario development, still perform
+scenario-level review separately according to the scenario contract, the knowledge-driven design
+philosophy, and the project's Scenario implementation standard.

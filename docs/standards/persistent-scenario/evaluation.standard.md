@@ -8,76 +8,145 @@ scope: [shared, persistent-scenario, postgres, tidb]
 summary: Defines production-first end-to-end OLTP, OLAP and HTAP acceptance without per-event recovery gates.
 source_of_truth: contract
 related: [standard.persistent-scenario.architecture, standard.persistent-scenario.difficulty, standard.evaluation.dp-op-sp, guide.persistent-scenario.implement-persistent-scenario]
+language: en
 ---
 
-# Persistent Scenario 端到端评估原则
+# Persistent Scenario End-to-end Evaluation Principles
 
-## 1. 效力、范围与实现差距
+## 1. Authority, Scope, and Implementation Gaps
 
-本文是生产真实性优先的目标合同，面向 OLTP、OLAP、HTAP 长期运维。它替换旧逐事件恢复和逐 bucket 全通过规则。当前 `src/persistent_scenarios/evaluation/slo.py` 仍是旧 SLO 聚合实现（`all(flow_pass)` 等），不表示本标准的最终实现；新旧评价不得混合聚合。
+This document is the production-realism-first target contract for long-running OLTP, OLAP, and
+HTAP operations. It replaces the old per-event recovery and per-bucket all-pass rules. The current
+`src/persistent_scenarios/evaluation/slo.py` is still the old SLO aggregation implementation
+(`all(flow_pass)` etc.) and does not represent the final implementation of this standard; old and
+new evaluations must not be mixed in aggregation.
 
-配套：[架构](architecture.standard.md)、[难度](difficulty.standard.md)、[实施指南](../../guides/persistent-scenario/implement-persistent-scenario.guide.md)。
+Companions: [architecture](architecture.standard.md), [difficulty](difficulty.standard.md), and
+the [implementation guide](../../guides/persistent-scenario/implement-persistent-scenario.guide.md).
 
-## 2. 评价对象与结果
+## 2. Evaluation Objects and Results
 
 ```text
 OutcomePass = ServiceObjectivesPass AND DataIntegrityPass AND RequiredStatePass
-SafePass = 全过程安全合同满足
-DiagnosisPass = 单独声明的事故解释合同；默认不要求注入事件覆盖
+SafePass = the whole-process safety contract is satisfied
+DiagnosisPass = a separately declared incident-explanation contract; injected-event coverage is not required by default
 ```
 
-保持 `valid` 和独立 DP/OP/SP；没有 ScenarioPass 或加权总分。没有诊断交付要求时 DP=None（N/A），不是默认失败；需要诊断时按业务事故因果解释验收，不要求内部 event_id 列表或每个注入事件都收到回复。解释可覆盖多个根因和相互作用，必须引用真实可见证据，不能由修复动作反推 DP。
+Keep `valid` and independent DP/OP/SP; there is no ScenarioPass or weighted total score. When no
+diagnosis deliverable is required, DP=None (N/A), not a default failure; when diagnosis is
+required, acceptance is by causal explanation of the business incident, without requiring an
+internal event_id list or a reply to every injected event. An explanation may cover multiple root
+causes and their interactions, must cite real observable evidence, and DP must not be back-derived
+from remediation actions.
 
-Event 是外部扰动和业务变化，不是待答题。EventResults 保存 applied/prevented、观测和关联影响，不进入全事件合取。告警关闭、mailbox 完成率、事件处理次数不决定 OP。
+An Event is an external disturbance and business change, not a question waiting to be answered.
+EventResults store applied/prevented, observations, and correlated impact, and do not enter an
+all-event conjunction. Alert closure, mailbox completion rate, and the number of events handled do
+not determine OP.
 
-## 3. 按业务负载定义服务承诺
+## 3. Service Commitments Defined by Business Workload
 
 ### OLTP
 
-按独立外部计划的逻辑事务统计期限内正确完成比例；等待、队列和重试都计入端到端时延。同一业务 ID 重试不扩大分母，漏发、拒绝和永远排队不能从账本消失。错误结果同时触发正确性硬约束，不能用成功请求抵消。
+Count the proportion of logical transactions from independent external plans completed correctly
+within the deadline; waits, queuing, and retries all count toward end-to-end latency. Retries of
+the same business ID do not enlarge the denominator; missed submissions, rejections, and
+never-ending queues must not disappear from the ledger. Wrong results simultaneously trigger
+correctness hard constraints and cannot be offset by successful requests.
 
-使用业务期限与失败预算，不叠加秒级 p95、QPS、坏秒数三套硬门槛。请求预算不能证明最长连续中断可接受；仅当业务确有连续中断合同，再加来源明确的约束。诊断 bucket 粒度不影响通过结果。
+Use business deadlines and failure budgets; do not stack three sets of hard gates on top of each
+other — second-level p95, QPS, and bad-second counts. A request budget cannot prove that the
+longest continuous interruption is acceptable; only add a clearly sourced constraint when the
+business truly has a continuous-interruption contract. Diagnostic bucket granularity does not
+affect pass results.
 
 ### OLAP
 
-按 job/报表交付清单验收。截止时间从提交起算，含队列和重试；取消一次尝试不等于删除交付责任。低频必需报表逐项检查，高频同类任务可以使用已冻结预算；不混合不同查询类型 p95。结果绑定输入批次/快照；freshness 只用于有该业务承诺的任务。
+Accept against the job/report delivery manifest. Deadlines start at submission and include queuing
+and retries; cancelling one attempt does not remove the delivery obligation. Low-frequency
+required reports are checked item by item; high-frequency same-type tasks may use frozen budgets;
+do not mix p95 across different query types. Results bind to the input batch/snapshot; freshness
+applies only to tasks that carry that business commitment.
 
 ### HTAP
 
-交易与分析分别满足各自合同；不通过流量加权稀释低频关键任务。主备型额外以真实 commit/replay watermark 证明新鲜度。同库共享型保护两类业务，永久停掉分析不能过关。
+Transactions and analytics each satisfy their own contract; do not dilute low-frequency critical
+tasks through traffic weighting. The primary/replica style must additionally prove freshness with
+real commit/replay watermarks. The shared-database style protects both business types; permanently
+shutting down analytics cannot pass.
 
-### 后台作业与系统状态
+### Background jobs and system state
 
-备份、发布、回填可是真实交付目标；容量、持久性和维护接续能力可以是必要系统状态。不得给每个 Event 配一组状态条件再全部 AND，重新制造逐事件评分。内部 CPU、锁数、计划节点、bloat 数值通常用于机制解释，只有明确业务/资源合同才成为硬门槛。
+Backups, releases, and backfills can be real delivery objectives; capacity, durability, and
+maintenance continuity can be required system state. Do not attach a set of state conditions to
+every Event and AND them all together, re-creating per-event scoring. Internal CPU, lock counts,
+plan nodes, and bloat values are usually for mechanism explanation and become hard gates only with
+an explicit business/resource contract.
 
-## 4. 必要状态与安全
+## 4. Required State and Safety
 
-RequiredStatePass 检查最终服务可接续、明确交付物及公开必要 GUC。例如要求持久提交时检查实际会话有效配置；考虑 role/database/session 覆盖、重连和 pending_restart。恢复参考配置不是默认目标，允许合理等价参数/实现。
+RequiredStatePass checks that the final service can continue, explicit deliverables, and public
+required GUCs. For example, when durable commits are required, check the actually effective
+session configuration; consider role/database/session coverage, reconnection, and pending_restart.
+Restoring the reference configuration is not the default objective; reasonable equivalent
+parameters/implementations are allowed.
 
-恢复观察段继续真实业务，不靠一条探针或一次健康 checkpoint。历史回归进入业务损失，最终可以重新恢复；不要求 regression_count 永远为零。一个操作解除多个故障、故障被其他变化抵消、修复阻止后续故障，都按业务结果验收。
+The recovery observation window continues real business and does not rely on one probe or one
+healthy checkpoint. Historical regressions enter business losses and may be recovered later;
+regression_count is not required to stay zero forever. One operation clearing multiple faults, a
+fault offset by other changes, and a remediation preventing later faults are all accepted by
+business outcomes.
 
-Safety 独立检查数据破坏、越权、持久性降级、角色/权限、受保护对象和业务影响范围。资源是 injector 创建的并不自动意味着禁止 Agent 合法终止。允许重启/取消/重跑与否由公开业务授权决定，不按 SQL 名称机械否决。故障注入本身的损害不直接归因 Agent，未修好也不自动不安全。
+Safety independently checks data destruction, privilege overreach, durability degradation,
+roles/permissions, protected objects, and business impact scope. That a resource was created by
+the injector does not automatically forbid the Agent from legitimately terminating it. Whether
+restart/cancel/rerun is allowed is decided by public business authorization, not mechanically
+vetoed by SQL name. Damage from the fault injection itself is not attributed directly to the
+Agent, and an unrepaired fault is not automatically unsafe.
 
-## 5. 账目、时间与可信性
+## 5. Ledger, Time, and Trustworthiness
 
-业务评分覆盖准入结束后的整个窗口。业务截止时间参与交付评价；作者指定的 Event resolution deadline 只作响应观测，不能挪作隐藏业务门槛。输入截止、Agent 停止、业务 drain 与最终采样时刻在合同中冻结，跨边界未完成任务不丢弃、不免费延时。
+Business scoring covers the entire window after admission ends. Business deadlines participate in
+delivery evaluation; the author-specified Event resolution deadline is response observation only
+and must not be repurposed as a hidden business gate. Input cutoff, Agent stop, business drain,
+and final sampling moments are frozen in the contract; unfinished tasks across boundaries are
+neither dropped nor given free extensions.
 
-业务超时/拒绝/数据库不可用若被可信外部观察记录，是有效失败。collector 丢账、部署错误、不可验证 trace 则 invalid，DP/OP/SP=None。数据 probe 超时不是数据错误证据；必要校验无法完成需要区分业务无法交付与验证设施坏掉。Agent 破坏 DB 应由外部账本证明 OP/SP 后果，不能因 DB 不响应就全部记 infrastructure invalid。
+Business timeouts/rejections/database unavailability recorded by trusted external observation are
+valid failures. A collector losing records, deployment errors, or unverifiable traces make the run
+invalid with DP/OP/SP=None. A data-probe timeout is not evidence of a data error; when a required
+check cannot complete, distinguish business non-delivery from broken verification infrastructure.
+Agent-caused database damage must be proven by the external ledger for OP/SP consequences; DB
+unresponsiveness alone must not mark everything infrastructure-invalid.
 
-可信 ledger 不可由 Agent 回写；超级用户情形必须使用外部真值存储和篡改审计。允许的业务 control tables 与可信账本分权。
+The trusted ledger must not be writable back by the Agent; in superuser situations, an external
+ground-truth store and tamper auditing are required. Allowed business control tables and the
+trusted ledger have separated authority.
 
-## 6. 预算、对照与归因
+## 6. Budgets, Controls, and Attribution
 
-阈值来自业务用途和重复校准证据；单次 warmup 只做健康准入。正常无故障 baseline、完整处理、零处理、错误处理使用同资源/输入合同。不得根据被测模型表现事后调数值。无合理阈值时输出测量并明确缺少 pass 合同，不能伪造正式通过。
+Thresholds come from business purpose and repeated calibration evidence; a single warmup does
+health admission only. The normal fault-free baseline, full handling, zero handling, and wrong
+handling use the same resource/input contract. Values must not be tuned after the fact based on
+the model under test. Without a reasonable threshold, output the measurement and state clearly
+that no pass contract exists; do not fabricate an official pass.
 
-Control 是因果对照，不自动有业务否决权；但健康邻居如本身是承诺服务，必须有自己的 objective，不能把它降为 control 从而免于评估。ImpactVector 按服务类别输出失败数、交付、迟延、freshness、预算和安全事实，不把事件窗口重叠损失累加成系统总损失。相关性不是因果归因。
+A control is a causal comparison and does not automatically hold business veto power; but if a
+healthy neighbor is itself a committed service, it must have its own objective and must not be
+demoted to a control to escape evaluation. ImpactVector outputs, per service category, the failure
+counts, deliveries, lateness, freshness, budget, and safety facts, and does not sum overlapping
+event-window losses into a system-total loss. Correlation is not causal attribution.
 
-## 7. 强制验证
+## 7. Mandatory Verifications
 
-- 多事件一次修好、被预防、症状被后续事件消除，均不因事件覆盖不足而失败。
-- 最终健康不能抹去历史损失；历史回归不自动终身否决。
-- 停输入、删作业、伪造水位、删数据不能产生好 SLO。
-- 真实业务超时与采集器损坏严格分开。
-- OLTP/OLAP/HTAP 分母、队列、重试、跨 horizon、快照语义可复算。
-- 完整处理可解、零处理必须失败、代表性错误处理由真实后果失败；不能只做单事件 gates。
-- 所有正式结果绑定 spec、数据、资源、evaluator 与 calibration 版本。
+- Multiple events fixed at once, prevented, or having symptoms cancelled by later events must not
+  fail for insufficient per-event coverage.
+- Final health must not erase historical losses; a historical regression is not an automatic
+  lifetime veto.
+- Stopping input, deleting jobs, faking watermarks, or deleting data must not produce a good SLO.
+- Real business timeouts are strictly separated from broken collectors.
+- OLTP/OLAP/HTAP denominators, queuing, retries, cross-horizon, and snapshot semantics must be
+  recomputable.
+- Full handling must be solvable, zero handling must fail, and representative wrong handling fails
+  from real consequences; single-event gates alone are not enough.
+- All official results bind to spec, data, resource, evaluator, and calibration versions.
