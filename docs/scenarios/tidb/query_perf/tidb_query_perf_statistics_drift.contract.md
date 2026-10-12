@@ -8,6 +8,7 @@ scope: [tidb, query_perf, tidb_query_perf_statistics_drift]
 summary: Current code-backed contract snapshot for tidb_query_perf_statistics_drift; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_query_perf_statistics_drift`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: A distributed order aggregate spans two physical shards whose post-collection distribution shifts leave both sides with stale statistics while control shards remain healthy.
-- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] 某订单聚合 SQL 指纹的 P95 从 25ms 升到 2.8s，同一指纹的处理行数明显增加，但其它相似聚合和集群可用性没有同步异常。请从 SQL 指纹、执行计划、估算/实际行数、统计新鲜度和数据分布中定位真正影响该请求的原因，排除无关 workload、索引定义和集群级故障，并在不改变业务结果的前提下恢复性能。
+- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] The P95 of an order-aggregate SQL fingerprint has risen from 25ms to 2.8s, and the rows processed by the same fingerprint have increased noticeably, but other similar aggregates and cluster availability show no synchronized anomalies. Locate the real cause affecting this request from the SQL fingerprint, execution plan, estimated/actual row counts, statistics freshness, and data distribution; rule out unrelated workloads, index definitions, and cluster-level failures; and restore performance without changing the business result.
 - Initial-state fields: `control_workload`, `status`, `symptom`
 - Expected-target fields: `business_result_consistent`, `estimate_actual_ratio_at_most`, `estimated_rows`, `status`
 - Background profiles: qp04_target_order_report, qp04_control_order_report, qp04_statistics_inventory, qp04_control_point_read, qp04_noise_archive_report
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A distributed order aggregate spans two physical shards whose post-collection distribution shifts leave both sides with stale statistics while control shards remain healthy.
-- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] 某订单聚合 SQL 指纹的 P95 从 25ms 升到 2.8s，同一指纹的处理行数明显增加，但其它相似聚合和集群可用性没有同步异常。请从 SQL 指纹、执行计划、估算/实际行数、统计新鲜度和数据分布中定位真正影响该请求的原因，排除无关 workload、索引定义和集群级故障，并在不改变业务结果的前提下恢复性能。
+- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] The P95 of an order-aggregate SQL fingerprint has risen from 25ms to 2.8s, and the rows processed by the same fingerprint have increased noticeably, but other similar aggregates and cluster availability show no synchronized anomalies. Locate the real cause affecting this request from the SQL fingerprint, execution plan, estimated/actual row counts, statistics freshness, and data distribution; rule out unrelated workloads, index definitions, and cluster-level failures; and restore performance without changing the business result.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `control_workload`, `status`, `symptom`
 - Expected-target fields: `business_result_consistent`, `estimate_actual_ratio_at_most`, `estimated_rows`, `status`
 - Background profiles: qp04_target_order_report, qp04_control_order_report, qp04_statistics_inventory, qp04_control_point_read, qp04_noise_archive_report

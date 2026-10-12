@@ -8,6 +8,7 @@ scope: [postgres, pg_system_failure_wal_checkpoint_storm]
 summary: Current code-backed contract snapshot for pg_system_failure_wal_checkpoint_storm; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_system_failure_wal_checkpoint_storm`
@@ -55,7 +56,7 @@ The following fields are the public state boundary exposed by the current Case c
 - Expected-target fields: `checkpoint`, `status`, `verification`, `wal`
 - Background profiles: checkpoint_log_noise_statement_timeout_dashboard_refresh
 - Evaluator: `src.scenarios.evaluation.postgres.system_failure.wal_checkpoint_storm.PgSystemFailureWalCheckpointStormForBillingSlotCheckpointBurstSimpleEvaluatorCase`
-- Calibration ledger: maintained by the Case registry and the [难度标准](../../../standards/scenario/difficulty.standard.md).
+- Calibration ledger: maintained by the Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md).
 
 #### Case-only fault state
 

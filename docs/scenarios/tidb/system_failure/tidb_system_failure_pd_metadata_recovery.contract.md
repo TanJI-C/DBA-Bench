@@ -140,10 +140,10 @@ internalized knowledge may succeed without calling it.
 
 ### Expected Failure Paths
 
-- Path A, `未找到根因`: the Agent anchors on a normal service restart, treats a rebuilt PD as the original
+- Path A, `root cause not found`: the Agent anchors on a normal service restart, treats a rebuilt PD as the original
   control plane, or cannot distinguish surviving-member and total-loss semantics. The diagnosis stops before a
   valid recovery family is established and the original cluster remains unavailable.
-- Path B, `找到根因但没有修复`: the Agent identifies PD metadata loss and cluster-ID mismatch but cannot
+- Path B, `root cause found but not remediated`: the Agent identifies PD metadata loss and cluster-ID mismatch but cannot
   operationalize the public versioned branch, active maintenance-window binding, original identity, allocator
   boundary, ordering, or terminal acceptance. Valid examples are choosing `surviving_member` after proving that
   every PD member is empty, selecting a coherent older full-loss record instead of the newest active record,

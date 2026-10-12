@@ -40,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Slow-query alert caused by background maintenance saturating database I/O.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresReportQueryLatencyHigh service=tpcds-reporting instance=postgresql-primary severity=warning summary=Multiple TPC-DS report query fingerprints exceeded the slow-query threshold description=In the last 5m, customer revenue, regional sales, and inventory trend reports all exceeded 5s latency; p95 report latency is 18.4s. Please diagnose the shared cause of the concurrent query slowdow
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresReportQueryLatencyHigh service=tpcds-reporting instance=postgresql-primary severity=warning summary=Multiple TPC-DS report query fingerprints exceeded the slow-query threshold description=In the last 5m, customer revenue, regional sales, and inventory trend reports all exceeded 5s latency; p95 report latency is 18.4s. Please diagnose the shared cause of the concurrent query slowdown and restore latency.
 - Initial-state fields: `alert`, `status`, `table`, `visible_symptom`
 - Expected-target fields: `maintenance_sessions`, `root_cause`, `status`, `table`
 - Background profiles: regional_sales_dashboard_refresh, report_temp_spill_rollup, invoice_cpu_rollup, order_status_touch_worker, missing_report_cache_log_noise
@@ -50,7 +50,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Slow report alerts caused by a maintenance refresh saturating I/O.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresReportQueryLatencyHigh service=ops-reporting instance=postgresql-primary severity=warning summary=Two operational reports crossed the slow-query threshold together description=Recent slow-query samples point at customer aging and shipment status reports, while host storage latency is elevated. Determine whether the reports share an infrastructure cause or independent SQL regression
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresReportQueryLatencyHigh service=ops-reporting instance=postgresql-primary severity=warning summary=Two operational reports crossed the slow-query threshold together description=Recent slow-query samples point at customer aging and shipment status reports, while host storage latency is elevated. A change window earlier today adjusted scheduled maintenance jobs. Restore report latency and keep other production workloads running unaffected.
 - Initial-state fields: `alert`, `status`, `table`, `visible_symptom`
 - Expected-target fields: `maintenance_sessions`, `root_cause`, `status`, `table`
 - Background profiles: regional_sales_dashboard_refresh, report_temp_spill_rollup
@@ -60,7 +60,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `2`
 - Title: I/O saturation alert caused by a stalled WAL archive slot rather than report SQL regressions.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresDiskIOLatencyHigh service=checkout-writes instance=postgresql-primary severity=warning summary=Database write latency and report latency rose while disk I/O stayed elevated description=Recent dashboards show several report samples and checkout writes slower than normal, but the WAL/archive panel also shows unusual backlog growth. Determine whether the visible slow SQL is the root c
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresDiskIOLatencyHigh service=checkout-writes instance=postgresql-primary severity=warning summary=Database write latency and report latency rose while disk I/O stayed elevated description=Recent dashboards show several report samples and checkout writes slower than normal, but the WAL/archive panel also shows unusual backlog growth. Determine whether the visible slow SQL is the root cause or a victim of WAL retention/archive pressure, then clear the backlog safely without changing report SQL.
 - Initial-state fields: `alert`, `fault_mechanism`, `status`, `table`, `visible_symptom`
 - Expected-target fields: `maintenance_sessions`, `root_cause`, `status`, `table`
 - Background profiles: none declared

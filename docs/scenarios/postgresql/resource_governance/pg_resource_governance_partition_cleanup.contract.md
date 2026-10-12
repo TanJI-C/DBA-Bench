@@ -77,7 +77,7 @@ reference-only queries.
 
 - Case number: `1`
 - Title: Simplified filesystem partition cleanup pressure with OLTP tail latency.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresHostCpuPressure service=checkout-api instance=postgresql-primary severity=warning summary=Host pressure and checkout tail latency crossed SLO together description=Checkout latency rose during a host pressure episode that is now clear. A small number of cleanup and reporting jobs were also active. Preserve the retention boundary and legal hold. You may use the case-specific filesyst
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresHostCpuPressure service=checkout-api instance=postgresql-primary severity=warning summary=Host pressure and checkout tail latency crossed SLO together description=Checkout latency rose during a host pressure episode that is now clear. A small number of cleanup and reporting jobs were also active. Preserve the retention boundary and legal hold. You may use the case-specific filesystem_io, bufferio_waiters, host_pressure, and partition_lifecycle observations exposed by query_metrics. For final recovery, keep the cleanup job enabled and unpaused, preserve the legal hold, remove all due non-hold partitions through the retention cleanup workflow without detached leftovers, and verify the last 2 samples are within the published filesystem-I/O and OLTP latency limits; host CPU pressure stays a reported observation.
 - Initial-state fields: `alert`, `status`, `visible_symptom`
 - Expected-target fields: `legal_hold`, `retention`, `root_cause`, `status`
 - Background profiles: pc-easy-tpcds-q14

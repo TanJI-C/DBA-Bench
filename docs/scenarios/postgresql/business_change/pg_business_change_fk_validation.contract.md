@@ -8,6 +8,7 @@ scope: [postgres, business_change, pg_business_change_fk_validation]
 summary: Code-backed contract for pg_business_change_fk_validation; NOT VALID FK rollout, lock-queue cascade, orphan prepared transaction blocker, failing validate retry job, legacy orphan-row data remediation, and governance closure repair.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_business_change_fk_validation`
@@ -36,7 +37,9 @@ PostgreSQL real semantics (probed on PG16): `VALIDATE CONSTRAINT` takes `ShareUp
 
 - Case number: `0`
 - Title: FK rollout DDL lock-queue cascade stalls every query on order_items.
-- Alert/symptom: 变更发布告警：数据治理外键发布正在订单库执行，发布开始后订单相关接口超时激增，发布流水线第 3 步（表结构调整）已卡住超过 10 分钟，监控显示大量会话堆积。请尽快恢复业务，并确认本次数据治理目标最终达成。
+- Alert/symptom: Change release alert: the data-governance foreign key release is executing against the order database. Since the release started, timeouts on order-related interfaces have spiked, step 3 of the release pipeline (table structure change) has been stuck for more than 10 minutes, and monitoring shows a large backlog of sessions. Restore the business as soon as possible, and confirm that the data-governance objective of this release is ultimately achieved.
+
+> Note: the alert/case-prompt text above is an English rendering for readability; the verbatim runtime alert text is defined in the scenario code under src/scenarios/.
 - Initial-state fields: `status=incident_active`, `change=fk_governance_rollout`, `pipeline_step=step3_add_release_note_column`, `visible_symptom=order_items_queries_and_writes_queued`
 - Expected-target fields: `status=recovered`, `table=order_items`, `fk_state=validated`, `incident_sessions=0`
 - Mechanism (incident state, all real):
@@ -79,12 +82,12 @@ PostgreSQL real semantics (probed on PG16): `VALIDATE CONSTRAINT` takes `ShareUp
 ### `order_items_fk_validate_storm` — Hard
 
 - pi_s = <sigma, h1, h2, h3, h4, c>:
-  - sigma: 发布告警（接口超时激增、流水线第 3 步卡住、会话堆积）；
-  - h1: 建立 `order_items` 锁等待链：业务会话 ← 排队 ALTER(AEL) ← **无会话的锁持有者**（`pg_stat_activity` 看不到持有者，必须由 `pg_locks` 中 `pid IS NULL` 的 granted ASE 关联 `pg_prepared_xacts` 定位孤儿两阶段提交事务）（evidence: `pg_stat_activity` 等待事件 + `pg_locks`/`pg_blocking_pids` 队列 + `pg_prepared_xacts`）；
-  - h2: 确认治理状态：`convalidated=false` 且 validate 作业 `attempts`/`last_error` 反复失败（只读事务拒绝），并盘点全目录发现 `order_items_peer` 的第二个 NOT VALID 外键（evidence: `pg_constraint` + `fk_release_pipeline`）；
-  - h3: 机制判定：排队 AEL 阻塞一切弱锁、`pg_terminate_backend` 对 prepared 持有者无效、作业被只读会话配置钉死无法自愈（evidence: lock queue + attempts/last_error 错误演化 + pg_prepared_xacts）；
-  - h4: **修复状态迁移（r5）**：重放 VALIDATE 真实失败，错误是 FK 违例而非锁问题——必须重新归因为存量孤儿订单行（evidence: VALIDATE 报错 DETAIL 给出一个违例 key + 反连接查询给出完整孤儿清单），并选择合法治理（定向 DELETE 或修复 customer_id），伪造客户主数据是被 OP 拒绝的错误治理；
-  - c: 处置决策：解除锁队列（COMMIT/ROLLBACK PREPARED + 取消排队 ALTER）+ 终止失败作业 + 孤儿数据治理 + 重放两个 `VALIDATE CONSTRAINT` + 验证两个 `convalidated=true`。
-- 关键工具证据（K_s）的逐跳计数与校准数值由 Case 注册表与[难度标准](../../../standards/scenario/difficulty.standard.md)维护，本文档不复述。
+  - sigma: the release alert (interface timeout spike, step 3 of the pipeline stuck, session backlog);
+  - h1: establish the `order_items` lock wait chain: business sessions ← queued ALTER(AEL) ← **a lock holder with no session** (the holder is invisible in `pg_stat_activity`; it must be located by joining the granted ASE with `pid IS NULL` in `pg_locks` against `pg_prepared_xacts` to find the orphaned two-phase-commit transaction) (evidence: `pg_stat_activity` wait events + the `pg_locks`/`pg_blocking_pids` queue + `pg_prepared_xacts`);
+  - h2: confirm the governance state: `convalidated=false` and the validate job repeatedly failing in `attempts`/`last_error` (rejected by the read-only transaction), plus a catalog-wide inventory revealing the second NOT VALID foreign key on `order_items_peer` (evidence: `pg_constraint` + `fk_release_pipeline`);
+  - h3: mechanism determination: the queued AEL blocks all weak locks, `pg_terminate_backend` is ineffective against the prepared-transaction holder, and the job is pinned by the read-only session setting so it cannot self-heal (evidence: the lock queue + the attempts/last_error error evolution + pg_prepared_xacts);
+  - h4: **repair state transition (r5)**: the replayed VALIDATE genuinely fails, and the error is an FK violation rather than a lock problem — it must be re-attributed to pre-existing orphan order rows (evidence: the VALIDATE error DETAIL names one offending key + an anti-join query yields the full orphan inventory), and a legitimate governance action must be chosen (a scoped DELETE or repairing the customer_id); forging customer master data is wrong governance rejected by OP;
+  - c: remediation decision: clear the lock queue (COMMIT/ROLLBACK PREPARED + cancel the queued ALTER) + stop the failing job + remediate the orphan data + replay both `VALIDATE CONSTRAINT` statements + verify both `convalidated=true`.
+- The per-hop counts of the key tool evidence (K_s) and the calibration values are maintained by the Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md); this document does not restate them.
 
 

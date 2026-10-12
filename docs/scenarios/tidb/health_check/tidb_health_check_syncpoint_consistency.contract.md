@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_syncpoint_consistency]
 summary: Current code-backed contract snapshot for tidb_health_check_syncpoint_consistency; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_syncpoint_consistency`
@@ -26,7 +27,7 @@ related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.
 
 | case_no | case_id | title | current label |
 | ---: | --- | --- | --- |
-| 0 | `syncpoint_consistency_under_writes` | 持续写入下的主备快照一致性审计 | `hard` |
+| 0 | `syncpoint_consistency_under_writes` | Primary/secondary snapshot consistency audit under continuous writes | `hard` |
 | 1 | `syncpoint_consistency_single_release_repair` | A scoped TiDB syncpoint audit for one release window under continued writes. | `hard` |
 
 The Case set above is the current code snapshot. A missing calibration is explicit and must not be inferred from unregistered labels.
@@ -38,8 +39,8 @@ The following fields are the public state boundary exposed by the current Case c
 ### `syncpoint_consistency_under_writes`
 
 - Case number: `0`
-- Title: 持续写入下的主备快照一致性审计
-- Alert/symptom: 晨间例行巡检：新零售账务/履约链路昨晚经历持续写入高峰。请按库内值班资料完成一次可复核的主备一致性审计，判断今天下游盘点是否可以放行。请遵循受控变更边界，不能直接修改业务表；结束时需要把临时审计配置恢复到巡检前状态。
+- Title: Primary/secondary snapshot consistency audit under continuous writes
+- Alert/symptom: Morning routine inspection: the new-retail accounting/fulfillment chain experienced a sustained write peak last night. Following the on-call reference material in the knowledge base, complete a reproducible primary/secondary consistency audit and decide whether today's downstream stocktaking can be given the go-ahead. Follow the controlled change boundary and do not modify business tables directly; at the end, restore the temporary audit configuration to its pre-inspection state.
 - Initial-state fields: `audit_context`, `mapped_snapshot`, `repair_context`, `surface`
 - Expected-target fields: `audit_result`, `direct_count_delta`, `gc_config`, `release_decision`, `repair_workflow`, `syncpoint_selection`
 - Background profiles: hc02_live_primary_order_writes, hc02_live_primary_item_writes, hc02_direct_count_decoy, hc02_customer_dashboard, hc02_fulfillment_lag_report, hc02_item_revenue_rollup, hc02_repl_noise_events, hc02_syncpoint_catalog_scan, hc02_runbook_lookup, hc02_audit_window_scan, hc02_binding_history_scan, hc02_release_request_queue_scan
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A scoped TiDB syncpoint audit for one release window under continued writes.
-- Alert/symptom: 例行发布前一致性复核：当前 release window 在持续写入期间出现主备直接计数差异。请先解析当前 consumer、window、syncpoint 和授权 lease，再按 mapped TSO 做行级比较。只处理当前 release 仍授权的少量 drift，等待异步 worker 完成后重新审计，并恢复临时 GC 保留设置。
+- Alert/symptom: Routine pre-release consistency review: the current release window shows a primary/secondary direct-count difference during continuous writes. First resolve the current consumer, window, syncpoint, and authorization lease, then perform a row-level comparison by mapped TSO. Address only the small amount of drift still authorized by the current release, wait for the asynchronous worker to finish before re-auditing, and restore the temporary GC retention settings.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `audit_context`, `direct_count_decoy`, `surface`
 - Expected-target fields: `audit_result`, `gc_config`, `release_decision`, `repair_workflow`
 - Background profiles: hc02_live_primary_order_writes, hc02_live_primary_item_writes, hc02_direct_count_decoy, hc02_customer_dashboard, hc02_fulfillment_lag_report, hc02_item_revenue_rollup, hc02_repl_noise_events, hc02_syncpoint_catalog_scan, hc02_runbook_lookup, hc02_audit_window_scan, hc02_binding_history_scan, hc02_release_request_queue_scan

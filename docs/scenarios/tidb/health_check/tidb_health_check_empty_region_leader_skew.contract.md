@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_empty_region_leader_skew]
 summary: Current code-backed contract snapshot for tidb_health_check_empty_region_leader_skew; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_empty_region_leader_skew`
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A bounded TiDB Region review separating persistent empty Regions from a recent split window.
-- Alert/symptom: 例行 Region 健康复核：最近 split 窗口出现一批短时 empty Region，同时仍有少量长期 zero-key Region。请用库存年龄、短窗口趋势、PD 调度快照和 store leader 分布区分两类现象，写入有边界的 review 结论。本次只允许记录复核，不重启组件、不修改业务表和调度配置。
+- Alert/symptom: Routine Region health review: the recent split window produced a batch of short-lived empty Regions, while a small number of long-lived zero-key Regions remain. Use inventory age, short-window trends, the PD scheduling snapshot, and the store leader distribution to distinguish the two phenomena, and record a bounded review conclusion. This pass only allows recording the review; do not restart components or modify business tables and scheduling configuration.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `review_key`, `status`, `window`
 - Expected-target fields: `business_checksum`, `persistent_region_risk`, `recent_split_window_excluded`, `status`
 - Background profiles: checkout_probe, merchant_rollup, audit_reconciliation, ops_queue_probe, dashboard_refresh, region_sampler, scheduler_snapshot, window_reconciliation, tenant_heatmap, raft_observer, backup_heartbeat, ddl_watch

@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates production index maintenance overhead hidden inside a routine health check.
-- Alert/symptom: [INFO] [PostgreSQL/Primary] Nightly health-check ticket: write latency and WAL generated per business transaction are 12-18% above last week's baseline on the customer domain. The same window also contains normal OLTP traffic, BI reports, monitoring probes, and a recent release rollback plan. Triage the production signals, explain what is safe to change now, apply the safe remediation, and verify that protected relea
+- Alert/symptom: [INFO] [PostgreSQL/Primary] Nightly health-check ticket: write latency and WAL generated per business transaction are 12-18% above last week's baseline on the customer domain. The same window also contains normal OLTP traffic, BI reports, monitoring probes, and a recent release rollback plan. Triage the production signals, explain what is safe to change now, apply the safe remediation, and verify that protected release/reporting paths remain intact.
 - Initial-state fields: `status`, `unused_indexes`
 - Expected-target fields: `must_keep_indexes`, `preserved_index`, `required_drop_indexes`, `status`, `unused_indexes`
 - Background profiles: none declared

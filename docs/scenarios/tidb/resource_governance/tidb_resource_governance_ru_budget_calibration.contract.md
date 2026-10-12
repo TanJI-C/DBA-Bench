@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Calibrate RU budgets for mixed OLTP and OLAP workloads.
-- Alert/symptom: [SEV-2] TiDB resource governance review: order-entry and revenue services share one cluster with archive and dashboard traffic. Users report uneven response time and analytical progress while the admission allocation is under review. Use the live database and workload evidence, including the operations service objectives, to choose a finite bounded allocation for the existing resource groups. Keep service continuity
+- Alert/symptom: [SEV-2] TiDB resource governance review: order-entry and revenue services share one cluster with archive and dashboard traffic. Users report uneven response time and analytical progress while the admission allocation is under review. Use the live database and workload evidence, including the operations service objectives, to choose a finite bounded allocation for the existing resource groups. Keep service continuity and order/customer truth unchanged. Do not disable resource control or restart nodes as a shortcut.
 - Initial-state fields: `resource_control`, `resource_groups`
 - Expected-target fields: `burstable`, `max_oltp_p95_ms`, `maximum_total_ru_per_sec`, `min_olap_qps`, `minimum_ru_per_sec`, `resource_control`
 - Background profiles: rg01_oltp_order_lookup, rg01_oltp_customer_lookup, rg01_oltp_status_probe, rg01_oltp_order_update, rg01_olap_revenue_rollup, rg01_olap_region_join, rg01_oltp_order_history_probe, rg01_olap_customer_mix, rg01_batch_archive_scan, rg01_batch_customer_rollup, rg01_batch_month_close, rg01_batch_event_rollup

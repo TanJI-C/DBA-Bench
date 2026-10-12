@@ -46,7 +46,7 @@ A Case may also declare `protected_reloptions`: pre-existing healthy per-table a
 
 - Case number: `0`
 - Title: Simulates auto-analyze storm by setting extremely low analyze thresholds.
-- Alert/symptom: Alert: postgres-primary reports recurring short disk I/O saturation windows. Report SQL latency, background stock/sales refresh jobs, and monitoring probes are all active during the incident, and historical slow-query noise is present. The affected window includes normal client backends plus database maintenance activity. Identify the recurring saturation cause, separate it from workload noise, and restore stable per
+- Alert/symptom: Alert: postgres-primary reports recurring short disk I/O saturation windows. Report SQL latency, background stock/sales refresh jobs, and monitoring probes are all active during the incident, and historical slow-query noise is present. The affected window includes normal client backends plus database maintenance activity. Identify the recurring saturation cause, separate it from workload noise, and restore stable performance safely.
 - Initial-state fields: `io`, `status`
 - Expected-target fields: `autovacuum_config`, `status`
 - Background profiles: tpcds_q68, tpcds_q73, tpcds_q79, tpcds_q48, tpcds_q81, tpcds_q71, tpcds_q10, tpcds_q87, tpcds_q49, monitor_probe_activity_snapshot, monitor_probe_table_stats, background_dml_inventory_refresh (0.02 qps), background_dml_web_sales_rollup (0.025 qps ≈ 1 row/s: its per-table storm override's trigger line then re-fires roughly every ~77 s after the globals are restored, so a short post-repair observation looks clean while the storm persists — cross-time increment observation is required to catch it)

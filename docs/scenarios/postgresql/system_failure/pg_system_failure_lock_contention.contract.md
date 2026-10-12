@@ -53,7 +53,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A small customer-profile write queue blocked by one uncommitted transaction.
-- Alert/symptom: Alert: customer-profile updates for one account are timing out, while the database remains available and unrelated reads continue to succeed. A small reporting task is also active on customer data. Identify the transaction responsible for the affected write queue, separate unrelated activity, and restore profile writes without restarting PostgreSQL. Affected statement: UPDATE customer SET c_salutation = 'Dr.' WHERE c_customer_sk = 1
+- Alert/symptom: Alert: customer-profile updates for one account are timing out, while the database remains available and unrelated reads continue to succeed. A small reporting task is also active on customer data. Identify the transaction responsible for the affected write queue, separate unrelated activity, and restore profile writes without restarting PostgreSQL. Affected statement: UPDATE customer SET c_salutation = 'Dr.' WHERE c_customer_sk = 1;
 - Initial-state fields: `affected_scope`, `lock`, `status`
 - Expected-target fields: `lock`, `status`, `unrelated_reporting_transaction`
 - Background profiles: customer_calendar_health_probe

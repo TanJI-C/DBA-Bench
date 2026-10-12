@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_large_table_batch_dml]
 summary: Current code-backed contract snapshot for tidb_business_change_large_table_batch_dml; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_large_table_batch_dml`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Apply an approved large-table change in bounded batches while preserving foreground SLO.
-- Alert/symptom: [CHANGE WINDOW] A live order_events table is estimated at 100 million rows. A signed business change must backfill risk_bucket/version and add one approved covering index while checkout, payment, risk, archive, export, and release-console traffic continues. Inspect the change-control records and the live workload before acting. Keep the operation bounded and auditable, re-read the public change-control feedback after
+- Alert/symptom: [CHANGE WINDOW] A live order_events table is estimated at 100 million rows. A signed business change must backfill risk_bucket/version and add one approved covering index while checkout, payment, risk, archive, export, and release-console traffic continues. Inspect the change-control records and the live workload before acting. Keep the operation bounded and auditable, re-read the public change-control feedback after the first recorded batch and whenever it reports a review boundary because the permitted continuation batch size or authorization phase may change, preserve the requested scope, and leave foreground SLO within its budget. For the canary proceed decision, record the foreground p95 from the canary batch audit; cluster query_latency is health context and is not an equivalent gate measurement. Only rows whose public change-control scope_state is apply are approved; same-release hold rows are protected. Do not run an unbounded UPDATE/DELETE, mutate immutable change-control metadata or same-domain decoys, change global settings, or restart TiDB.
 - Initial-state fields: `adaptive_batch_policy`, `business_goal`, `estimated_table_rows`, `guardrails`, `mid_bulk_review`, `online_workload`, `protected_same_release_scope`, `status`
 - Expected-target fields: `adaptive_batch_audit`, `approved_index`, `business_truth`, `canary_gate`, `frontend_slo`, `mid_bulk_review_gate`, `progress`, `requested_scope_only`, `required_scope`, `status`
 - Background profiles: bc04_checkout_recent_order_lookup, bc04_risk_queue_by_bucket, bc04_payment_status_rollup, bc04_tenant_revenue_dashboard, bc04_business_checksum_probe, bc04_stage_release_preview, bc04_change_job_history_decoy, bc04_archive_reconciliation_decoy, bc04_replay_shadow_decoy, bc04_export_preview_decoy, bc04_future_release_decoy, bc04_schema_inventory_noise
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Apply the settlement risk rebucket with canary and review gates.
-- Alert/symptom: [CHANGE WINDOW] settlement_events 的已签名 risk rebucket 需要在前台结算和账单查询持续运行时完成。请先读取 immutable contract、公开 stage、canary/bulk gate 和反馈视图；仅处理 scope_state=apply 的 settlement cohort，首批与每个公开 review boundary 后重新读取允许批大小，记录真实 SLO gate，再建立批准的 online covering index。不得修改 hold/future/replay cohort、不可变控制面、全局设置或重启 TiDB。
+- Alert/symptom: [CHANGE WINDOW] The signed risk rebucket for settlement_events must complete while foreground settlement and billing queries keep running. First read the immutable contract, public stage, canary/bulk gate, and feedback view; process only the settlement cohorts with scope_state=apply, re-read the allowed batch size after the first batch and after every public review boundary, record the real SLO gate, and then build the approved online covering index. Do not modify hold/future/replay cohorts, the immutable control plane, or global settings, and do not restart TiDB.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business_goal`, `estimated_table_rows`, `online_workload`, `protected_scope`, `status`
 - Expected-target fields: `approved_index`, `business_truth`, `canary_gate`, `frontend_slo`, `mid_bulk_review_gate`, `progress`, `requested_scope_only`, `status`
 - Background profiles: bc04_checkout_recent_order_lookup, bc04_risk_queue_by_bucket, bc04_payment_status_rollup, bc04_tenant_revenue_dashboard, bc04_business_checksum_probe, bc04_stage_release_preview, bc04_change_job_history_decoy, bc04_archive_reconciliation_decoy, bc04_replay_shadow_decoy, bc04_export_preview_decoy, bc04_future_release_decoy, bc04_schema_inventory_noise

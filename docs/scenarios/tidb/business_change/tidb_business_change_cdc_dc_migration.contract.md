@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_cdc_dc_migration]
 summary: Current code-backed contract snapshot for tidb_business_change_cdc_dc_migration; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_cdc_dc_migration`
@@ -49,7 +50,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Online TiCDC-style east-to-west migration with forward catch-up, a reverse changefeed, and a rollback-ready traffic cutover.
-- Alert/symptom: 业务变更任务：checkout-api 的在线机房迁移收口尚未完成。按迁移计划，流量此时应已切到 west 并保持可安全回退，但当前迁移状态不满足收口条件，具体缺什么需要你结合环境证据自行排查。请在迁移期间保证业务数据不丢失、east 与 west 业务真值一致，收口完成后必须可安全回退。不得修改业务真值，不得停掉集群、删除数据、跳过一致性校验，或用强制方式掩盖复制延迟。
+- Alert/symptom: Business change task: the closure of checkout-api's online data-center migration is not yet complete. According to the migration plan, traffic should already have been switched to west by now while remaining safely rollback-capable, but the current migration state does not satisfy the closure conditions; what exactly is missing needs to be investigated by you against the environment evidence. During the migration, ensure that no business data is lost and that the east and west business truth stay consistent; after closure, the migration must be safely rollback-capable. Do not modify business truth, and do not stop the cluster, delete data, skip consistency checks, or use forced means to mask replication lag.
 - Initial-state fields: `active_dc` (west, post-cutover), `forward_changefeed` (normal with draining lag), `reverse_changefeed` (normal, activated per runbook), `migration_phase` (observation until events flow, then the machine claims rollback_ready)
 - Expected-target fields: closure is a family — forward (west, rollback_ready, equal truth) or safe abort (east, guarded rollback, zero loss with the unreplicable residual preserved on west); `business_truth`: no business row loss; `target_lineage`: source increment rows preserve replicated east provenance
 - Control-plane surface: `ops_control.changefeed_status` holds the two live feeds plus the parked rehearsal pair (`checkout-east-west-forward-20260701` paused/parked, `checkout-west-east-reverse-20260701` normal/enabled); `ops_control.migration_control` holds the live row `checkout-east-west-20260801` plus the parked rehearsal row `checkout-east-west-20260701-rehearsal` (phase `observation`, primary `west`); `ops_control.validation_requests` holds the expired 20260731 row plus a `passed` rehearsal row; `ops_control.migration_audit` holds two rehearsal `route_cutover` rows dated 2026-07-01. Rehearsal rows are frozen (`updated_at` 2026-07-02) and are never advanced by the controller. The live reverse feed is already activated per runbook (no `last_error` hint). The rehearsal window left 75 real west-only orders in `west_dc`: 45 journal-covered (`order_id` 3_000_001..3_000_045, drained by the live reverse link) and 30 journal-uncovered (`order_id` 3_100_001..3_100_030, committed inside the export window whose journal entries were lost) — so initial east/west business truth differs by a residual that replication can never heal.
@@ -63,7 +64,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Online TiCDC-style west-to-east migration with rollback-ready billing cutover.
-- Alert/symptom: 业务变更任务：billing-api 需要在不停写的前提下从 west 机房迁移到 east 机房。请先完成全量基线和 west->east 增量追平，再建立 east->west 反向复制；只有两条链路都追平且业务真值一致时，才可以把 billing-api 流量切到 east，并保留观察期回切能力。环境中保留少量 archive 同域噪声、历史迁移和路由控制记录。不得停集群、删数据、跳过一致性校验或用强制方式掩盖复制延迟。
+- Alert/symptom: Business change task: billing-api needs to migrate from the west data center to the east data center without stopping writes. First complete the full baseline and the west->east incremental catch-up, then establish east->west reverse replication; only when both links have caught up and the business truth is consistent may billing-api traffic be switched to east, while keeping the ability to switch back during the observation period. The environment retains a small amount of archive same-domain noise and historical migration and routing control records. Do not stop the cluster, delete data, skip consistency checks, or use forced means to mask replication lag.
+> Note: the alert/case-prompt text above is an English rendering for readability; the verbatim runtime alert text is defined in the scenario code under src/scenarios/.
 - Initial-state fields: `active_dc`, `forward_changefeed`, `migration_phase`, `reverse_changefeed`
 - Expected-target fields: `active_dc`, `business_truth`, `forward_changefeed`, `migration_phase`, `reverse_changefeed`, `target_lineage`
 - Control-plane surface: identical rehearsal-fleet shape and rehearsal-window target backlog as `cdc_dc_migration_reverse_cutover` with billing identities (`billing-west-east-forward-20260701`, `billing-east-west-reverse-20260701`, `billing-west-east-20260701-rehearsal`, plus the rehearsal validation and audit rows).

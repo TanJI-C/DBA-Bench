@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_gc_safepoint_pin]
 summary: Current code-backed contract snapshot for tidb_health_check_gc_safepoint_pin; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_gc_safepoint_pin`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Routine TiDB retention review where an orphaned changefeed keeps the oldest service GC safepoint.
-- Alert/symptom: 日常数据服务与容量巡检：近期报表里历史版本清理窗口、异步处理时间跨度和多个存储来源的变化需要复核，但核心交易延迟、业务读写和节点存活都没有事故告警。请按常规 DBA 流程核对各类保留责任、处理进度、业务活动与容量时间序列，判断是否有已经结束却仍影响在线系统的流程；只有证据能排除当前业务、备份、恢复和合规保留后，才允许做最小范围的状态收口。报告中说明风险、影响范围、保留的例外和已排除的其它链路，并给出最终复核结果。
+- Alert/symptom: Routine data-service and capacity inspection: recent reports show changes in the historical-version cleanup window, the asynchronous processing time span, and multiple storage sources that need review, but core transaction latency, business reads/writes, and node liveness have no incident alerts. Follow the routine DBA process to verify the various retention responsibilities, processing progress, business activity, and capacity time series, and determine whether any process has already ended but still affects the online system; only after evidence can rule out current business, backup, restore, and compliance retention is a minimal-scope state closure allowed. In the report, explain the risks, the impact scope, the retention exceptions, and the other paths already ruled out, and give the final review result.
 - Initial-state fields: `business_traffic`, `incident`, `retention_window`, `status`
 - Expected-target fields: `healthy_owners_preserved`, `status`, `target_service_id_removed`
 - Background profiles: order_status_dashboard, customer_activity_probe, revenue_window_rollup, order_touch_writer, capacity_audit_writer, replication_status_rollup, capacity_trend_review, owner_lineage_scan, retention_history_rollup, review_queue_triage, account_balance_reconciliation, daily_order_summary
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Routine TiDB retention review where an orphaned backup/restore coordinator keeps the oldest service GC safepoint.
-- Alert/symptom: 日常保留窗口复核：备份恢复值班记录与在线复制、合规保留记录混在同一批容量证据中。请关联当前请求、恢复 checkpoint、owner 心跳和 effective safepoint，确认已经退役的流程是否仍在占用保留窗口。只允许收口已证明完成的 backup/restore owner，必须保留仍有业务或合规依据的其它 owner，并在 controller 观察收敛后复核结果。
+- Alert/symptom: Routine retention-window review: backup/restore on-call records are mixed with online replication and compliance retention records in the same batch of capacity evidence. Correlate the current requests, restore checkpoints, owner heartbeats, and the effective safepoint to confirm whether already-retired processes are still occupying the retention window. Only backup/restore owners proven complete may be closed out; other owners that still have business or compliance justification must be preserved, and the result must be re-verified after convergence is observed on the controller.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business_traffic`, `incident`, `retention_window`, `status`
 - Expected-target fields: `healthy_owners_preserved`, `owner_type`, `status`, `target_service_id_removed`
 - Background profiles: order_status_dashboard, customer_activity_probe, revenue_window_rollup, order_touch_writer, capacity_audit_writer, replication_status_rollup, capacity_trend_review, owner_lineage_scan, retention_history_rollup, review_queue_triage, account_balance_reconciliation, daily_order_summary

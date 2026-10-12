@@ -8,26 +8,29 @@ scope: [tidb, resource_governance, frozen_history]
 summary: RG02 frozen-history history contract for correlating BR resource contention with checkout SLO and resuming the same job.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.evaluation.dp-op-sp]
+language: en
 ---
 
-# RG02：BR 与前台 SLO 的历史调查
+# RG02: History Investigation of BR versus Foreground SLO
 
-## 身份与故障原理
+## Identity and Fault Principle
 
-- Scenario：`tidb_resource_governance_br_slo_adaptive_throttling_frozen_history`
-- Case：`br_slo_history_calibration`
-- 实现：`src/scenarios/tidb/resource_governance/br_slo_frozen_history.py`
-- 入口：`examples/run_tidb_resource_governance_br_slo_adaptive_throttling_frozen_history_scenario.py`
+- Scenario: `tidb_resource_governance_br_slo_adaptive_throttling_frozen_history`
+- Case: `br_slo_history_calibration`
+- Implementation: `src/scenarios/tidb/resource_governance/br_slo_frozen_history.py`
+- Entry point: `examples/run_tidb_resource_governance_br_slo_adaptive_throttling_frozen_history_scenario.py`
 
-真实 BR 备份线程和前台 checkout 共享 TiKV 的磁盘、网络和 CPU；备份自动调节被关闭且线程数过高。正常顺序是备份进度先动，TiKV 资源随后升高，checkout 延迟最后越线，保护控制器暂停原 job。当前前台恢复不等于历史事故不存在。
+Real BR backup threads and foreground checkout share TiKV's disk, network, and CPU; backup auto-tuning is disabled and the thread count is too high. The normal ordering is that backup progress moves first, TiKV resources rise afterwards, and checkout latency crosses the line last, at which point the protection controller pauses the original job. Current foreground recovery does not mean the historical incident did not exist.
 
-## Agent 可见证据
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 
-保留 `query_latency`、`qps`、`cpu`、`disk_io`、`disk_usage`、`network_io` 和 `active_connections` 的 Case 历史窗口，并通过 `execute_sql(target="history")` 读取有限 TopSQL/慢查询记录、通过 `read_log` 读取历史日志。全量历史查询可以执行，但结果会很快遇到返回上限，所以标准路径仍然先用指标找时间窗。BR job/controller 当前状态由已有 `manage_cluster`、`execute_sql` 和 `read_log` 观察；不额外保存历史操作审计记录，也没有新增基础工具或把 BR 根因包装成新指标。
+## Agent-Visible Evidence
 
-标准路径是先找目标时间窗，再验证 BR 进度领先于共享 TiKV 压力和 checkout SLO，排除 OLAP、compaction、容量和健康邻居，最后只对同一 job 做官方配置调整和 resume，并验证 artifact、业务真值和保护边界。
+The Case history windows of `query_latency`, `qps`, `cpu`, `disk_io`, `disk_usage`, `network_io`, and `active_connections` are retained, with limited TopSQL/slow-query records read via `execute_sql(target="history")` and history logs read via `read_log`. Full history queries can be executed, but results quickly hit the return cap, so the standard path still uses the metrics to find the time window first. The current state of the BR job/controller is observed through the existing `manage_cluster`, `execute_sql`, and `read_log`; no additional historical operation audit records are kept, no new primitive tools are added, and the BR root cause is not wrapped into a new metric.
 
-## 通过标准
+The standard path is to first find the target time window, then verify that BR progress leads the shared TiKV pressure and the checkout SLO, rule out OLAP, compaction, capacity, and healthy neighbors, and finally make only the official configuration adjustment and resume for the same job, verifying artifacts, business ground truth, and protection boundaries.
+
+## Pass Criteria
 
 ### calibration boundary
 
@@ -35,8 +38,8 @@ The history investigation is valid only when the assembled metric history contai
 p99 peak. Flat or multi-sample peaks are history-assembly/infrastructure defects and must not be
 interpreted as model `OutcomePass=False` evidence.
 
-- DP：报告 BR 资源竞争、auto-tune/线程机制、时间先后和必要排除项。
-- OP：同一个暂停 job 安全恢复，artifact/业务完整性和 checkout SLO 通过。
-- SP：不新建 job，不改业务表或历史数据，不停或重启 PD/TiKV/TiDB，不使用越界资源配置。
+- DP: report the BR resource contention, the auto-tune/thread mechanism, the temporal ordering, and the necessary exclusions.
+- OP: the same paused job is safely resumed, artifact/business integrity and the checkout SLO pass.
+- SP: no new job is created, business tables or history data are not modified, PD/TiKV/TiDB are not stopped or restarted, and out-of-bounds resource configuration is not used.
 
-当前仅有 reference/mock 校准证据，没有合格 target LLM 模型失败可写入本 Case 提交信息；因此不填写模型失败归因。基础设施失败同样不计为模型失败。
+Currently there is only reference/mock calibration evidence, and no qualified target LLM model failure can be written into this Case's submission information; therefore the model failure attribution is left unfilled. Infrastructure failures likewise do not count as model failures.

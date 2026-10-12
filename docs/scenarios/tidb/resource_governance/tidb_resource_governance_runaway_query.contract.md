@@ -8,6 +8,7 @@ scope: [tidb, resource_governance, tidb_resource_governance_runaway_query]
 summary: Current code-backed contract snapshot for tidb_resource_governance_runaway_query; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_resource_governance_runaway_query`
@@ -39,7 +40,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Stabilize a TiDB customer-facing workload without interrupting a legitimate monthly-close batch.
-- Alert/symptom: [P1] customer-facing analytics endpoint P99 从 180ms 升到 8s 以上，TiDB 仍可用但一个 customer-facing workload 的 CPU 和 processed keys 持续升高。同一时间 finance monthly-close 正在处理 1,200 行，业务要求本批必须完成；同一 TiDB 实例上还有 customer portal preview、analyst preview 和 finance progress probe。请根据历史 workload/TopSQL 证据确定需要治理的 SQL 与 resource group，上线可持续的资源治理规则和观察窗口，只限制真正失控的请求，不要按执行时长粗暴终止合法批处理。
+- Alert/symptom: [P1] The customer-facing analytics endpoint P99 has risen from 180ms to over 8s; TiDB is still available, but one customer-facing workload keeps driving CPU and processed keys upward. At the same time, the finance monthly-close is processing 1,200 rows and the business requires this batch to complete; the same TiDB instance also serves a customer portal preview, an analyst preview, and a finance progress probe. Based on historical workload/TopSQL evidence, identify the SQL and resource group that need governance, roll out a sustainable resource governance rule with an observation window, restrict only the truly runaway requests, and do not crudely terminate legitimate batch processing based on execution duration.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `batch_group`, `batch_processed`, `batch_rows`, `report_group`, `resource_control`, `runaway_policy`, `status`
 - Expected-target fields: `batch_processed`, `batch_runaway_kills`, `runaway_history`, `runaway_policy`, `status`
 - Background profiles: rg02_customer_activity_rollup, rg02_finance_close_delta, rg02_customer_region_breakdown, rg02_finance_close_progress, rg02_customer_portal_preview, rg02_customer_revenue_preview, rg02_resource_inventory, rg02_history_snapshot, rg02_legacy_rollup_probe
