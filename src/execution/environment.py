@@ -3923,7 +3923,10 @@ class PGEnv(BaseEnv):
     def _set_config(self, param_name: str, value: str) -> str:
         if not param_name or value is None:
             return json.dumps({"status": "error", "error": "Missing param name (target) or value"})
-        import subprocess
+        import psycopg2
+        from psycopg2 import sql
+        if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*", param_name) is None:
+            return json.dumps({"status": "error", "error": f"Invalid PostgreSQL parameter name: param={param_name!r}"})
         if self._is_nofile_config(param_name):
             try:
                 limit = int(str(value).strip())
@@ -3943,25 +3946,40 @@ class PGEnv(BaseEnv):
                 }, ensure_ascii=False)
             except Exception as e:
                 return json.dumps({"status": "error", "error": str(e)}, ensure_ascii=False)
-        if self._conn is not None:
+        if self._conn is not None and not self._conn.closed:
             try:
                 with self._conn.cursor() as cur:
-                    cur.execute(f"ALTER SYSTEM SET {param_name} = '{value}';")
+                    cur.execute(
+                        sql.SQL("ALTER SYSTEM SET {} = %s;").format(sql.Identifier(param_name)),
+                        (value,),
+                    )
                 return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": agent_text(zh="需要 restart/reload 生效", en="requires restart/reload to take effect")})
-            except Exception:
-                pass
+            except psycopg2.Error as error:
+                return json.dumps({"status": "error", "error": f"ALTER SYSTEM SET failed: param={param_name!r}, error={error}"})
         container = self.deployment.container_name
+        config_path = f"{self.deployment.pgdata}/postgresql.auto.conf"
         try:
-            sed_cmd = f"grep -q \"^{param_name}\" {self.deployment.pgdata}/postgresql.auto.conf && " \
-                      f"sed -i \"s|^{param_name}.*|{param_name} = '{value}'|\" {self.deployment.pgdata}/postgresql.auto.conf || " \
-                      f"echo \"{param_name} = '{value}'\" >> {self.deployment.pgdata}/postgresql.auto.conf"
+            result = subprocess.run(
+                ["docker", "exec", container, "cat", config_path],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            setting = re.compile(rf"^\s*{re.escape(param_name)}\s*=", re.IGNORECASE)
+            contents = "".join(
+                line for line in result.stdout.splitlines(keepends=True)
+                if not setting.match(line)
+            )
+            quoted_value = (
+                value.replace("\\", "\\\\").replace("'", "''")
+                .replace("\n", "\\n").replace("\r", "\\r")
+            )
+            contents = contents.rstrip("\n") + f"\n{param_name} = '{quoted_value}'\n"
             subprocess.run(
-                ["docker", "exec", container, "bash", "-c", sed_cmd],
-                capture_output=True, text=True, timeout=10, check=True
+                ["docker", "exec", "-i", container, "tee", config_path],
+                input=contents, capture_output=True, text=True, timeout=10, check=True,
             )
             return json.dumps({"status": "success", "action": "set_config", "param": param_name, "value": value, "note": agent_text(zh="已写入 auto.conf，需要 start/restart 生效", en="written to auto.conf; requires start/restart to take effect")})
-        except Exception as e:
-            return json.dumps({"status": "error", "error": str(e)})
+        except (OSError, subprocess.SubprocessError) as error:
+            return json.dumps({"status": "error", "error": f"Cannot write PostgreSQL setting: container={container!r}, path={config_path!r}, param={param_name!r}, error={error}"})
 
     def _reset_config(self, param_name: str) -> str:
         if not param_name:
