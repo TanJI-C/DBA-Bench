@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Optional
 
+from src.agent_language import agent_text
 from src.agents.prompt_manager import PromptManager
 from src.execution.deployment import lightning_decoy_job_id
 from src.scenarios.evaluation.protocol import parse_submission_report
@@ -576,8 +577,11 @@ class Orchestrator:
         if hasattr(self.env, "build_tool_instructions"):
             return self.env.build_tool_instructions(use_native_tools=use_native)
         if use_native:
-            return "请分析场景，并通过提供的 tools 进行函数调用（Function Calling）来执行操作。"
-        return "未提供工具说明。"
+            return agent_text(
+                zh="请分析场景，并通过提供的 tools 进行函数调用（Function Calling）来执行操作。",
+                en="Analyze the scenario and perform actions by making function calls (Function Calling) with the provided tools.",
+            )
+        return agent_text(zh="未提供工具说明。", en="No tool instructions were provided.")
 
     def _get_tool_schemas(self):
         if hasattr(self.env, "get_tool_schemas"):
@@ -588,7 +592,7 @@ class Orchestrator:
         """
         获取 user prompt，包含故障场景说明。
         """
-        return self.prompt_manager.get_user_prompt(self.case.alert)
+        return self.prompt_manager.get_user_prompt(self.case.agent_alert())
 
     def setup(self):
         """

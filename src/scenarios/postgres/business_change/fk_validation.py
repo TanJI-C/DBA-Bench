@@ -100,6 +100,13 @@ _STORM_ALERT = (
     "发布流水线第 3 步（表结构调整）已卡住超过 10 分钟，监控显示大量会话堆积。"
     "请尽快恢复业务，并确认本次数据治理目标最终达成。"
 )
+_STORM_ALERT_EN = (
+    "Change release alert: a data governance foreign key release is running on the orders database. Since the "
+    "release started, timeouts on order-related APIs have surged, step 3 of the release pipeline (table structure "
+    "adjustment) has been stuck for more than 10 minutes, and monitoring shows a large pile-up of sessions. "
+    "Restore the business as soon as possible and confirm that the data governance goal of this release is "
+    "ultimately achieved."
+)
 
 _STORM_REFERENCE_REPORT = {
     "diagnosis": {
@@ -241,6 +248,7 @@ def _storm_case() -> PgBusinessChangeFkValidationForOrderItemsFkValidateStormSce
         workload_tag="default",
         title="FK rollout DDL lock-queue cascade stalls every query on order_items.",
         alert=_STORM_ALERT,
+        alert_en=_STORM_ALERT_EN,
         initial_state={
             "status": "incident_active",
             "change": "fk_governance_rollout",

@@ -53,6 +53,25 @@ TiDB QP 场景的 PD/TiKV 数据通过镜像组复用，仍按独立 Compose pro
 组进入隔离调度。完整配置见
 `experiments/pg_system_failure_parallel.example.yaml`。
 
+### Agent 侧文本语言
+
+`runtime.agent_language` 可选 `zh`（默认）或 `en`：
+
+```yaml
+runtime:
+  agent_language: en
+```
+
+该配置选择框架提供的 system/user prompt、工具和参数说明、`help` 返回、工具结果中的
+说明与截断提示，以及场景告警的语言。runner 通过 `AIOPS_AGENT_LANGUAGE` 环境变量
+传给场景进程。它适用于内置 LLM Agent，也适用于发送给
+[远程 Agent](connect-remote-agent.guide.zh-CN.md) 的提示词、工具 schema 和 help。
+
+英文目前仅支持 PostgreSQL bounded Scenario。TiDB、Persistent Scenario，以及自身
+提示词尚未翻译的 `dbot`、`dbaiops`、`v-expel` 模式，在使用 `en` 时会于 manifest
+加载阶段报错。远程服务的内部提示词由服务自行管理。数据库原始值、日志和检索文档
+保留原文，此配置不翻译这些内容，也不改变 DP/OP/SP 评估合同。
+
 已存在的 `experiment_id` 不能换用另一份 manifest。实验配置变化时创建新的 ID。
 
 ## 2. 预览运行矩阵

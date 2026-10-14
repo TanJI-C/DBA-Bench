@@ -44,6 +44,26 @@ Each exclusion must match a bounded Scenario cell in the plan, otherwise the pla
 
 Parallel experiments must configure `runtime.isolation`, and every selected Case must declare `resources`. The runner computes each worker's CPU and memory requirements from the generic resource contract and allocates cpusets by full physical cores and NUMA node. PostgreSQL scenarios marked host-exclusive take over the entire host machine even when they appear in a parallel manifest; TiDB QP scenarios reuse PD/TiKV data via image groups and still enter isolated scheduling as an independent Compose project, network, ports, and container group. For the full configuration see `experiments/pg_system_failure_parallel.example.yaml`.
 
+### Agent-facing language
+
+Set `runtime.agent_language` to `zh` (default) or `en`:
+
+```yaml
+runtime:
+  agent_language: en
+```
+
+The setting selects the framework's system/user prompts, tool and argument descriptions,
+`help` output, notes and truncation hints in tool results, and scenario alerts. The runner
+passes it to scenario processes as `AIOPS_AGENT_LANGUAGE`. It applies to built-in LLM agents
+and to the prompts, tool schemas, and help sent to [remote agents](connect-remote-agent.guide.md).
+
+English currently supports PostgreSQL bounded Scenarios only. Manifest loading rejects
+`en` for TiDB, Persistent Scenarios, and the `dbot`, `dbaiops`, and `v-expel` modes,
+whose own prompts have not been translated. The remote service controls its own internal
+prompts. Raw database values, logs, and retrieved documents remain in their original
+language; this setting does not translate them or change the DP/OP/SP evaluation contracts.
+
 An existing `experiment_id` cannot be swapped to a different manifest. Create a new ID when the experiment configuration changes.
 
 ## 2. Preview the run matrix

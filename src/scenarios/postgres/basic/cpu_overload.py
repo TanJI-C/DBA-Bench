@@ -39,6 +39,7 @@ _CPUOVERLOADSCENARIO_CASE = CpuOverloadForHostCpuSaturationScenarioCase(
     evaluator=CpuOverloadForHostCpuSaturationEvaluatorCase,
     title='Simulates CPU overload on a PostgreSQL container via stress-ng.',
     alert='告警或提示：Simulates CPU overload on a PostgreSQL container via stress-ng.',
+    alert_en="Alert or notice: Simulates CPU overload on a PostgreSQL container via stress-ng.",
     initial_state={'status': 'healthy', 'metric_cpu_percent': 15},
     expected_target={'status': 'recovered', 'metric_cpu_percent': '< 70'},
     background_workload=EMPTY_BACKGROUND_WORKLOAD,

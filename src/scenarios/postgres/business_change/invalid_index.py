@@ -267,6 +267,7 @@ _PGBUSINESSCHANGEINVALIDINDEXSCENARIO_HARD_CASE = (
             "请找出性能退化的真实原因并恢复门店销量报表查询性能；"
             "发布窗口约束：不允许长时间阻塞 store_sales 的线上写入，也不允许重启实例。"
         ),
+        alert_en="Change release alert: last night's release task that rolls out a new index on store_sales for the store sales report kept showing failures and retries; this morning the latency of store sales report queries rose significantly, and several unrelated report queries are also slow. Find the real cause of the performance degradation and restore store sales report query performance; release window constraints: online writes to store_sales must not be blocked for a long time, and restarting the instance is not allowed.",
         initial_state={
             "status": "degraded",
             "alert": "release_retrying_and_report_latency_high",
@@ -400,6 +401,7 @@ _PGBUSINESSCHANGEINVALIDINDEXSCENARIO_SIMPLE_CASE = (
             "延迟明显升高。请找出性能退化的真实原因并恢复门店销量报表查询性能；"
             "发布窗口约束：不允许长时间阻塞 store_sales 的线上写入，也不允许重启实例。"
         ),
+        alert_en="Change alert: last night's report release task for store_sales failed, and this morning the latency of store sales report queries rose noticeably. Find the real cause of the performance degradation and restore store sales report query performance; release window constraints: online writes to store_sales must not be blocked for a long time, and restarting the instance is not allowed.",
         initial_state={
             "status": "degraded",
             "alert": "release_retrying_and_report_latency_high",

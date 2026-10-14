@@ -199,6 +199,7 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
     workload_tag='initialized',
     title='Online schema change on a large hot PostgreSQL order_line table.',
     alert='发布窗口告警：订单写入链路正在上线配送备注能力，应用映射字段为 ol_delivery_note。当前 order-entry 读写延迟 SLO 接近阈值，连接数、事务吞吐和发布预检任务同时升高。请确认应变更的在线业务对象，在不中断下单流量的前提下完成结构变更，并复查变更已生效。',
+    alert_en="Release window alert: the order write path is rolling out a delivery note capability, and the application maps it to the column ol_delivery_note. The order-entry read/write latency SLO is close to its threshold, and connections, transaction throughput and release pre-check tasks are rising at the same time. Identify the online business object that should be changed, complete the structural change without interrupting order traffic, and re-check that the change has taken effect.",
     initial_state={'status': 'change_pending',
  'table': 'order_line',
  'workload': 'high_write_concurrency',
@@ -309,6 +310,7 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
             "发布预检观察到短暂锁竞争。请确认实际在线对象和缺失结构，"
             "使用快速失败并可重试的方式完成变更，随后核验业务结构。"
         ),
+        alert_en="Release window alert: the order path is rolling out a gift note capability, writes are still ongoing, and the release pre-check observed brief lock contention. Identify the actual online object and the missing structure, complete the change in a fail-fast and retryable way, and then verify the business structure.",
         initial_state={
             "status": "change_pending",
             "workload": "steady_write_concurrency",

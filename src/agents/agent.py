@@ -12,15 +12,17 @@ from src.agents.cache_breaker import (
     CacheCircuitBreaker,
     CacheCircuitBreakerError,
 )
+from src.agent_language import agent_text
 from src.agents.context_compaction import (
-    BURST_WARNING_PREFIX,
     CONTEXT_SUMMARY_SYSTEM_PROMPT,
     ContextCompactionConfig,
     ContextCompactionError,
     SUMMARY_HEADINGS,
     SUMMARY_MESSAGE_PREFIX,
     build_summary_user_prompt,
+    burst_warning_prefix,
     is_burst_warning_message,
+    prompt_tool_result_prefix,
     select_compaction,
     split_history_into_rounds,
 )
@@ -1354,7 +1356,7 @@ class LLMAgent(BaseAgent):
         """
         api = action_result.get("api", "unknown")
         result_str = json.dumps(action_result, ensure_ascii=False)
-        return f"[工具执行结果] {api}: {result_str}"
+        return f"{prompt_tool_result_prefix()} {api}: {result_str}"
 
     def _is_claude_response(self, llm_response: Dict[str, Any]) -> bool:
         return llm_response.get("type") == "message" and "content" in llm_response and isinstance(llm_response["content"], list)
@@ -1560,7 +1562,10 @@ class LLMAgent(BaseAgent):
         self._log("LLMAgent.solve 开始驱动诊断循环...")
 
         if not any(m.get("role") == "user" for m in self._conversation_history):
-            initial_user_msg = self.user_prompt if self.user_prompt else "请根据上述场景开始诊断。"
+            initial_user_msg = self.user_prompt if self.user_prompt else agent_text(
+                zh="请根据上述场景开始诊断。",
+                en="Start the diagnosis based on the scenario above.",
+            )
             self._append_conversation_message(
                 {"role": "user", "content": initial_user_msg}
             )
@@ -1760,13 +1765,25 @@ class LLMAgent(BaseAgent):
         ledger_text = self._build_dropped_tool_ledger(rounds)
         warning_message = {
             "role": "user",
-            "content": (
-                BURST_WARNING_PREFIX + "此前工具调用返回内容过多，超出模型上下文窗口（token 上限），"
-                "已触发上下文压缩：仅保留第一轮对话，其后所有轮次（包括最近的工具结果）已被丢弃，"
-                "上下文压缩算法可能丢失重要信息。\n"
-                + ledger_text
-                + "禁止重复以上调用：它们此前已导致上下文超限，重复执行会再次超窗且结果再次被丢弃。"
-                "请改用更精确、更小范围的查询，或基于现有信息继续完成原任务并提交。"
+            "content": burst_warning_prefix() + agent_text(
+                zh=(
+                    "此前工具调用返回内容过多，超出模型上下文窗口（token 上限），"
+                    "已触发上下文压缩：仅保留第一轮对话，其后所有轮次（包括最近的工具结果）已被丢弃，"
+                    "上下文压缩算法可能丢失重要信息。\n"
+                    + ledger_text
+                    + "禁止重复以上调用：它们此前已导致上下文超限，重复执行会再次超窗且结果再次被丢弃。"
+                    "请改用更精确、更小范围的查询，或基于现有信息继续完成原任务并提交。"
+                ),
+                en=(
+                    "Earlier tool calls returned too much content and exceeded the model "
+                    "context window (token limit), so context compaction was triggered: only the first round of the "
+                    "conversation is kept, and all later rounds (including the most recent tool results) have been "
+                    "discarded; the context compaction algorithm may have lost important information.\n"
+                    + ledger_text
+                    + "Do not repeat the calls above: they already caused the context overflow, and repeating them "
+                    "would exceed the window again and their results would be discarded again. Use more precise, "
+                    "narrower queries instead, or continue the original task based on the information you have and submit."
+                ),
             ),
         }
         compacted = [*kept_prefix, warning_message]
@@ -1796,10 +1813,17 @@ class LLMAgent(BaseAgent):
                         args_text = args_text[:120] + "…"
                     entries.append(f"- {api}: {args_text}")
                     if len(entries) >= 20:
-                        return "本轮诊断已执行过的工具调用：\n" + "\n".join(entries) + "\n"
+                        return self._dropped_tool_ledger_header() + "\n".join(entries) + "\n"
         if not entries:
             return ""
-        return "本轮诊断已执行过的工具调用：\n" + "\n".join(entries) + "\n"
+        return self._dropped_tool_ledger_header() + "\n".join(entries) + "\n"
+
+    @staticmethod
+    def _dropped_tool_ledger_header() -> str:
+        return agent_text(
+            zh="本轮诊断已执行过的工具调用：\n",
+            en="Tool calls already executed in this diagnosis:\n",
+        )
 
     @staticmethod
     def _iter_round_tool_calls(message: Dict[str, Any]):

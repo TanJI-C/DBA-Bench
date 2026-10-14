@@ -181,6 +181,7 @@ _PGRESOURCEGOVERNANCERESOURCETHROTTLINGSCENARIO_CASE = PgResourceGovernanceResou
     workload_tag='initialized',
     title='Simulates mixed OLTP and reporting workload contention and requires role-level resource isolation.',
     alert='P1 混合业务资源告警：PostgreSQL 单机实例 CPU 使用率持续偏高，核心交易接口 P95 延迟从毫秒级升高到秒级，QPS 明显下降。同实例活跃会话数量上升且存在长耗时 SQL，请排查资源占用来源，在不重启实例且符合安全合规要求的前提下恢复核心交易延迟，并降低复发风险。',
+    alert_en="P1 mixed-workload resource alert: CPU usage of the standalone PostgreSQL instance stays high, the P95 latency of core transaction APIs has risen from milliseconds to seconds, and QPS has dropped noticeably. The number of active sessions on the same instance is rising and there are long-running SQL statements. Investigate the source of the resource usage, restore core transaction latency without restarting the instance and in compliance with security and compliance requirements, and reduce the risk of recurrence.",
     initial_state={'status': 'degraded',
  'resource_contention': 'reporting_query_consuming_cpu',
  'transaction_latency': 'high'},

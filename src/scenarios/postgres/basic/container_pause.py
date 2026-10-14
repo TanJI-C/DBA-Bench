@@ -39,6 +39,7 @@ _CONTAINERPAUSESCENARIO_CASE = ContainerPauseForPrimaryContainerPausedScenarioCa
     evaluator=ContainerPauseForPrimaryContainerPausedEvaluatorCase,
     title='Simulates container freeze via docker pause.',
     alert='告警或提示：Simulates container freeze via docker pause.',
+    alert_en="Alert or notice: Simulates container freeze via docker pause.",
     initial_state={'status': 'healthy'},
     expected_target={'status': 'recovered'},
     background_workload=EMPTY_BACKGROUND_WORKLOAD,

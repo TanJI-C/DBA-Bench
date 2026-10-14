@@ -40,6 +40,11 @@ agents:
 bounded Scenario；不接受 `reasoning_effort` 和 `max_output_tokens`，因为 benchmark
 不会替这个 Agent 调用模型。
 
+需要框架提供英文提示词、工具 schema、help 和告警时，在实验 manifest 中设置
+`runtime.agent_language: en`。默认是 `zh`，英文仅支持 PostgreSQL bounded Scenario。
+服务内部的提示词仍由服务自行管理。完整范围和限制见
+[正式实验指南](run-experiment.guide.zh-CN.md)。
+
 ## 协议
 
 请求和响应正文均为 JSON，路径相对于 `endpoint`。

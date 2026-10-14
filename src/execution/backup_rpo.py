@@ -26,6 +26,7 @@ from src.execution.history.records import (
     HistoricalRecordSource,
 )
 from src.execution.deployment import PGDockerDeployment
+from src.agent_language import agent_text
 from src.execution.environment import PGEnv
 from src.execution.postgres_metrics import (
     LivePostgresSamplerMetricProvider,
@@ -317,20 +318,34 @@ class RpoPGEnv(PGEnv):
 
     def _refresh_rpo_tool_specs(self) -> None:
         visible_metrics = {*RPO_METRIC_DEFINITIONS, "oltp_service"}
-        action_description = (
-            "RPO action。合法组合: archive_status/archive_repository; "
-            "rpo_topology/archive_repository; recover_archive/archive_repository; "
-            "validate_backup/backup_repository; pitr_restore/evaluator_selected。"
+        action_description = agent_text(
+            zh=(
+                "RPO action。合法组合: archive_status/archive_repository; "
+                "rpo_topology/archive_repository; recover_archive/archive_repository; "
+                "validate_backup/backup_repository; pitr_restore/evaluator_selected。"
+            ),
+            en=(
+                "RPO action. Valid combinations: archive_status/archive_repository; "
+                "rpo_topology/archive_repository; recover_archive/archive_repository; "
+                "validate_backup/backup_repository; pitr_restore/evaluator_selected."
+            ),
         )
-        target_description = (
-            "必须使用 action 对应的逻辑 target，禁止猜测容器路径: "
-            "archive_repository、backup_repository 或 evaluator_selected。"
+        target_description = agent_text(
+            zh=(
+                "必须使用 action 对应的逻辑 target，禁止猜测容器路径: "
+                "archive_repository、backup_repository 或 evaluator_selected。"
+            ),
+            en=(
+                "Use the logical target that matches the action; do not guess container paths: "
+                "archive_repository, backup_repository or evaluator_selected."
+            ),
         )
         self._enabled_tool_specs = [
             replace(
                 spec,
-                description=(
-                    "管理 RPO 归档与隔离恢复；仅支持当前 Case 声明的逻辑 action/target。"
+                description=agent_text(
+                    zh="管理 RPO 归档与隔离恢复；仅支持当前 Case 声明的逻辑 action/target。",
+                    en="Manage RPO archiving and isolated recovery; only the logical action/target declared by the current Case are supported.",
                 ),
                 parameters=tuple(
                     replace(parameter, description=action_description)
@@ -348,7 +363,10 @@ class RpoPGEnv(PGEnv):
                     replace(
                         parameter,
                         description=(
-                            "当前 RPO Case metric，可选值: "
+                            agent_text(
+                                zh="当前 RPO Case metric，可选值: ",
+                                en="Metric of the current RPO Case, allowed values: ",
+                            )
                             + ", ".join(sorted(visible_metrics))
                         ),
                     )

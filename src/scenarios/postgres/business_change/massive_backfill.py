@@ -235,6 +235,7 @@ _PGBUSINESSCHANGEMASSIVEBACKFILLSCENARIO_CASE = PgBusinessChangeMassiveBackfillF
     workload_tag='initialized',
     title='Simulates a massive historical data backfill that must be chunked and throttled.',
     alert='变更发布告警：业务要求重新计算 customer_backfill 历史一年数据中的订正字段 c_birth_decade_corrected。当前 customer_backfill 仍有高并发读写，监控显示写入吞吐和 I/O 对批量变更非常敏感。请先评估变更风险，并在执行过程中持续确认业务负载保持稳定。',
+    alert_en="Change release alert: the business requires recalculating the corrected column c_birth_decade_corrected over one year of historical data in customer_backfill. customer_backfill still has highly concurrent reads and writes, and monitoring shows that write throughput and I/O are very sensitive to bulk changes. First assess the change risk, and keep confirming during execution that the business workload stays stable.",
     initial_state={'status': 'change_requested',
  'backfill': 'pending',
  'risk': 'full_table_update_would_create_long_transaction'},
@@ -351,6 +352,7 @@ _PGBUSINESSCHANGEMASSIVEBACKFILLSCENARIO_SIMPLE_CASE = (
             "资料表上的批次标签存在漂移，请以发布清单确定订正范围。"
             "请采用可控批次完成变更，并验证冻结切片外的记录保持原状。"
         ),
+        alert_en="Release alert: the historical customer loyalty segments must be corrected according to the reviewed release manifest of this release. This release is based on the manifest snapshot frozen at 2025-01-06 00:00:00+00; manifest rows appended after the freeze go out with the next release window and must not be modified this time. After the freeze, the release desk still records scope rulings (voided or rolled back) on individual registered rows; the latest ruling is the one in the release operation event records, so determine the scope of this correction by the latest rulings. Online customer profiles still receive low-frequency writes, and future batch previews and leftovers of past batches are visible at the same time; the batch labels on the profile table have drifted, so determine the correction scope from the release manifest. Make the change in controlled batches, and verify that the records outside the frozen slice stay unchanged.",
         initial_state={
             "status": "change_requested",
             "backfill": "pending",

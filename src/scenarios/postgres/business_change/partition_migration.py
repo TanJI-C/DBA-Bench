@@ -340,6 +340,7 @@ _PGBUSINESSCHANGEPARTITIONMIGRATIONSCENARIO_CASE = (
             "至今未恢复。发布包含支付库结构变更，具体影响范围未知。请尽快恢复业务正常"
             "读写，完成本次变更收尾，并核对支付数据完整性。"
         ),
+        alert_en="Change release alert: after last night's payment domain release, widespread read/write stalls appeared, payment write timeouts increased markedly, and the situation has not recovered so far. The release included structural changes to the payment database, and the exact scope of impact is unknown. Restore normal business reads and writes as soon as possible, finish wrapping up this change, and check the integrity of the payment data.",
         initial_state={
             "status": "change_degraded",
             "migration": "attach_partition_failed",
@@ -486,6 +487,7 @@ _PGBUSINESSCHANGEPARTITIONMIGRATIONSCENARIO_SIMPLE_CASE = (
             "偶发变慢，改造作业在等待数据库锁，多次执行仍未完成。请处理阻塞并完成 "
             "payment_events 的分区改造，注意保持支付数据完整。"
         ),
+        alert_en="Change alert: the ATTACH step of the payment_events partitioning rework is running slowly, monitoring shows that payment queries are occasionally slow, and the rework job is waiting on a database lock and has not finished after several attempts. Resolve the blocking and complete the partitioning rework of payment_events, taking care to keep the payment data intact.",
         initial_state={
             "status": "change_degraded",
             "migration": "attach_partition_waiting",

@@ -13,8 +13,13 @@ from src.agents.baselines.v_expel.config import VExpeLConfig
 from src.scenarios.base import DatabaseSystem
 from src.scenarios.registry import ScenarioCategory
 
+from src.agent_language import DEFAULT_AGENT_LANGUAGE, validate_agent_language
+
 from .models import AgentSpec, IsolationPolicySpec, RuntimeSpec, ScenarioKind
 from .isolation import expand_linux_set
+
+# Agent modes whose own prompts exist only in Chinese; English runs refuse them.
+UNTRANSLATED_AGENT_MODES = frozenset({"dbot", "dbaiops", "v-expel"})
 
 
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -296,6 +301,7 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
             "postgres_storage_root",
             "diagnosis_match_mode",
             "diagnosis_semantic_model",
+            "agent_language",
             "isolation",
             "run_mode",
             "time_scale",
@@ -355,6 +361,10 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
         diagnosis_semantic_model=str(
             runtime_data.get("diagnosis_semantic_model", "Qwen/Qwen3-4B-Instruct-2507")
         ),
+        agent_language=validate_agent_language(
+            runtime_data.get("agent_language", DEFAULT_AGENT_LANGUAGE),
+            "manifest.runtime.agent_language",
+        ),
         isolation=isolation,
         run_mode=str(runtime_data.get("run_mode", "formal")),
         time_scale=float(runtime_data.get("time_scale", 1.0)),
@@ -404,6 +414,29 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
         )
     if not runtime.diagnosis_semantic_model.strip():
         raise ValueError("manifest.runtime.diagnosis_semantic_model must be non-empty")
+    if runtime.agent_language == "en":
+        untranslated_systems = sorted(
+            system.value for system in systems if system is not DatabaseSystem.POSTGRESQL
+        )
+        if untranslated_systems:
+            raise ValueError(
+                "manifest.runtime.agent_language='en' covers PostgreSQL only; agent-facing text "
+                f"for {untranslated_systems} is Chinese. Use agent_language: zh for these systems."
+            )
+        if scenario_kind is ScenarioKind.PERSISTENT:
+            raise ValueError(
+                "manifest.runtime.agent_language='en' covers bounded scenarios only; "
+                "persistent episodes are Chinese. Use agent_language: zh."
+            )
+        untranslated_agents = sorted(
+            agent.id for agent in agents if agent.mode in UNTRANSLATED_AGENT_MODES
+        )
+        if untranslated_agents:
+            raise ValueError(
+                "manifest.runtime.agent_language='en' needs agents whose own prompts are "
+                f"translated; agents {untranslated_agents} use modes "
+                f"{sorted(UNTRANSLATED_AGENT_MODES)} with Chinese prompts."
+            )
     if runtime.concurrency > 1:
         if runtime.isolation is None:
             raise ValueError(

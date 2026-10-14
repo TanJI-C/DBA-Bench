@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
+from src.agent_language import agent_text
+
 
 UTC = timezone.utc
 METRIC_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -419,6 +421,16 @@ QUERY_METRICS_BOUND_CONTRACT = (
     "truncated=true（附 truncation.hint），请缩小 start_timestamp/end_timestamp 窗口或增大 "
     "step_seconds 后重新查询。"
 )
+QUERY_METRICS_TRUNCATION_HINT_EN = (
+    "This query_metrics result exceeded the per-response character limit, so observation points were dropped from the "
+    "oldest end (the newest observation points are kept intact); narrow the start_timestamp/end_timestamp query window, "
+    "or increase step_seconds to lower the sampling density, and query again."
+)
+QUERY_METRICS_BOUND_CONTRACT_EN = (
+    f"The whole result is at most {QUERY_METRICS_RESULT_MAX_CHARS} characters; beyond that, observation points are "
+    "dropped from the oldest end and truncated=true is set (with truncation.hint); narrow the "
+    "start_timestamp/end_timestamp window or increase step_seconds and query again."
+)
 
 
 def _series_point_count(fields: dict[str, Any]) -> int:
@@ -461,7 +473,7 @@ def bound_metric_result(result_json: str, *, max_chars: int = QUERY_METRICS_RESU
         "limit_chars": max_chars,
         "original_chars": len(result_json),
         "dropped_points": 0,
-        "hint": QUERY_METRICS_TRUNCATION_HINT,
+        "hint": agent_text(zh=QUERY_METRICS_TRUNCATION_HINT, en=QUERY_METRICS_TRUNCATION_HINT_EN),
     }
     while True:
         kept_points = sum(_series_point_count(fields) for fields in series.values())

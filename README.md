@@ -131,7 +131,12 @@ repetitions: 1
 seeds: [11]
 runtime:
   fault_snapshot: auto
+  agent_language: en   # optional: zh (default) or en; English covers PostgreSQL bounded scenarios
 ```
+
+`runtime.agent_language` selects the framework's Agent-facing text, including the prompts
+and tools sent to remote agents. English currently supports PostgreSQL bounded Scenarios;
+see the [language scope and restrictions](docs/guides/benchmark/run-experiment.guide.md#agent-facing-language).
 
 ```bash
 aiopsbench experiment plan experiments/pg_smoke.example.yaml

@@ -43,6 +43,12 @@ agents:
 bounded scenarios only; `reasoning_effort` and `max_output_tokens` are rejected because the
 benchmark does not call a model for this agent.
 
+For English framework prompts, tool schemas, help, and alerts, set
+`runtime.agent_language: en` in the experiment manifest. It defaults to `zh`; English
+supports PostgreSQL bounded Scenarios only. The service's internal prompts remain its
+own responsibility. See [agent-facing language](run-experiment.guide.md#agent-facing-language)
+for the full scope and restrictions.
+
 ## Protocol
 
 All bodies are JSON. Paths are relative to `endpoint`.
