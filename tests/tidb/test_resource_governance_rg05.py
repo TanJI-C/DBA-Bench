@@ -12,8 +12,8 @@ from src.scenarios.evaluation.tidb.resource_governance.lightning_budget import (
     LightningBudgetSafetyRule,
 )
 from src.scenarios.evaluation.safety import TraceEvent
-from src.execution.environment import TiDBEnv
-from src.execution.deployment import lightning_job_id
+from src.execution.environments.tidb import TiDBEnv
+from src.execution.deployments.tidb_support import lightning_job_id
 from src.scenarios.tidb.resource_governance.lightning_budget import (
     ChunkCheckpointLightningBudgetController,
     LightningBudgetController,

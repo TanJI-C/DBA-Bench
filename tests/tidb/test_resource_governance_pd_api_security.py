@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun, InjectionRecord
 from src.scenarios.tidb.resource_governance.pd_api_security import (
     RG09_CLUSTER_CONFIG_SQL,

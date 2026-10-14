@@ -1,7 +1,7 @@
 import math
 from typing import Mapping
 
-from ..base import (
+from src.execution.specs import (
     CaseResourceSpec,
     TiDBCaseRuntime,
     TiDBReleaseSpec,

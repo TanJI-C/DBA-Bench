@@ -23,7 +23,6 @@ from .enums import (
     SETTING_SCOPES_BY_SYSTEM,
     SETTING_SCOPES_WITH_NAME,
     CalibrationStatus,
-    DatabaseSystem,
     EventTrigger,
     HtapMode,
     LoadClass,
@@ -32,6 +31,7 @@ from .enums import (
     SettingEffect,
     SettingScope,
 )
+from src.database.system import DatabaseSystem
 
 PROTOCOL_VERSION = "persistent-scenario-v2"
 

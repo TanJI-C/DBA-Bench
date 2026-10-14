@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.agent_language import agent_text
-from src.scenarios.evaluation.protocol import STRUCTURED_REPORT_JSON_SCHEMA
+from src.protocols.report import STRUCTURED_REPORT_JSON_SCHEMA
 from src.execution.tidb_metrics import CASE_ONLY_METRICS, TIDB_METRIC_CATALOG
 
 

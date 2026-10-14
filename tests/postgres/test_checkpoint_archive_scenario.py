@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.scenarios.evaluation.base import evaluation_passed
-from src.scenarios.evaluation.protocol import EMPTY_REPORT, StructuredReport
-from src.execution.environment import PGEnv
+from src.protocols.report import EMPTY_REPORT, StructuredReport
+from src.execution.environments.postgres import PGEnv
 from src.execution.history.records import HistoricalRecordSource
 from src.execution.postgres_metrics import read_device_io_stats
 from src.scenarios import SCENARIOS_BY_ID
@@ -906,7 +906,7 @@ def test_entrypoint_uses_case_fault_image_as_default_snapshot_name():
     assert case.base_image_name == "aiopsbench-pg-tpcds:latest"
     assert run_config.fault_snapshot_name == case.fault_image_name
     assert entry["allocate_ports"](15841) == (15842, 15843)
-    assert entry["allocate_ports"](15849) == (15844, 15845)
+    assert entry["allocate_ports"](15849) == (15850, 15851)
     assert entry["allocate_ports"](15941) == (15942, 15943)
 
 

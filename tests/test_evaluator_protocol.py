@@ -7,10 +7,8 @@ import pytest
 from src.scenarios.evaluation import BaseEvaluator
 from src.scenarios.evaluation.common import condition
 from src.scenarios.evaluation.diagnosis import DiagnosisMatcher
-from src.scenarios.evaluation.protocol import (
-    EvaluationContext,
-    parse_submission_report,
-)
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import parse_submission_report
 from src.scenarios.evaluation.efficiency import EfficiencyCalculator
 from src.scenarios.evaluation.outcome import ActionResultVerifier
 from src.scenarios.evaluation.safety import (
@@ -18,12 +16,12 @@ from src.scenarios.evaluation.safety import (
     ProtectedObjectRule,
     SafetyEngine,
 )
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.base import evaluation_passed
 from src.scenarios.runtime.config import required_run_timeout_seconds
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, normalize_submission_report
 
 

@@ -7,7 +7,7 @@ import psycopg2
 from psycopg2 import sql
 import pytest
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 def make_env(connection=None):

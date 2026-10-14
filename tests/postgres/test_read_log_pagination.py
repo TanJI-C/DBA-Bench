@@ -4,7 +4,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 def test_read_log_default_returns_first_100_lines_with_total():

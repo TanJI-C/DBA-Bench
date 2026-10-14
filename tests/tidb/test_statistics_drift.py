@@ -14,7 +14,7 @@ from src.database.query_results import capture_query_result_truth
 from src.scenarios import TIDB_SCENARIO_REGISTRY
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbQueryPerfStatisticsDriftScenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
+from src.execution.tidb_runtime import TIDB_V8_1_0
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.query_perf.statistics_drift import (
     TidbQueryPerfStatisticsDriftInjector,
@@ -447,7 +447,7 @@ def test_semantic_dp_accepts_faithful_paraphrase():
 
 def test_reduced_case_merges_five_diagnosis_states_into_two_and_keeps_table_scope_choice():
     from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     original, reduced = SCENARIO.cases
     assert (original.case_no, reduced.case_no) == (0, 1)

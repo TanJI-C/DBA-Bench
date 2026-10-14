@@ -11,6 +11,7 @@ most likely to hit.
 |---|---|---|
 | Python | 3.10 – 3.12 | `python3 --version` |
 | Docker Engine | 20.10+ | Includes Compose v2 (`docker compose version`) |
+| Docker storage filesystem | xfs with pquota | PG and TiDB containers enforce disk quota via `--storage-opt`, which Docker only supports on xfs+pquota; on ext4 every container start fails with exit 125. Check with `df -T /var/lib/docker` (see step 2) |
 | Free disk | ~10 GB | `postgres:16` image plus per-run containers; TiDB Compose adds PD/TiKV/TiDB/Prometheus images |
 | Free RAM | 4 GB (PG) / 8 GB (TiDB) | TiDB Compose runs PD + TiKV + TiDB + Prometheus |
 | (Optional) NVIDIA GPU | 24 GB+ VRAM | Only for the local semantic-diagnosis judge (vLLM) |
@@ -51,7 +52,13 @@ Conda works too (`conda create -n aiopsbench python=3.11`) — any environment n
    docker compose version   # must be Compose v2
    ```
 
-3. If step 2 fails with `permission denied` on Linux, add yourself to the `docker` group and re-login:
+3. If step 2 fails with `docker: unknown command: docker compose`, the Compose v2 plugin is missing — install it and re-verify:
+
+   ```bash
+   sudo apt-get install docker-compose-plugin   # Debian/Ubuntu; Docker Desktop ships it
+   ```
+
+4. If step 2 fails with `permission denied` on Linux, add yourself to the `docker` group and re-login:
 
    ```bash
    sudo usermod -aG docker "$USER"
@@ -60,9 +67,40 @@ Conda works too (`conda create -n aiopsbench python=3.11`) — any environment n
 Images used at runtime:
 
 - PostgreSQL scenarios pull **`postgres:16`** from Docker Hub.
-- TiDB scenarios use a Compose file that pins **`pingcap/pd`, `pingcap/tikv`, `pingcap/tidb`** by digest, plus Prometheus and cAdvisor.
+- TiDB scenarios use a Compose file that pins the **TiDB v8.1.0** release images (**`pingcap/pd`**, **`pingcap/tikv`**, **`pingcap/tidb`**) by digest, plus Prometheus and cAdvisor. The digest pins the exact calibrated release — do not swap in newer tags.
 - If `pingcap/*` pulls are slow or blocked in your network, configure a registry mirror in the Docker daemon
   (for example `https://docker.m.daocloud.io`) — parts of the Compose file already reference it directly.
+
+### Ext4 hosts: migrate the Docker data-root to xfs
+
+The prerequisite table requires an **xfs with pquota** filesystem under the Docker storage root. Check yours:
+
+```bash
+df -T /var/lib/docker    # Type column: xfs ok; ext4 needs the migration below
+```
+
+If it is ext4, every container start fails with exit 125
+(`--storage-opt is supported only for overlay over xfs with 'pquota'`). Run the migration script:
+
+```bash
+sudo bash scripts/setup_docker_xfs_dataroot.sh
+```
+
+It creates a sparse image file (200G by default, override with `SIZE=...`), formats it xfs, loop-mounts
+it with pquota at `/srv/docker-xfs`, rsyncs the old data root over, points `data-root` in
+`/etc/docker/daemon.json` at the new location, and verifies that a `--storage-opt size=1g` container
+actually sees a 1G filesystem. Containers running before the migration are restarted afterwards.
+
+**Finish with the fstab line the script prints** — the loop mount is runtime state and disappears on
+reboot, which would leave Docker with an empty data-root directory (all data stays safe inside the
+image file; remounting brings everything back):
+
+```
+/srv/docker-xfs.img /srv/docker-xfs xfs loop,pquota 0 0
+```
+
+Rollback at any time: stop docker, remove the mountpoint, `mv /var/lib/docker.ext4.bak /var/lib/docker`,
+remove `data-root` from daemon.json, start docker.
 
 ## 3. First run
 
@@ -154,6 +192,7 @@ are only needed for `examples/run_tpcds_demo.py`, which generates and loads a fu
 | Port already allocated (`15432`, `4000`, `2379`) | A previous run is still up; `docker ps`, then stop/remove the leftover containers |
 | `postgres:16` pull times out | Configure a Docker registry mirror for your region |
 | TiDB Compose containers restart-loop or OOM | Not enough free RAM — stop other workloads or lower TiKV memory in a local copy of the Compose file |
+| `--storage-opt is supported only for overlay over xfs with 'pquota'` | Docker data-root is on ext4; the container disk quota needs xfs+pquota — run `sudo bash scripts/setup_docker_xfs_dataroot.sh` (see step 2) |
 | Hugging Face download stalls | Keep the default `hf-mirror.com` endpoint (default here), or set `HF_ENDPOINT` explicitly |
 | vLLM fails to start | Check CUDA driver and free VRAM; the judge is optional — exact DP matching needs no GPU |
 | Tests hang on first run | Scenario tests pull images on first use; watch `docker ps` for progress |

@@ -4,19 +4,15 @@ from src.scenarios.evaluation.postgres.system_failure import (
     PgSystemFailureLockContentionForCustomerProfileLockQueueSimpleEvaluatorCase,
     PgSystemFailureLockContentionForCustomerRowLockQueueEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    CaseResourceSpec,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    PostgresScenarioCase,
 )
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.execution.specs import CaseResourceSpec, PostgresCaseRuntime
 
 
 # runtime fat image 以 shared_buffers=1GB / work_mem=64MB 运行；case 噪声含

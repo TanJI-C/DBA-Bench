@@ -308,7 +308,7 @@ results[].source_scope
 results[].content
 ~~~
 
-运行时实现位置是 src/execution/environment.py 的 _search_tidb_knowledge() 和
+运行时实现位置是 src/execution/environments/tidb.py 的 _search_tidb_knowledge() 和
 search_knowledge()；工具 schema 位于 src/execution/tidb_tool_definitions.py。
 
 知识结果只提供一般 TiDB 产品知识，不提供当前 run 的 Store、Region、表、checkpoint、

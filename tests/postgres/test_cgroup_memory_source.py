@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import src.execution.environment as environment
-from src.execution.environment import PGEnv
+import src.execution.environments.postgres as environment
+from src.execution.environments.postgres import PGEnv
 
 CONTAINER_ID = "3f2a9c" + "0" * 58
 

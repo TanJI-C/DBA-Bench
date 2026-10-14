@@ -94,6 +94,7 @@ REPORT = {
 
 class FakeDeployment:
     def __init__(self, audit):
+        self.rollout = SimpleNamespace(upgrade_agent_observation=self.upgrade_agent_observation, upgrade_evaluation_state=self.upgrade_evaluation_state)
         self.audit = audit
         self.database_nodes = TARGETS
         self.tidb_endpoints = {
@@ -460,3 +461,55 @@ def test_bc01_billing_case_mock_path_compresses_to_a_two_hop_rollout():
         if action["api"] == "manage_cluster" and action["args"].get("operation") == "verify"
     )
     assert verify_after["parameters"] == {"phase": "after"}
+
+
+def test_rolling_upgrade_business_control_belongs_to_its_environment():
+    from src.execution.environments.tidb import TiDBEnv
+    from src.execution.tidb_cluster_control import TiDBClusterControl
+    from src.scenarios.tidb.business_change.runtime.rolling_upgrade import RollingUpgradeEnv
+    env = RollingUpgradeEnv.__new__(RollingUpgradeEnv)
+    env.deployment = SimpleNamespace(upgrade_release=SimpleNamespace(version='v7.5.0'))
+    env._run_upgrade_precheck = lambda: {
+        'current_version': 'v6.5.0', 'target_version': 'v7.5.0',
+        'cluster_info': [{'TYPE': 'tidb', 'VERSION': 'v6.5.0'}],
+        'compatibility_variables': [],
+    }
+    result = json.loads(env.manage_cluster('release', 'prepare'))
+    assert result['status'] == 'success'
+    assert result['result']['target_version'] == 'v7.5.0'
+    assert not hasattr(TiDBEnv, '_run_upgrade_precheck')
+    assert TiDBClusterControl(SimpleNamespace()).resource_handlers()['release'].__func__ is TiDBClusterControl._release
+
+
+def test_generic_component_upgrade_keeps_its_observation_shape():
+    from src.execution.tidb_cluster_control import TiDBClusterControl
+    details = {'target': 'tidb/tidb-0', 'component': 'tidb',
+               'from_version': 'v6.5.0', 'to_version': 'v7.5.0', 'event': 'component_upgrade'}
+    env = SimpleNamespace(deployment=SimpleNamespace(rollout=SimpleNamespace(upgrade_component=lambda target: details)))
+    response = json.loads(TiDBClusterControl(env).execute('service', 'upgrade', 'tidb/tidb-0'))
+    assert response['status'] == 'success'
+    assert response['result'] == {key: details[key] for key in ('target', 'component', 'from_version', 'to_version')}
+
+
+def test_rolling_upgrade_snapshot_returns_the_schema_it_records():
+    from src.scenarios.tidb.business_change.runtime.rolling_upgrade import RollingUpgradeEnv
+    env = RollingUpgradeEnv.__new__(RollingUpgradeEnv)
+    env._case = CASE
+    env.run_id = 'bc01-backup'
+    checksum = [{'row_count': CASE.row_count, 'amount_cents': CASE.expected_amount_cents,
+                 'tenant_sum': CASE.expected_tenant_sum}]
+    schema = [{'Table': CASE.table, 'Create Table': 'CREATE TABLE business_events (...)'}]
+    env._query_rows = lambda sql: schema if sql.startswith('SHOW CREATE') else checksum
+    events = []
+
+    def record(event, **details):
+        events.append({'event': event, **details})
+        return events[-1]
+
+    env.deployment = SimpleNamespace(upgrade_release=SimpleNamespace(version=CASE.target_version),
+                                     rollout=SimpleNamespace(record_upgrade_event=record))
+    response = json.loads(env.manage_cluster('release', 'snapshot'))
+    assert response['status'] == 'success'
+    assert response['result'] == {'checksum': checksum, 'schema': schema}
+    assert events[0]['schema'] == schema
+    assert events[0]['rpo'] == '0'

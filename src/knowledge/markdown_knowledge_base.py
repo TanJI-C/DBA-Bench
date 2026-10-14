@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from src.project_paths import REPOSITORY_ROOT, SHARED_REPOSITORY_ROOT, resolve_project_path, resolve_shared_project_path
+from src.project_paths import SHARED_REPOSITORY_ROOT, resolve_shared_project_path
 
 from .embedding_model_runtime import default_embedding_model_url, request_embeddings
 
@@ -79,11 +79,11 @@ def sha256_file(path: Path) -> str:
 
 
 def _repository_relative(path: Path) -> str:
-    """manifest 路径的存储形式：仓库内资源写相对 REPOSITORY_ROOT 的 POSIX 相对路径
+    """manifest 路径的存储形式：仓库内资源写相对共享仓库根目录的 POSIX 相对路径
     （随仓库分发的数据文件不携带构建机绝对路径）；仓库外语料没有相对形式，保留绝对路径。"""
     resolved = path.resolve()
     try:
-        return resolved.relative_to(REPOSITORY_ROOT).as_posix()
+        return resolved.relative_to(SHARED_REPOSITORY_ROOT).as_posix()
     except ValueError:
         return resolved.as_posix()
 
@@ -358,7 +358,7 @@ class MarkdownKnowledgeBase:
                 f"expected_collection={self.collection_name!r}, "
                 f"actual_collection={manifest.get('collection_name')!r}"
             )
-        source_path = resolve_project_path(manifest["source_file"])
+        source_path = resolve_shared_project_path(manifest["source_file"])
         if not source_path.exists():
             raise FileNotFoundError(
                 f"Knowledge index source file is missing: manifest={self.manifest_path}, "

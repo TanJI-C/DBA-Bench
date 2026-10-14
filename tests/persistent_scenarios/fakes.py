@@ -13,7 +13,8 @@ from src.persistent_scenarios.backend.contracts import (
     OwnershipMode,
     ResourceOwnership,
 )
-from src.persistent_scenarios.model.enums import CalibrationStatus, DatabaseSystem, EventTrigger
+from src.persistent_scenarios.model.enums import CalibrationStatus, EventTrigger
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.spec import (
     CalibrationSpec,
     DiagnosisContract,
@@ -166,6 +167,10 @@ class FakeEnvironment:
 
 
 class FakeEnvironmentProvider:
+    def host_ports(self, spec):
+        from src.execution.specs import HostPortLayout
+        return HostPortLayout(offsets=tuple(range(len(spec.environment.nodes))))
+
     def __init__(self, environment: FakeEnvironment | None = None):
         self.environment = environment or FakeEnvironment()
         self.teardowns = 0

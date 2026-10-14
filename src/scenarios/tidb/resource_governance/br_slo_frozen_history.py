@@ -42,10 +42,10 @@ from src.scenarios.tidb.resource_governance.br_slo import (
     _RG03_ROW_COUNT,
     _rg03_workload,
 )
-from src.scenarios.workloads import BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadStartPhase, WorkloadProfile
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _DATABASE = "benchops_mf_rg03"
@@ -1103,7 +1103,7 @@ _CASE = TidbResourceGovernanceBrSloFrozenHistoryCase(
         diagnostic_depth=5,
         environmental_complexity=0.850198,
         reference_run_ids=(
-            "reference-91__"
+            "tidb-mf-rg02-reference-mock-r106-20260828__"
             "tidb_resource_governance_br_slo_adaptive_throttling_frozen_history__"
             "br_slo_history_calibration__mock__r001",
         ),

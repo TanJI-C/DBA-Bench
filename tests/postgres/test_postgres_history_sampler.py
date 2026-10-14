@@ -6,7 +6,7 @@ import pytest
 
 from src.execution.history.metrics import MetricQuery, render_metric_frame
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider, POSTGRES_METRIC_CATALOG
-from src.execution.environment import PGEnv, _bounded_cpu_percent
+from src.execution.environments.postgres import PGEnv, _bounded_cpu_percent
 
 
 BASE_MS = 1_700_000_000_000

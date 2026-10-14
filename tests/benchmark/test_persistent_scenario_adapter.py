@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from src.persistent_scenarios.model.spec import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.benchmark.isolation import derive_worker_demand
 from src.benchmark.aggregate import aggregate, write_aggregate
 from src.benchmark.manifest import load_manifest
@@ -76,7 +76,7 @@ def _run_with_trace(tmp_path: Path, monkeypatch, evaluation: dict[str, object], 
     )
     monkeypatch.setattr(
         "src.benchmark.runner.build_command",
-        lambda run_spec, experiment: [sys.executable, "-c", child],
+        lambda run_spec, experiment: [sys.executable, "-c", child, "--port", str(run_spec.port)],
     )
     runner = ExperimentRunner(manifest, store)
     return runner._execute(spec), store

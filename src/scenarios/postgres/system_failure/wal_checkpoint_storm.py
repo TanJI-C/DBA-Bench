@@ -13,16 +13,9 @@ from src.scenarios.postgres.common import (
     build_checkpoint_temp_spill_profiles,
 )
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
-)
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import BackgroundWorkloadSpec, EMPTY_BACKGROUND_WORKLOAD
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

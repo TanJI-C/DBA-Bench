@@ -11,7 +11,6 @@ import yaml
 
 from src.persistent_scenarios.model.enums import (
     SETTING_SCOPES_BY_SYSTEM,
-    DatabaseSystem,
     EventTrigger,
     HtapMode,
     LoadClass,
@@ -20,6 +19,7 @@ from src.persistent_scenarios.model.enums import (
     SettingEffect,
     SettingScope,
 )
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.persistent_scenarios.model.spec import (
     compress_persistent_scenario_timeline,

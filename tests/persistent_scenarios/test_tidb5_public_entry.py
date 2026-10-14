@@ -19,7 +19,7 @@ from src.benchmark.models import AgentSpec, RuntimeSpec, ScenarioKind
 from src.cli import run_persistent_scenario_command
 from src.persistent_scenarios.api import build_tidb_backend
 from src.persistent_scenarios.backend.tidb.assembly import TiDBPersistentScenarioBackend
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 
 WORKTREE = Path(__file__).resolve().parents[2]

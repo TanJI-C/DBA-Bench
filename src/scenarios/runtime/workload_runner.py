@@ -9,11 +9,7 @@ from typing import Callable, List, Optional, Sequence
 
 from src.database.query_results import nearest_rank_percentile
 from src.execution.history.metrics import MetricFrame
-from src.scenarios.workloads import (
-    WORKLOAD_LOCK_TIMEOUT,
-    WORKLOAD_STATEMENT_TIMEOUT,
-    WorkloadProfile,
-)
+from src.workloads.specs import WORKLOAD_LOCK_TIMEOUT, WORKLOAD_STATEMENT_TIMEOUT, WorkloadProfile
 from src.workloads.tpcds import default_mix
 
 logger = logging.getLogger(__name__)

@@ -88,7 +88,7 @@ class FakeTiDBGateway:
 
 
 def make_inner_llm(monkeypatch, replies, report=MOCK_REPORT):
-    inner_llm = LLMAgent(url="mock", api_key="mock", model="test-model", use_native_tools=True)
+    inner_llm = LLMAgent(model="mock", url="mock", api_key="mock", use_native_tools=True)
     reply_iter = iter(replies)
     monkeypatch.setattr(
         inner_llm, "_next_llm_actions", lambda max_empty_retries: next(reply_iter)
@@ -168,7 +168,7 @@ class TestDbaiopsAgentTidbIntegration:
     def test_tidb_surface_selects_tidb_graph_and_solves(self, monkeypatch):
         from src.agents.baselines.dbaiops.agent import DbaiopsAgent
 
-        agent = DbaiopsAgent(model="test-model", graph_path="data/knowledge_graph/pg_experience_graph.json")
+        agent = DbaiopsAgent(model="mock", graph_path="data/knowledge_graph/pg_experience_graph.json")
         agent.set_tools(TIDB_TOOL_SURFACE)
         agent.set_user_prompt(
             "Resource group rg1 RU exceeded, queries are throttled and waiting on quota"
@@ -193,7 +193,7 @@ class TestDbaiopsAgentTidbIntegration:
     def test_tidb_action_adaptation_rewrites_history_queries(self):
         from src.agents.baselines.dbaiops.agent import DbaiopsAgent
 
-        agent = DbaiopsAgent(model="test-model", graph_path="data/knowledge_graph/pg_experience_graph.json")
+        agent = DbaiopsAgent(model="mock", graph_path="data/knowledge_graph/pg_experience_graph.json")
         agent.set_tools(TIDB_TOOL_SURFACE)
         agent._history_window = ("2026-09-08 00:00:00", "2026-09-08 01:00:00")
         adapted = agent._adapt_tidb_action({
@@ -212,7 +212,7 @@ class TestDbaiopsAgentTidbIntegration:
     def test_pg_surface_keeps_pg_graph(self, monkeypatch):
         from src.agents.baselines.dbaiops.agent import DbaiopsAgent
 
-        agent = DbaiopsAgent(model="test-model", graph_path="data/knowledge_graph/pg_experience_graph.json")
+        agent = DbaiopsAgent(model="mock", graph_path="data/knowledge_graph/pg_experience_graph.json")
         agent.set_tools([
             {"function": {"name": "query_metrics"}},
             {"function": {"name": "execute_sql"}},

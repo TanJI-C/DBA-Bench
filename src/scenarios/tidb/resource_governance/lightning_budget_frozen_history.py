@@ -6,16 +6,21 @@ from dataclasses import dataclass, replace
 import threading
 from typing import Mapping
 
-from src.execution.deployment import lightning_job_id
+from src.execution.deployments.tidb_support import lightning_job_id
 from src.execution.history.records import HistoricalRecordSource
-from src.scenarios.tidb.common import BaseFaultInjector, FaultLifecycleContext, json_object, require_sql_success
+from src.scenarios.tidb.common import (
+    BaseFaultInjector,
+    FaultLifecycleContext,
+    json_object,
+    require_sql_success,
+)
 from src.scenarios.frozen_history import (
     DecoyDirection,
     DecoyKind,
     HistoryDecoySpec,
     FrozenHistorySpec,
 )
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
 
 from src.scenarios.evaluation.tidb.resource_governance.lightning_budget_frozen_history import (
     TidbResourceGovernanceLightningBudgetFrozenHistoryEvaluatorCase,
@@ -23,7 +28,7 @@ from src.scenarios.evaluation.tidb.resource_governance.lightning_budget_frozen_h
 )
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from .lightning_budget import (
     LightningBudgetController,
     build_lightning_budget_noise_profiles,

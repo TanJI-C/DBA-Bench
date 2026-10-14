@@ -14,7 +14,7 @@ from src.scenarios.base import CaseRun
 from src.scenarios.tidb.health_check.ticdc_replication_trend import (
     TidbHealthCheckTiCdcReplicationTrendScenario,
 )
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 
 
 SCENARIO_ID = "tidb_health_check_ticdc_replication_trend"
@@ -498,7 +498,7 @@ def test_hc05_downstream_log_target_reads_registered_external_container(monkeypa
         sink_uri="mysql://root:hc05_sink_password@mysql-0:3306/?worker-count=4&max-txn-row=1&batch-dml-enable=true&transaction-atomicity=none",
     )
     monkeypatch.setattr(
-        "src.execution.environment.subprocess.run",
+        "src.execution.environments.tidb.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=0,
             stdout="2026-08-06T20:00:00Z downstream ready\n",
@@ -527,7 +527,7 @@ def test_hc05_external_log_result_is_character_bounded(monkeypatch):
         sink_uri="mysql://root:hc05_sink_password@mysql-0:3306/?worker-count=4&max-txn-row=1&batch-dml-enable=true&transaction-atomicity=none",
     )
     monkeypatch.setattr(
-        "src.execution.environment.subprocess.run",
+        "src.execution.environments.tidb.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=0,
             stdout="x" * 50000,
@@ -563,7 +563,7 @@ def test_hc05_manage_cluster_exposes_bounded_external_service_controls(monkeypat
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         raise AssertionError(command)
 
-    monkeypatch.setattr("src.execution.environment.subprocess.run", run)
+    monkeypatch.setattr("src.execution.environments.tidb.subprocess.run", run)
 
     ticdc = json.loads(env.manage_cluster("service", "get", target="ticdc/ticdc-0"))
     downstream = json.loads(env.manage_cluster("service", "get", target="downstream/mysql-0"))
@@ -613,7 +613,7 @@ def test_hc05_changefeed_update_preserves_existing_tool_surface_and_bounds(monke
         commands.append(command)
         return SimpleNamespace(returncode=0, stdout="updated", stderr="")
 
-    monkeypatch.setattr("src.execution.environment.subprocess.run", run)
+    monkeypatch.setattr("src.execution.environments.tidb.subprocess.run", run)
 
     updated = json.loads(
         env.manage_cluster(
@@ -667,7 +667,7 @@ def test_hc05_external_changefeed_lifecycle_uses_registered_ticdc_container(monk
         commands.append(command)
         return SimpleNamespace(returncode=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("src.execution.environment.subprocess.run", run)
+    monkeypatch.setattr("src.execution.environments.tidb.subprocess.run", run)
 
     paused = json.loads(env.manage_cluster("changefeed", "pause", target=CASE.changefeed_id))
     resumed = json.loads(env.manage_cluster("changefeed", "resume", target=CASE.changefeed_id))

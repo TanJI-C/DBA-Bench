@@ -9,7 +9,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.postgres import PgSystemFailureWalCheckpointStormScenario
 from src.scenarios.base import CaseRun
 

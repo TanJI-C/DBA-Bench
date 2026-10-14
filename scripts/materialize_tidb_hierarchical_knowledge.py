@@ -283,9 +283,6 @@ def markdown_record(chunk: dict, source_lock: dict, resolution: dict | None) -> 
     tags = ", ".join(f"`{item}`" for item in chunk["topic_tags"]) or "none"
     review_status = "reviewed" if resolution else "ai_classified"
     enrichment = chunk["enrichment"]
-    prompt_hash = sha256_bytes(
-        f"{chunk['split_prompt_sha256']}\n{chunk['enrich_prompt_sha256']}".encode("utf-8")
-    )
     return f"""# {chunk['title']}
 
 ## Knowledge Metadata
@@ -308,8 +305,6 @@ def markdown_record(chunk: dict, source_lock: dict, resolution: dict | None) -> 
 - Review Status: `{review_status}`
 - Source Extraction: `matched_markdown_sections`
 - Official Content SHA256: `{chunk['content_sha256']}`
-- Processing Prompt SHA256: `{prompt_hash}`
-- Processing Model: `{chunk['processing_model']}`
 
 ## Source Links
 

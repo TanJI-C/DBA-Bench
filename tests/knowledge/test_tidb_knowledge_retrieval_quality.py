@@ -83,7 +83,7 @@ def test_materialized_corpus_has_no_benchmark_specific_leakage():
 def test_unified_serving_corpus_has_no_provenance_or_scenario_leakage():
     assert SERVING_CORPUS.is_file(), f"Unified serving corpus is missing: {SERVING_CORPUS}"
     forbidden = (
-        "aiopsbench", "scenario_id", "case_id", "source_class", "source_origin",
+        "aiopsbench", "scenario_id", "case_id", "source_kind", "source_origin",
         "knowledge/tidb/curated", "docs/scenarios", "benchmark case",
     )
     required = {

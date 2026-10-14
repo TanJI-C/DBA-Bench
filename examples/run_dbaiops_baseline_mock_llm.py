@@ -13,7 +13,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.postgres import PgQueryPerfMissingIndexScenario
 from src.agents.baselines.dbaiops.agent import DbaiopsAgent
 from src.agents.agent import LLMAgent
@@ -134,7 +134,7 @@ def main():
         graph_path="data/knowledge_graph/pg_experience_graph.json",
         config_path="config/llm_config.json",
     )
-    inner_llm = LLMAgent(url="mock", api_key="mock", use_native_tools=True)
+    inner_llm = LLMAgent(model="mock", url="mock", api_key="mock", use_native_tools=True)
     replies = iter(build_full_score_replies(case))
     inner_llm._next_llm_actions = lambda max_empty_retries: next(replies)
     inner_llm.call_text = lambda prompt, system_prompt=None: mock_report(case)

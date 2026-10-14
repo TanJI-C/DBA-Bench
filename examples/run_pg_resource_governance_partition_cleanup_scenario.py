@@ -18,14 +18,13 @@ sys.path.insert(0, project_root)
 
 from src.agents.factory import build_experiment_agent
 from src.agents.agent import MockLLMAgent
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.postgres import PgResourceGovernancePartitionCleanupScenario
 
 
 PARTITION_CLEANUP_SCENARIO_ID = "pg_resource_governance_partition_cleanup"
-DEFAULT_AUX_PORTS = tuple(range(15862, 15870))
 
 
 def build_report(case, success: bool) -> dict:
@@ -180,18 +179,18 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=15861)
     parser.add_argument("--container-name", default=f"aiopsbench-{PARTITION_CLEANUP_SCENARIO_ID}")
     parser.add_argument("--image")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="off")
     parser.add_argument("--fault-snapshot-name")
     args = parser.parse_args()
     case = scenario.get_case(args.case)
-    aux_ports = DEFAULT_AUX_PORTS[: case.aux_port_count]
+    aux_ports = tuple(args.port + offset for offset in case.runtime.host_ports.offsets[1:])
     _check_ports((args.port, *aux_ports))
     resource_prefix = f"{PARTITION_CLEANUP_SCENARIO_ID}-{case.case_id}".replace("_", "-")
     _check_docker_names((f"aiopsbench-{resource_prefix}-mock", f"aiopsbench-{resource_prefix}-zero", f"aiopsbench-{resource_prefix}-llm"))
-    os.environ.setdefault("AIOPS_PARTITION_CLEANUP_AUX_PORTS", ",".join(map(str, aux_ports)))
+    os.environ["AIOPS_PARTITION_CLEANUP_AUX_PORTS"] = ",".join(map(str, aux_ports))
     run_config = OrchestratorRunConfig(fault_snapshot_mode=args.fault_snapshot_mode, fault_snapshot_name=args.fault_snapshot_name)
     modes = ("mock", "zero", "llm") if args.mode == "all" else (args.mode,)
     for mode in modes:

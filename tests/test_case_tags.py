@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.scenarios import SCENARIO_REGISTRY
 from src.scenarios.case_tags import CASE_TAGS, citation_tag

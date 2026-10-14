@@ -25,8 +25,8 @@ formal implementations, not historical hardening copies; Cases without `Difficul
 
 | Category | Scenario ID | Current Cases (`case_no:case_id [label]`) |
 |---|---|---|
-| `basic` | `container_pause` | 0:docker_pause [uncalibrated] |
-| `basic` | `cpu_overload` | 0:stress_ng_cpu [uncalibrated] |
+| `basic` | `container_pause` | 0:primary_container_paused [uncalibrated] |
+| `basic` | `cpu_overload` | 0:host_cpu_saturation [uncalibrated] |
 | `basic` | `demo` | 0:minimal_healthy [uncalibrated] |
 | `business_change` | `pg_business_change_collation_conversion` | 0:store_returns_collation_conversion [hard, D=4/C=0.538462]; 1:store_returns_ticket_locale_simple [easy, D=3/C=0.142857] |
 | `business_change` | `pg_business_change_fk_validation` | 0:order_items_fk_validate_storm [hard, D=5/C=0.533333] |

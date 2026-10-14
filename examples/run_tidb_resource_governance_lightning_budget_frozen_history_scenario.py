@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+
+
 import argparse
 import os
 import sys
@@ -10,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.deployment import lightning_job_id
-from src.execution.environment import TiDBEnv
+from src.execution.deployments.tidb_support import lightning_job_id
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbResourceGovernanceLightningBudgetFrozenHistoryScenario
 
@@ -102,7 +104,7 @@ def main() -> None:
         required=True,
         choices=[case.case_id for case in scenario.cases],
     )
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--port", type=int, default=24730)

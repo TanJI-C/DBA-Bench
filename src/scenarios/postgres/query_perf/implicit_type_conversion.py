@@ -24,16 +24,12 @@ from src.scenarios.postgres.common import (
     build_query_perf_noise_profiles,
 )
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
 )
 
 

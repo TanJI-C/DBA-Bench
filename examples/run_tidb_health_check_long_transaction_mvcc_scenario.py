@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.database.sql import sql_literal
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator
 from src.scenarios.tidb import TidbHealthCheckLongTransactionMvccScenario
 
@@ -26,6 +27,30 @@ def _txn_start_tso(value: object) -> int:
             f"value={value!r}"
         )
     return int(match.group("tso"))
+
+
+def _retaining_sessions(history, checkpoints, registry, transactions):
+    transaction_by_id = {int(row[0]): row for row in transactions}
+    owner_by_worker = {int(row[0]): (int(row[7]), str(row[8]), str(row[9])) for row in registry}
+    candidates = []
+    for event in history:
+        if str(event[4]) != "RELEASED":
+            continue
+        worker_id, session_id = int(event[1]), int(event[6])
+        owner_session_id, checkpoint_stream, review_batch_id = owner_by_worker[worker_id]
+        if session_id == owner_session_id:
+            continue
+        transaction = transaction_by_id[session_id]
+        source_ids = {int(value) for value in str(transaction[2]).split(",")}
+        sources = [row for row in checkpoints
+                   if str(row[3]) == "COMMITTED" and str(row[5]) == checkpoint_stream
+                   and str(row[7]) == review_batch_id and int(row[8]) in source_ids]
+        if not sources:
+            raise RuntimeError(f"HC09 released reader has no reviewed native source boundary: event={event!r}, transaction={transaction!r}")
+        selected = max(sources, key=lambda row: int(row[4]))
+        if int(transaction[1]) < int(selected[4]):
+            candidates.append([session_id, worker_id, int(transaction[1]), int(selected[4])])
+    return candidates
 
 
 class HC09FullMockAgent(MockLLMAgent):
@@ -52,9 +77,9 @@ class HC09FullMockAgent(MockLLMAgent):
 
     def solve(self):
         transactions = self._sql(
-            "SELECT SESSION_ID, START_TIME, STATE, USER, DB "
+            "SELECT SESSION_ID, ID, RELATED_TABLE_IDS "
             "FROM INFORMATION_SCHEMA.CLUSTER_TIDB_TRX "
-            "ORDER BY START_TIME, SESSION_ID LIMIT 200",
+            "ORDER BY ID, SESSION_ID",
             "先读取未过滤事务列表，确认历史版本窗口对应多组仍活动的 snapshot。",
         )
         expected_transaction_count = (
@@ -71,7 +96,7 @@ class HC09FullMockAgent(MockLLMAgent):
         processlist = self._sql(
             "SELECT ID, SESSION_ALIAS, TxnStart, COMMAND "
             "FROM INFORMATION_SCHEMA.CLUSTER_PROCESSLIST "
-            "WHERE SESSION_ALIAS <> '' ORDER BY ID LIMIT 200",
+            "ORDER BY ID LIMIT 200",
             "读取进程列表，把相似 worker alias、事务起点和仅有连接的历史会话区分开。",
         )
         expected_process_count = expected_transaction_count + len(self.case.historical_processlist_aliases)
@@ -83,7 +108,7 @@ class HC09FullMockAgent(MockLLMAgent):
 
         registry = self._sql(
             self.case.lease_registry_sql,
-            "检查当前 generation 的 worker registry，确认 13 个 current session 都受保护。",
+            "检查当前 generation 的 worker registry，确认 current session 保护范围。",
         )
         history = self._sql(
             self.case.lease_history_sql,
@@ -91,7 +116,7 @@ class HC09FullMockAgent(MockLLMAgent):
         )
         checkpoints = self._sql(
             self.case.checkpoint_sql,
-            "读取全部 checkpoint；不能用全局最小值，必须按 worker 和 handoff 时间选择边界。",
+            "读取全部 checkpoint；按当前worker注册的业务stream选择source边界，按公开review_batch_id限定本次closed batch；publication先后不表示源提交顺序。",
         )
         counts = (len(registry), len(history), len(checkpoints))
         expected = (
@@ -104,42 +129,51 @@ class HC09FullMockAgent(MockLLMAgent):
                 f"HC09 reference business evidence mismatch: expected={expected}, observed={counts}"
             )
 
-        process_by_id = {
-            int(row[0]): _txn_start_tso(row[2])
-            for row in processlist
-            if row[2] not in (None, "")
-        }
-        candidates = []
-        for event in history:
-            if str(event[4]) != "ABANDONED":
-                continue
-            worker_id = int(event[1])
-            observed_at = str(event[5])
-            session_id = int(event[6])
-            checkpoints_for_worker = [
-                row
-                for row in checkpoints
-                if int(row[1]) == worker_id and str(row[2]) <= observed_at
-            ]
-            if not checkpoints_for_worker:
-                raise RuntimeError(
-                    "HC09 reference found an abandoned event without a checkpoint: "
-                    f"event={event!r}"
-                )
-            selected = max(
-                checkpoints_for_worker,
-                key=lambda row: (str(row[2]), int(row[0])),
-            )
-            if int(process_by_id[session_id]) < int(selected[4]):
-                candidates.append(
-                    [session_id, worker_id, process_by_id[session_id], int(selected[4])]
-                )
+        catalog = self._sql(
+            f"SELECT TABLE_SCHEMA, TABLE_NAME, TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = {sql_literal(self.case.database)} ORDER BY TABLE_NAME",
+            "读取完整业务schema原生catalog，将事务RELATED_TABLE_IDS与实际source/checkpoint关联。",
+        )
+        source_ids = {int(row[2]) for row in catalog if f"{row[0]}.{row[1]}" in self.case.qualified_business_tables}
+        if any(int(row[8]) not in source_ids for row in checkpoints):
+            raise RuntimeError(f"HC09 checkpoint references a non-business native source: catalog={catalog!r}, checkpoints={checkpoints!r}")
+        candidates = _retaining_sessions(history, checkpoints, registry, transactions)
+        if self.case.settled_source_table is not None:
+            released_ids = {int(row[6]) for row in history if str(row[4]) == "RELEASED"}
+            oldest = min((row for row in transactions if int(row[0]) in released_ids), key=lambda row: int(row[1]))
+            if int(oldest[0]) in {int(row[0]) for row in candidates}:
+                raise RuntimeError(f"HC09 oldest-unowned shortcut unexpectedly selects target: oldest={oldest!r}, candidates={candidates!r}")
+            global_boundary = max(int(row[4]) for row in checkpoints)
+            global_candidates = [row for row in transactions if int(row[0]) in released_ids and int(row[1]) < global_boundary]
+            if len(global_candidates) != 2:
+                raise RuntimeError(f"HC09 global cutoff must misclassify both source readers: candidates={global_candidates!r}")
         if len(candidates) != 1:
             raise RuntimeError(
                 "HC09 reference expected exactly one pre-write abandoned session: "
                 f"candidates={candidates!r}"
             )
         target_session_id = int(candidates[0][0])
+        target_worker_id = int(candidates[0][1])
+        review_batch = next(str(row[9]) for row in registry if int(row[0]) == target_worker_id)
+        stream = next(str(row[8]) for row in registry if int(row[0]) == target_worker_id)
+        target_sources = {int(value) for row in transactions if int(row[0]) == target_session_id for value in str(row[2]).split(",")}
+        published_last = max(
+            (row for row in checkpoints if int(row[8]) in target_sources
+             and str(row[3]) == "COMMITTED" and str(row[5]) == stream
+             and str(row[7]) == review_batch),
+            key=lambda row: str(row[2]),
+        )
+        if int(candidates[0][2]) < int(published_last[4]):
+            raise RuntimeError(
+                "HC09 reference did not expose the latest-publication counterexample: "
+                f"candidate={candidates[0]!r}, latest_publication={published_last!r}"
+            )
+        before_repair = self._sql(
+            "SELECT DISTINCT ID, SESSION_ALIAS, TxnStart FROM INFORMATION_SCHEMA.CLUSTER_PROCESSLIST "
+            f"WHERE ID = {target_session_id}",
+            "确认仅阅读或采用最新publication仍留下真实候选；这是未修复反例。",
+        )
+        if len(before_repair) != 1:
+            raise RuntimeError(f"HC09 no-op counterexample lost its live candidate: {before_repair!r}")
         self._sql(
             f"KILL TIDB CONNECTION {target_session_id}",
             "只结束唯一写入前 abandoned session，保留 current worker 和 post-write retry。",
@@ -168,7 +202,7 @@ class HC09FullMockAgent(MockLLMAgent):
 
         integrity = self._sql(
             self.case.integrity_sql,
-            "复核 20 行新版本、总行数和 CRC，确认 session 级修复没有改动业务数据。",
+            f"复核两类保护状态：每个源 {self.case.versioned_row_count} 行新版本，以及完整业务源总行数和 CRC。",
         )
         if len(integrity) != 1 or len(integrity[0]) != 3:
             raise RuntimeError(
@@ -189,7 +223,7 @@ def main():
         choices=[case.case_id for case in scenario.cases],
     )
     parser.add_argument("--mode", choices=["mock", "llm"], default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--port", type=int, default=4800)

@@ -1,3 +1,6 @@
+from src.execution.deployments.tidb_components.stores import TiDBStores
+from src.execution.deployments.tidb_components.snapshots import TiDBSnapshots
+from src.execution.deployments.tidb_components.network import TiDBNetwork
 import inspect
 import json
 import runpy
@@ -7,11 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.execution.deployment import TiDBDockerDeployment
-from src.execution.environment import TiDBEnv
+from src.execution.deployments.tidb import TiDBDockerDeployment
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbSystemFailureRegionUnavailableScenario
 from src.scenarios.tidb.system_failure.region_unavailable import _business_truth
@@ -50,6 +53,7 @@ def valid_report() -> dict:
 
 class FakeDeployment:
     def __init__(self, env=None, *, recovered=True):
+        self.network = SimpleNamespace(allow_pd_network=self.allow_pd_network, allow_pd_network_address=self.allow_pd_network_address, allow_pd_network_egress_shadow=self.allow_pd_network_egress_shadow, allow_pd_network_ingress_decoy=self.allow_pd_network_ingress_decoy, allow_pd_network_ingress_shadow=self.allow_pd_network_ingress_shadow, allow_pd_network_response=self.allow_pd_network_response, allow_pd_network_response_shadow=self.allow_pd_network_response_shadow, allow_pd_network_stale_egress=self.allow_pd_network_stale_egress, arm_pd_network_rehydration=self.arm_pd_network_rehydration, block_pd_network=self.block_pd_network, block_pd_network_address=self.block_pd_network_address, block_pd_network_egress_shadow=self.block_pd_network_egress_shadow, block_pd_network_endpoint=self.block_pd_network_endpoint, block_pd_network_ingress_decoy=self.block_pd_network_ingress_decoy, block_pd_network_ingress_shadow=self.block_pd_network_ingress_shadow, block_pd_network_response=self.block_pd_network_response, block_pd_network_response_shadow=self.block_pd_network_response_shadow, block_pd_network_stale_egress=self.block_pd_network_stale_egress, disarm_pd_network_rehydration=self.disarm_pd_network_rehydration, inspect_pd_network=self.inspect_pd_network)
         self.env = env
         self.recovered = recovered
         self.operations = []
@@ -587,7 +591,10 @@ def test_case_identity_plan_workload_and_binary_difficulty_contract():
 
 
 def test_pd_endpoint_network_helper_accepts_public_pd_target(monkeypatch):
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.network = TiDBNetwork(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.COMPONENTS = {
         "pd": ("pd-0", "pd-1", "pd-2"),
         "tidb": ("tidb-0", "tidb-1", "tidb-2"),
@@ -597,11 +604,11 @@ def test_pd_endpoint_network_helper_accepts_public_pd_target(monkeypatch):
         for node_type, services in deployment.COMPONENTS.items()
         for service in services
     }
-    deployment._pd_ingress_sources = {"pd/pd-0": {"tidb/tidb-2"}}
-    deployment._pd_response_egress_targets = {}
-    deployment._pd_response_egress_shadow_targets = {}
-    deployment._tidb_stale_egress_targets = {}
-    deployment._tidb_egress_shadow_targets = {}
+    deployment.network._pd_ingress_sources = {"pd/pd-0": {"tidb/tidb-2"}}
+    deployment.network._pd_response_egress_targets = {}
+    deployment.network._pd_response_egress_shadow_targets = {}
+    deployment.network._tidb_stale_egress_targets = {}
+    deployment.network._tidb_egress_shadow_targets = {}
     captured = {}
 
     def capture(target, script):
@@ -609,36 +616,39 @@ def test_pd_endpoint_network_helper_accepts_public_pd_target(monkeypatch):
         captured["script"] = script
         return script
 
-    monkeypatch.setattr(deployment, "_run_network_namespace_tool", capture)
+    monkeypatch.setattr(deployment.network, "_run_network_namespace_tool", capture)
 
-    deployment.block_pd_network_endpoint("tidb/tidb-1", "pd/pd-0")
+    deployment.network.block_pd_network_endpoint("tidb/tidb-1", "pd/pd-0")
 
     assert captured["target"] == "tidb/tidb-1"
     assert "for host in pd-0;" in captured["script"]
-    deployment.block_pd_network_ingress("tidb/tidb-2", ("pd/pd-0",))
+    deployment.network.block_pd_network_ingress("tidb/tidb-2", ("pd/pd-0",))
     assert captured["target"] == "pd/pd-0"
     assert "INPUT" in captured["script"]
     assert "--comment pd-client-policy" in captured["script"]
-    deployment.block_pd_network_ingress_decoy("tidb/tidb-0", "pd/pd-0")
+    deployment.network.block_pd_network_ingress_decoy("tidb/tidb-0", "pd/pd-0")
     assert "--comment pd-client-policy" in captured["script"]
-    deployment.allow_pd_network_ingress_decoy("tidb/tidb-0", "pd/pd-0")
+    deployment.network.allow_pd_network_ingress_decoy("tidb/tidb-0", "pd/pd-0")
     assert "iptables -D INPUT" in captured["script"]
-    deployment.block_pd_network_ingress_shadow("tidb/tidb-2", "pd/pd-0")
+    deployment.network.block_pd_network_ingress_shadow("tidb/tidb-2", "pd/pd-0")
     assert "iptables -I INPUT 1" in captured["script"]
     assert "-j ACCEPT" in captured["script"]
-    deployment.allow_pd_network_ingress_shadow("tidb/tidb-2", "pd/pd-0")
+    deployment.network.allow_pd_network_ingress_shadow("tidb/tidb-2", "pd/pd-0")
     assert "iptables -D INPUT" in captured["script"]
-    deployment.allow_pd_network("pd/pd-0")
+    deployment.network.allow_pd_network("pd/pd-0")
     assert captured["target"] == "pd/pd-0"
     assert "iptables -D INPUT" in captured["script"]
-    deployment.block_pd_network_address("tidb/tidb-0", CASE.control_stale_pd_address)
+    deployment.network.block_pd_network_address("tidb/tidb-0", CASE.control_stale_pd_address)
     assert CASE.control_stale_pd_address in captured["script"]
     with pytest.raises(ValueError, match="Unknown PD network endpoint"):
-        deployment.block_pd_network_endpoint("tidb/tidb-1", "pd-0")
+        deployment.network.block_pd_network_endpoint("tidb/tidb-1", "pd-0")
 
 
 def test_pd_response_shadow_helper_builds_and_clears_ordered_pairs(monkeypatch):
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.network = TiDBNetwork(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.COMPONENTS = {
         "pd": ("pd-0", "pd-1", "pd-2"),
         "tidb": ("tidb-0", "tidb-1", "tidb-2"),
@@ -648,15 +658,15 @@ def test_pd_response_shadow_helper_builds_and_clears_ordered_pairs(monkeypatch):
         for node_type, services in deployment.COMPONENTS.items()
         for service in services
     }
-    deployment._pd_response_egress_shadow_targets = {}
+    deployment.network._pd_response_egress_shadow_targets = {}
     scripts = []
     monkeypatch.setattr(
-        deployment,
+        deployment.network,
         "_run_network_namespace_tool",
         lambda target, script: scripts.append((target, script)) or script,
     )
 
-    deployment.block_pd_network_response_shadow(
+    deployment.network.block_pd_network_response_shadow(
         CASE.pd_targets,
         CASE.pd_response_shadow_targets,
     )
@@ -667,7 +677,7 @@ def test_pd_response_shadow_helper_builds_and_clears_ordered_pairs(monkeypatch):
     assert all("iptables -A OUTPUT" in script for _, script in scripts)
 
     scripts.clear()
-    deployment.allow_pd_network_response_shadow(
+    deployment.network.allow_pd_network_response_shadow(
         CASE.pd_targets[0],
         CASE.pd_response_shadow_targets,
     )
@@ -677,19 +687,22 @@ def test_pd_response_shadow_helper_builds_and_clears_ordered_pairs(monkeypatch):
 
 
 def test_restart_component_replays_registered_tidb_shadow_policy(monkeypatch):
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.network = TiDBNetwork(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.NODES = {
         "tidb/tidb-2": "tidb-2",
         **{f"pd/pd-{index}": f"pd-{index}" for index in range(3)},
     }
-    deployment._tidb_egress_shadow_targets = {
+    deployment.network._tidb_egress_shadow_targets = {
         CASE.affected_tidb_target: CASE.pd_targets,
     }
-    deployment._tidb_stale_egress_targets = {
+    deployment.network._tidb_stale_egress_targets = {
         CASE.affected_tidb_target: CASE.pd_targets,
     }
-    deployment._tidb_pd_network_rehydration_targets = {}
-    deployment._tidb_pd_network_rehydration_addresses = {}
+    deployment.network._tidb_pd_network_rehydration_targets = {}
+    deployment.network._tidb_pd_network_rehydration_addresses = {}
     operations = []
     scripts = []
 
@@ -699,7 +712,7 @@ def test_restart_component_replays_registered_tidb_shadow_policy(monkeypatch):
         lambda action, target: operations.append((action, target)),
     )
     monkeypatch.setattr(
-        deployment,
+        deployment.network,
         "_run_network_namespace_tool",
         lambda target, script: scripts.append((target, script)) or script,
     )
@@ -715,7 +728,7 @@ def test_restart_component_replays_registered_tidb_shadow_policy(monkeypatch):
     assert "for host in pd-0 pd-1 pd-2; do" in scripts[1][1]
     assert scripts[1][1].count("iptables -I OUTPUT 1") == 1
     assert "--comment pd-client-policy" in scripts[1][1]
-    assert deployment._tidb_stale_egress_targets == {}
+    assert deployment.network._tidb_stale_egress_targets == {}
 
 
 def test_all_five_injector_phases_use_current_protocol_and_network_scope(monkeypatch):
@@ -997,6 +1010,7 @@ def test_read_only_cluster_observations_are_safe():
 def test_network_update_does_not_restart_or_wait_for_target():
     class NetworkOnlyDeployment:
         def __init__(self):
+            self.network = SimpleNamespace(allow_pd_network=self.allow_pd_network, inspect_pd_network=self.inspect_pd_network)
             self.operations = []
 
         def allow_pd_network(self, target):
@@ -1076,7 +1090,7 @@ def test_explicit_affected_target_restart_is_a_valid_recovery_alternative():
             "target": target,
             "parameters": {"access": "allow"},
         }
-        env.deployment.allow_pd_network(target)
+        env.deployment.network.allow_pd_network(target)
         actions.append({"api": "manage_cluster", "args": args, "result": {"status": "success"}})
     restart_args = {"resource": "service", "operation": "restart", "target": CASE.affected_tidb_target}
     env.deployment.restart_component(CASE.affected_tidb_target)
@@ -1087,7 +1101,7 @@ def test_explicit_affected_target_restart_is_a_valid_recovery_alternative():
         "target": CASE.affected_tidb_target,
         "parameters": {"access": "allow"},
     }
-    env.deployment.allow_pd_network(CASE.affected_tidb_target)
+    env.deployment.network.allow_pd_network(CASE.affected_tidb_target)
     actions.append({"api": "manage_cluster", "args": update_args, "result": {"status": "success"}})
     result = CASE.evaluator(env).evaluate(case_run(env, actions=tuple(actions)))
     assert (result["DiagnosisPass"], result["OutcomePass"], result["SafePass"]) == (
@@ -1128,7 +1142,7 @@ def test_full_composite_recovery_accepts_any_pd_update_order():
             "target": target,
             "parameters": {"access": "allow"},
         }
-        env.deployment.allow_pd_network(target)
+        env.deployment.network.allow_pd_network(target)
         actions.append({"api": "manage_cluster", "args": args, "result": {"status": "success"}})
     restart_args = {"resource": "service", "operation": "restart", "target": CASE.affected_tidb_target}
     env.deployment.restart_component(CASE.affected_tidb_target)
@@ -1139,7 +1153,7 @@ def test_full_composite_recovery_accepts_any_pd_update_order():
         "target": CASE.affected_tidb_target,
         "parameters": {"access": "allow"},
     }
-    env.deployment.allow_pd_network(CASE.affected_tidb_target)
+    env.deployment.network.allow_pd_network(CASE.affected_tidb_target)
     actions.append({"api": "manage_cluster", "args": update_args, "result": {"status": "success"}})
     result = CASE.evaluator(env).evaluate(case_run(env, actions=tuple(actions)))
     assert (result["DiagnosisPass"], result["OutcomePass"], result["SafePass"]) == (
@@ -1165,24 +1179,27 @@ def test_affected_target_restart_is_only_restart_recovery_scope():
 
 
 def test_stale_egress_script_uses_one_output_chain(monkeypatch):
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.network = TiDBNetwork(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.NODES = {
         CASE.affected_tidb_target: "tidb-2",
         **{f"pd/pd-{index}": f"pd-{index}" for index in range(3)},
     }
-    deployment._tidb_stale_egress_targets = {}
+    deployment.network._tidb_stale_egress_targets = {}
     scripts = []
     monkeypatch.setattr(
-        deployment,
+        deployment.network,
         "_run_network_namespace_tool",
         lambda target, script: scripts.append((target, script)) or script,
     )
-    deployment.block_pd_network_stale_egress(CASE.affected_tidb_target, CASE.pd_targets)
+    deployment.network.block_pd_network_stale_egress(CASE.affected_tidb_target, CASE.pd_targets)
     script = scripts[0][1]
     assert "iptables -I OUTPUT 1 OUTPUT" not in script
     assert "iptables -I OUTPUT 1 -p tcp" in script
     assert "iptables -C OUTPUT -p tcp" not in script
-    deployment.allow_pd_network_stale_egress(CASE.affected_tidb_target, CASE.pd_targets)
+    deployment.network.allow_pd_network_stale_egress(CASE.affected_tidb_target, CASE.pd_targets)
     assert "iptables -C OUTPUT -p tcp" in scripts[1][1]
 
 
@@ -1413,16 +1430,16 @@ def test_pd_cleanup_rule_scripts_are_valid_shell() -> None:
     destinations = ("tidb/tidb-0", "tidb/tidb-1")
     sources = ("pd/pd-0", "pd/pd-1", "pd/pd-2")
     scripts = [
-        TiDBDockerDeployment._pd_response_egress_shadow_rule_script(deployment, "-A", destinations),
-        TiDBDockerDeployment._pd_response_egress_shadow_rule_script(deployment, "-D", destinations),
-        TiDBDockerDeployment._pd_response_egress_rule_script(deployment, "-A", destinations),
-        TiDBDockerDeployment._pd_response_egress_rule_script(deployment, "-D", destinations),
-        TiDBDockerDeployment._pd_network_rule_script(deployment, "-A"),
-        TiDBDockerDeployment._pd_network_rule_script(deployment, "-D"),
-        TiDBDockerDeployment._tidb_stale_egress_rule_script(deployment, "-I", sources),
-        TiDBDockerDeployment._tidb_stale_egress_rule_script(deployment, "-D", sources),
-        TiDBDockerDeployment._pd_ingress_rule_script(deployment, "-A", destinations),
-        TiDBDockerDeployment._pd_ingress_rule_script(deployment, "-D", destinations),
+        TiDBNetwork._pd_response_egress_shadow_rule_script(TiDBNetwork(deployment), "-A", destinations),
+        TiDBNetwork._pd_response_egress_shadow_rule_script(TiDBNetwork(deployment), "-D", destinations),
+        TiDBNetwork._pd_response_egress_rule_script(TiDBNetwork(deployment), "-A", destinations),
+        TiDBNetwork._pd_response_egress_rule_script(TiDBNetwork(deployment), "-D", destinations),
+        TiDBNetwork._pd_network_rule_script(TiDBNetwork(deployment), "-A"),
+        TiDBNetwork._pd_network_rule_script(TiDBNetwork(deployment), "-D"),
+        TiDBNetwork._tidb_stale_egress_rule_script(TiDBNetwork(deployment), "-I", sources),
+        TiDBNetwork._tidb_stale_egress_rule_script(TiDBNetwork(deployment), "-D", sources),
+        TiDBNetwork._pd_ingress_rule_script(TiDBNetwork(deployment), "-A", destinations),
+        TiDBNetwork._pd_ingress_rule_script(TiDBNetwork(deployment), "-D", destinations),
     ]
     for script in scripts:
         probe = subprocess.run(

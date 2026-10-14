@@ -44,7 +44,8 @@ from src.persistent_scenarios.backend.tidb.capabilities.cdc.verifiers import (
     CdcUpstreamLedgerConservationVerifier,
     CdcVisibilityDeadlineVerifier,
 )
-from src.persistent_scenarios.model.enums import DatabaseSystem, LoadClass
+from src.persistent_scenarios.model.enums import LoadClass
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.persistent_scenarios.runtime.clock import FakeClock, RealClock
 from src.persistent_scenarios.runtime.ledger import (

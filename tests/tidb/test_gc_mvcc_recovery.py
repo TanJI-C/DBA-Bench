@@ -1,3 +1,6 @@
+from src.execution.deployments.tidb_components.stores import TiDBStores
+from src.execution.deployments.tidb_components.snapshots import TiDBSnapshots
+from src.execution.deployments.tidb_components.mvcc import TiDBMvcc
 import json
 import hashlib
 import zlib
@@ -7,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.database.sql import sql_literal
-from src.execution.deployment import TiDBDockerDeployment
+from src.execution.deployments.tidb import TiDBDockerDeployment
 from src.project_paths import REPOSITORY_ROOT
 from src.scenarios import SCENARIO_REGISTRY
 from src.scenarios.base import CaseRun
@@ -76,6 +79,7 @@ class FakeDeployment:
     }
 
     def __init__(self):
+        self.mvcc = SimpleNamespace(mvcc_lock_list=self.mvcc_lock_list)
         self.lock_present = False
 
     def pd_request(self, method, path, body=None):
@@ -360,6 +364,9 @@ def test_k01_operator_backfill_is_a_real_committed_business_write():
     assert "operator backfill" in CASE.alert
     assert "part of the business truth" in CASE.alert
     assert CASE.runtime.tikv_server_config_overrides == {"pessimistic-txn": {"in-memory": False}}
+    assert CASE.runtime.tikv_memory_mb == 4096
+    assert CASE.runtime.tidb_memory_mb == 2048
+    assert CASE.runtime.resources.worker_memory_mb == 32_768
 
 
 def test_k01_backfill_watchdog_commits_on_progress_signal():
@@ -586,7 +593,7 @@ def test_k01_backfill_watchdog_reconnects_after_dropped_poll_connection():
 
 
 def test_k01_tikv_config_override_rendering():
-    from src.execution.deployment import _render_toml_sections
+    from src.execution.deployments.tidb import _render_toml_sections
 
     rendered = _render_toml_sections({"pessimistic-txn": {"in-memory": False}})
     assert rendered == "[pessimistic-txn]\nin-memory = false\n"
@@ -634,6 +641,56 @@ def test_k01_four_legal_neighbor_connections_are_tracked():
     assert injector._stuck_holder_connection is None
 
 
+def test_k01_lost_neighbor_connection_is_reported_as_not_alive():
+    from pymysql.err import OperationalError
+
+    class _DroppedConnection:
+        open = True
+
+        def ping(self, reconnect):
+            raise OperationalError(2013, "Lost connection to MySQL server during query")
+
+    injector = TidbSystemFailureGcMvccRecoveryInjector()
+    injector._normal_lock_connection = _DroppedConnection()
+    injector._long_tx_connection = _DroppedConnection()
+    injector._target_lock_connection = _DroppedConnection()
+    injector._stuck_holder_connection = _DroppedConnection()
+
+    assert injector.legal_neighbors_alive() is False
+
+
+def test_k01_cleanup_closes_neighbors_after_connection_loss():
+    from pymysql.err import InterfaceError
+
+    class _DroppedConnection:
+        open = False
+
+        def __init__(self):
+            self.closed = False
+
+        def rollback(self):
+            raise InterfaceError(0, "")
+
+        def close(self):
+            self.closed = True
+
+    injector = TidbSystemFailureGcMvccRecoveryInjector()
+    connections = [_DroppedConnection() for _ in range(4)]
+    (
+        injector._normal_lock_connection, injector._long_tx_connection,
+        injector._target_lock_connection, injector._stuck_holder_connection,
+    ) = connections
+
+    injector._close_neighbors()
+
+    assert all(connection.closed for connection in connections)
+    assert injector._normal_lock_connection is None
+    assert injector._long_tx_connection is None
+    assert injector._target_lock_connection is None
+    assert injector._stuck_holder_connection is None
+    assert "_normal_lock_connection rollback during cleanup: InterfaceError" in injector._backfill_commit_error
+
+
 def test_k01_target_row_key_binds_to_one_live_region_range():
     target_key = _table_row_key(812, CASE.target_row_id)
     encoded_key = _encode_memcomparable_key(target_key).hex().upper()
@@ -648,33 +705,36 @@ def test_k01_target_row_key_binds_to_one_live_region_range():
 
 
 def test_k01_region_scope_requires_the_complete_current_peer_set():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.mvcc = TiDBMvcc(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.NODES = dict(FakeDeployment.NODES)
     deployment.pd_request = FakeDeployment().pd_request
     deployment._pd_stores = lambda: FakeDeployment().pd_request("GET", "/pd/api/v1/stores")["stores"]
 
-    scope = deployment._mvcc_region_scope(REGION_ID, list(reversed(STORE_TARGETS)))
+    scope = deployment.mvcc._mvcc_region_scope(REGION_ID, list(reversed(STORE_TARGETS)))
 
     assert scope["peer_store_ids"] == tuple(PEER_STORE_IDS)
     assert scope["store_targets"] == tuple(STORE_TARGETS)
     with pytest.raises(ValueError, match="exactly the current Region peer Store set"):
-        deployment._mvcc_region_scope(REGION_ID, STORE_TARGETS[:2])
+        deployment.mvcc._mvcc_region_scope(REGION_ID, STORE_TARGETS[:2])
 
 
 def test_k01_memcomparable_key_codec_matches_tikv():
     encoded_start = "7480000000000000FF6A00000000000000F8"
     encoded_end = "7480000000000000FF6B00000000000000F8"
 
-    assert TiDBDockerDeployment._mvcc_decode_memcomparable_key(encoded_start, "start_key") == "74800000000000006A"
-    assert TiDBDockerDeployment._mvcc_decode_memcomparable_key(encoded_end, "end_key") == "74800000000000006B"
+    assert TiDBMvcc._mvcc_decode_memcomparable_key(encoded_start, "start_key") == "74800000000000006A"
+    assert TiDBMvcc._mvcc_decode_memcomparable_key(encoded_end, "end_key") == "74800000000000006B"
     with pytest.raises(ValueError, match="invalid mem-comparable marker"):
-        TiDBDockerDeployment._mvcc_decode_memcomparable_key("748000000000000000", "start_key")
+        TiDBMvcc._mvcc_decode_memcomparable_key("748000000000000000", "start_key")
 
 
 def test_k01_raw_lock_scan_exposes_origin_key_and_storage_key():
     storage_key_hex = "7A7400000000000000F8"
-    summary = TiDBDockerDeployment._mvcc_scan_summary(
-        f'key: "{TiDBDockerDeployment._mvcc_hex_to_escaped(storage_key_hex, "test")}", value: "P"\n\nTotal scanned keys: 1\n',
+    summary = TiDBMvcc._mvcc_scan_summary(
+        f'key: "{TiDBMvcc._mvcc_hex_to_escaped(storage_key_hex, "test")}", value: "P"\n\nTotal scanned keys: 1\n',
         region_id=REGION_ID,
         target="tikv/tikv-0",
     )
@@ -690,7 +750,7 @@ def test_k01_raw_lock_scan_exposes_origin_key_and_storage_key():
 
 def test_k01_raw_lock_scan_rejects_non_data_key():
     with pytest.raises(RuntimeError, match="non-data key"):
-        TiDBDockerDeployment._mvcc_scan_summary(
+        TiDBMvcc._mvcc_scan_summary(
             'key: "t", value: "P"\n\nTotal scanned keys: 1\n',
             region_id=REGION_ID,
             target="tikv/tikv-0",
@@ -698,10 +758,13 @@ def test_k01_raw_lock_scan_rejects_non_data_key():
 
 
 def test_k01_ldb_rewrite_uses_explicit_hex_prefix():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.mvcc = TiDBMvcc(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k01-ldb-test"
     deployment.release = SimpleNamespace(version="v8.1.0")
-    deployment._mvcc_region_scope = lambda region_id, store_targets: {
+    deployment.mvcc._mvcc_region_scope = lambda region_id, store_targets: {
         "peer_store_ids": (11,),
         "store_targets": ("tikv/tikv-0",),
     }
@@ -714,12 +777,12 @@ def test_k01_ldb_rewrite_uses_explicit_hex_prefix():
         observed["store_targets"] = store_targets
         return "OK", {"binary_path": "/tikv-ctl"}
 
-    deployment._mvcc_tikv_ctl = fake_tikv_ctl
-    deployment._mvcc_offline_call_many = (
+    deployment.mvcc._mvcc_tikv_ctl = fake_tikv_ctl
+    deployment.mvcc._mvcc_offline_call_many = (
         lambda targets, operation, callback: callback(tuple("tikv-0" for _ in targets))
     )
 
-    deployment.rewrite_mvcc_lock(REGION_ID, STORE_TARGETS, "AA", "BB")
+    deployment.mvcc.rewrite_mvcc_lock(REGION_ID, STORE_TARGETS, "AA", "BB")
 
     assert observed == {
         "service": "tikv-0",
@@ -738,16 +801,19 @@ def test_k01_ldb_rewrite_uses_explicit_hex_prefix():
 
 
 def test_k01_ldb_rewrite_uses_one_offline_window_for_all_peers():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.mvcc = TiDBMvcc(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k01-ldb-scope-test"
     deployment.release = SimpleNamespace(version="v8.1.0")
-    deployment._mvcc_region_scope = lambda region_id, store_targets: {
+    deployment.mvcc._mvcc_region_scope = lambda region_id, store_targets: {
         "peer_store_ids": (11, 12, 13),
         "store_targets": tuple(STORE_TARGETS),
     }
     observed = {"targets": None, "calls": 0}
 
-    deployment._mvcc_tikv_ctl = lambda service, arguments, *, region_id, store_targets: (
+    deployment.mvcc._mvcc_tikv_ctl = lambda service, arguments, *, region_id, store_targets: (
         "OK", {"binary_path": "/tikv-ctl"}
     )
 
@@ -756,9 +822,9 @@ def test_k01_ldb_rewrite_uses_one_offline_window_for_all_peers():
         observed["calls"] += 1
         return callback(tuple(target.rsplit("/", 1)[1] for target in targets))
 
-    deployment._mvcc_offline_call_many = fake_offline_call_many
+    deployment.mvcc._mvcc_offline_call_many = fake_offline_call_many
 
-    result = deployment.rewrite_mvcc_lock(REGION_ID, STORE_TARGETS, "AA", "BB")
+    result = deployment.mvcc.rewrite_mvcc_lock(REGION_ID, STORE_TARGETS, "AA", "BB")
 
     assert observed == {"targets": tuple(STORE_TARGETS), "calls": 1}
     assert [item["target"] for item in result["peers"]] == STORE_TARGETS
@@ -915,8 +981,11 @@ _RESOLVE_INSPECTION = "mvcc-test-inspection"
 
 
 def _resolve_deployment(records):
-    deployment = object.__new__(TiDBDockerDeployment)
-    deployment._mvcc_inspections = {
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.mvcc = TiDBMvcc(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
+    deployment.mvcc._mvcc_inspections = {
         _RESOLVE_INSPECTION: {
             "region_id": REGION_ID,
             "store_targets": tuple(STORE_TARGETS),
@@ -925,17 +994,17 @@ def _resolve_deployment(records):
             "tool": {"binary_path": "/tikv-ctl"},
         }
     }
-    deployment._mvcc_region_scope = lambda region_id, store_targets: {
+    deployment.mvcc._mvcc_region_scope = lambda region_id, store_targets: {
         "region": {"id": region_id},
         "region_id": region_id,
         "peer_store_ids": tuple(PEER_STORE_IDS),
         "store_targets": tuple(STORE_TARGETS),
         "stores": [],
     }
-    deployment._mvcc_tool_metadata = lambda image: {"binary_path": "/tikv-ctl"}
-    deployment._mvcc_tikv_mounts = lambda service: ("/data", "/cfg", "tikv-image")
-    deployment._mvcc_compose_service = lambda target: target.rsplit("/", 1)[1]
-    deployment.mvcc_lock_list = lambda region_id, store_targets, limit, from_key=None, to_key=None: {
+    deployment.mvcc._mvcc_tool_metadata = lambda image: {"binary_path": "/tikv-ctl"}
+    deployment.mvcc._mvcc_tikv_mounts = lambda service: ("/data", "/cfg", "tikv-image")
+    deployment.mvcc._mvcc_compose_service = lambda target: target.rsplit("/", 1)[1]
+    deployment.mvcc.mvcc_lock_list = lambda region_id, store_targets, limit, from_key=None, to_key=None: {
         "region_id": region_id,
         "peer_store_ids": PEER_STORE_IDS,
         "store_targets": STORE_TARGETS,
@@ -950,8 +1019,8 @@ def _resolve_deployment(records):
         observed["commands"].append((service, arguments))
         return "OK", {"binary_path": "/tikv-ctl"}
 
-    deployment._mvcc_tikv_ctl = fake_tikv_ctl
-    deployment._mvcc_offline_call_many = (
+    deployment.mvcc._mvcc_tikv_ctl = fake_tikv_ctl
+    deployment.mvcc._mvcc_offline_call_many = (
         lambda targets, operation, callback: callback(tuple(target.rsplit("/", 1)[1] for target in targets))
     )
     return deployment, observed
@@ -984,18 +1053,18 @@ def test_k11_guard_registers_only_for_the_focused_case():
 
 
 def test_k11_lock_record_decoder_reads_type_and_start_ts():
-    decoded = TiDBDockerDeployment.mvcc_decode_lock_record(_ORPHAN_VALUE_HEX)
+    decoded = TiDBMvcc.mvcc_decode_lock_record(_ORPHAN_VALUE_HEX)
 
     assert decoded == {"lock_type": "P", "start_ts": _ORPHAN_FACTS["start_ts"]}
-    live = TiDBDockerDeployment.mvcc_decode_lock_record(_LIVE_VALUE_HEX)
+    live = TiDBMvcc.mvcc_decode_lock_record(_LIVE_VALUE_HEX)
     assert live["lock_type"] == "S"
     with pytest.raises(ValueError, match="unknown lock-type byte"):
-        TiDBDockerDeployment.mvcc_decode_lock_record("58")
+        TiDBMvcc.mvcc_decode_lock_record("58")
     orphan_value = bytes.fromhex(_ORPHAN_VALUE_HEX)
     primary_length = orphan_value[1] // 2
     truncated_hex = _ORPHAN_VALUE_HEX[: 2 * (2 + primary_length)]
     with pytest.raises(ValueError, match="ended while decoding start_ts"):
-        TiDBDockerDeployment.mvcc_decode_lock_record(truncated_hex)
+        TiDBMvcc.mvcc_decode_lock_record(truncated_hex)
 
 
 def test_k11_stuck_holder_shares_the_recovery_region_and_is_public():
@@ -1021,7 +1090,7 @@ def test_k11_resolve_key_deletes_the_orphan_on_every_peer():
         {"key_hex": _LIVE_KEY_HEX, "value_hex": _LIVE_VALUE_HEX},
     ])
 
-    result = deployment.mvcc_lock_resolve_key(
+    result = deployment.mvcc.mvcc_lock_resolve_key(
         REGION_ID,
         _RESOLVE_INSPECTION,
         _ORPHAN_KEY_HEX,
@@ -1036,7 +1105,7 @@ def test_k11_resolve_key_deletes_the_orphan_on_every_peer():
     assert [item["target"] for item in result["peers"]] == STORE_TARGETS
     storage_key = (
         "7A"
-        + TiDBDockerDeployment._mvcc_encode_memcomparable_key(_ORPHAN_KEY).hex().upper()
+        + TiDBMvcc._mvcc_encode_memcomparable_key(_ORPHAN_KEY).hex().upper()
     )
     assert observed["commands"] == [
         (
@@ -1052,7 +1121,7 @@ def test_k11_resolve_key_deletes_the_orphan_on_every_peer():
         )
         for service in ("tikv-0", "tikv-1", "tikv-2")
     ]
-    assert _RESOLVE_INSPECTION not in deployment._mvcc_inspections
+    assert _RESOLVE_INSPECTION not in deployment.mvcc._mvcc_inspections
 
 
 def test_k11_resolve_key_refuses_pessimistic_and_mismatched_credentials():
@@ -1063,23 +1132,23 @@ def test_k11_resolve_key_refuses_pessimistic_and_mismatched_credentials():
     deployment, observed = _resolve_deployment(records)
 
     with pytest.raises(ValueError, match="pessimistic in-flight transaction lock"):
-        deployment.mvcc_lock_resolve_key(
+        deployment.mvcc.mvcc_lock_resolve_key(
             REGION_ID, _RESOLVE_INSPECTION, _LIVE_KEY_HEX, "S", 469370385767596032
         )
     with pytest.raises(ValueError, match="credentials do not match"):
-        deployment.mvcc_lock_resolve_key(
+        deployment.mvcc.mvcc_lock_resolve_key(
             REGION_ID, _RESOLVE_INSPECTION, _ORPHAN_KEY_HEX, "S", _ORPHAN_FACTS["start_ts"]
         )
     with pytest.raises(ValueError, match="credentials do not match"):
-        deployment.mvcc_lock_resolve_key(
+        deployment.mvcc.mvcc_lock_resolve_key(
             REGION_ID, _RESOLVE_INSPECTION, _ORPHAN_KEY_HEX, "P", _ORPHAN_FACTS["start_ts"] + 1
         )
     with pytest.raises(ValueError, match="requires a live inspect result"):
-        deployment.mvcc_lock_resolve_key(
+        deployment.mvcc.mvcc_lock_resolve_key(
             REGION_ID, "mvcc-forged", _ORPHAN_KEY_HEX, "P", _ORPHAN_FACTS["start_ts"]
         )
     assert observed["commands"] == []
-    assert _RESOLVE_INSPECTION in deployment._mvcc_inspections
+    assert _RESOLVE_INSPECTION in deployment.mvcc._mvcc_inspections
 
 
 def test_k11_resolve_key_requires_the_record_on_every_peer():
@@ -1088,7 +1157,7 @@ def test_k11_resolve_key_requires_the_record_on_every_peer():
     ])
 
     with pytest.raises(ValueError, match="exactly one lock record"):
-        deployment.mvcc_lock_resolve_key(
+        deployment.mvcc.mvcc_lock_resolve_key(
             REGION_ID, _RESOLVE_INSPECTION, _ORPHAN_KEY_HEX, "P", _ORPHAN_FACTS["start_ts"]
         )
 
@@ -1100,12 +1169,12 @@ def test_k11_region_apply_interlock_refuses_live_pessimistic_locks():
     ])
 
     with pytest.raises(ValueError, match="in-flight pessimistic transaction lock"):
-        deployment.mvcc_recovery_apply_interlock(REGION_ID, _RESOLVE_INSPECTION)
+        deployment.mvcc.mvcc_recovery_apply_interlock(REGION_ID, _RESOLVE_INSPECTION)
 
     clean, _ = _resolve_deployment([
         {"key_hex": _ORPHAN_KEY_HEX, "value_hex": _ORPHAN_VALUE_HEX},
     ])
-    cleared = clean.mvcc_recovery_apply_interlock(REGION_ID, _RESOLVE_INSPECTION)
+    cleared = clean.mvcc.mvcc_recovery_apply_interlock(REGION_ID, _RESOLVE_INSPECTION)
     assert cleared == {
         "region_id": REGION_ID,
         "inspection_id": _RESOLVE_INSPECTION,
@@ -1117,6 +1186,7 @@ def test_k11_region_apply_interlock_refuses_live_pessimistic_locks():
 
 class _GuardHandlerDeployment:
     def __init__(self):
+        self.mvcc = SimpleNamespace(mvcc_lock_resolve_key=self.mvcc_lock_resolve_key, mvcc_recovery_apply_interlock=self.mvcc_recovery_apply_interlock, mvcc_recovery_execute=self.mvcc_recovery_execute)
         self.resolve_calls = []
         self.execute_calls = []
         self.interlock_calls = []
@@ -1135,10 +1205,10 @@ class _GuardHandlerDeployment:
 
 
 def _guard_env():
-    from src.execution.environment import TiDBEnv
+    from src.scenarios.tidb.system_failure.runtime.gc_mvcc_recovery import GcMvccRecoveryEnv
 
     deployment = _GuardHandlerDeployment()
-    env = TiDBEnv.__new__(TiDBEnv)
+    env = GcMvccRecoveryEnv.__new__(GcMvccRecoveryEnv)
     env.deployment = deployment
     env.run_id = "k11-guard-test"
     env._mvcc_recovery_guard = None

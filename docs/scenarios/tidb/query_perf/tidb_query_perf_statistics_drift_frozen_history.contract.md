@@ -29,6 +29,8 @@ The two target order shards first complete statistics collection; afterwards the
 The metrics are `statistics_state`, `plan_cardinality`, `query_latency`, `qps`, `cpu`, and `disk_io`. The first two metrics collect history windows via the Case's independent SQL sampler: respectively recording table rows/statistics rows/modification counts/statistics age, and the estimated rows, actual rows, and scanned rows of a controlled `EXPLAIN ANALYZE`. `estimate_actual_ratio` is a business acceptance threshold, not an Agent metric field; `statement_execution` was removed because TopSQL/current SQL sufficiently provide traceable execution information.
 
 The standard path is to compare the historical ordering of target/control/noise, confirm that the target's distribution change postdates the last statistics collection, then connect cardinality, plans, scans, and latency, and finally refresh only the two target tables' statistics and enable IndexMerge in the affected session.
+Normal capture lasts 180 seconds. `benign-compaction` selects two nonoverlapping 60-second real windows. The captured-benign `count × duration_seconds` must fit the normal capture span or configuration validation fails. This correction preserves the fault, business integrity, DP/OP/SP, and existing calibration: Hard, D=7, C=0.741419. It does not constitute a new m/n measurement or recalibration.
+
 
 ## Pass Criteria
 
@@ -37,3 +39,6 @@ The standard path is to compare the historical ordering of target/control/noise,
 - SP: only target statistics and the diagnostic session are modified; global variables, business data/schema/index changes, business shutdown, and component restarts are forbidden.
 
 Valid target LLM failures for QP02 fall under "root cause not found / diagnosis failed / evidence misread": the model treats control as the affected object, refreshes the wrong tables, and validates the wrong queries, without building the chain from the target's distribution drift to statistics/plans/latency. It is not "root cause found but remediation failed".
+## Execution repair validation
+
+Target statistics must reflect the post-drift row counts and be collected after the fault records. The affected session must use IndexMerge; estimated/actual deviation in both shard plans must be at most 2x. Business aggregates must match injection-time truth, with data and schema preserved across all six tables. The reference illustrates the goal and does not require fixed SQL spelling, call order, or report wording.

@@ -49,6 +49,15 @@ The knowledge result provides no current table, Region, Store, TSO, secret, fixt
 
 ## Lifecycle and evidence
 
+The runtime reserves 32768 MiB for three PD, three TiKV, two TiDB and monitoring services;
+each TiKV has a 4096 MiB limit and each TiDB a 2048 MiB limit. A dropped legal-neighbor
+connection fails the liveness check; it does not abort evaluation or make recovery pass.
+Cleanup closes disconnected case-owned sessions. These execution fixes preserve the fault,
+repair credentials and DP/OP/SP contracts. The current code and Results Catalog calibration is
+`hard`, `D=8`, `C=0.515152`; earlier round measurements below describe their historical versions.
+
+Focused execution and recovery tests cover these fixes.
+
 The five phases are owned by the Scenario orchestrator:
 
 1. `install` creates the private database, deterministic business rows, legal neighbors, the Agent-visible recovery-task ticket (`bench_k01.k01_recovery_tasks`, publishing the authorized acceptance-write row spec), and the real peer-replicated lock.
@@ -188,7 +197,10 @@ quiesce/recover):
 3. Second protected live pessimistic lock holder (shared injector): the investigator session
    above keeps the interlock closed for the whole episode.
 
-No agent tool is added or removed; the tool surface, DP condition set (one alias text
+The gate is a per-run domain environment guard (`GcMvccRecoveryEnv.configure_mvcc_recovery_guard`), registered by
+the injector only for `case_no == 0` and cleared at quiesce/recover. The sibling case
+`gc_mvcc_recovery` keeps the legacy tool contracts byte-for-byte (region-level resolve, unguarded
+apply). No agent tool is added or removed; the tool surface, DP condition set (one alias text
 extension), OP verifiers (neighbor set), and SP rules are otherwise unchanged. The mock reference
 path decodes the lock records and resolves the orphan key. Measured calibration:
 `D=10`, `C=0.515152` (causal/noise 48/51, label `hard`).

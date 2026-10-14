@@ -4,18 +4,12 @@ from src.scenarios.evaluation.tidb.system_failure.region_unavailable import (
     TidbSystemFailureRegionUnavailableEvaluatorCase,
     TidbSystemFailureRegionUnavailableFocusedEvaluatorCase,
 )
-from src.scenarios.evaluation.protocol import structured_reference_report
-from src.scenarios.workloads import WorkloadProfile
+from src.protocols.report import structured_reference_report
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 def _business_truth(row_count: int) -> tuple[int, int, int]:
@@ -458,28 +452,28 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
         self._create_fixture(context.env)
         self._inject_recovered_control_plane_noise(context.env)
         self._pin_pd_leader_off_decoy_targets()
-        self.deployment.arm_pd_network_rehydration(
+        self.deployment.network.arm_pd_network_rehydration(
             self.affected_tidb_target,
             (self.post_restart_rehydrated_pd_target,),
         )
         self.deployment.restart_component(self.affected_tidb_target)
-        self.deployment.block_pd_network_egress_shadow(
+        self.deployment.network.block_pd_network_egress_shadow(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.block_pd_network_stale_egress(
+        self.deployment.network.block_pd_network_stale_egress(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.block_pd_network_response(
+        self.deployment.network.block_pd_network_response(
             self.pd_targets,
             self.affected_tidb_target,
         )
-        self.deployment.block_pd_network_response_shadow(
+        self.deployment.network.block_pd_network_response_shadow(
             self.pd_targets,
             self.pd_response_shadow_targets,
         )
-        self.deployment.block_pd_network_address(
+        self.deployment.network.block_pd_network_address(
             self.affected_tidb_target,
             self.affected_stale_pd_address,
         )
@@ -495,28 +489,28 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
         self._verify_fixture(context.env)
         self._inject_recovered_control_plane_noise(context.env)
         self._pin_pd_leader_off_decoy_targets()
-        self.deployment.arm_pd_network_rehydration(
+        self.deployment.network.arm_pd_network_rehydration(
             self.affected_tidb_target,
             (self.post_restart_rehydrated_pd_target,),
         )
         self.deployment.restart_component(self.affected_tidb_target)
-        self.deployment.block_pd_network_egress_shadow(
+        self.deployment.network.block_pd_network_egress_shadow(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.block_pd_network_stale_egress(
+        self.deployment.network.block_pd_network_stale_egress(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.block_pd_network_response(
+        self.deployment.network.block_pd_network_response(
             self.pd_targets,
             self.affected_tidb_target,
         )
-        self.deployment.block_pd_network_response_shadow(
+        self.deployment.network.block_pd_network_response_shadow(
             self.pd_targets,
             self.pd_response_shadow_targets,
         )
-        self.deployment.block_pd_network_address(
+        self.deployment.network.block_pd_network_address(
             self.affected_tidb_target,
             self.affected_stale_pd_address,
         )
@@ -528,7 +522,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
 
     def prepare_observability(self, context: FaultLifecycleContext) -> Mapping[str, object]:
         self._configure(context.config, context.env)
-        affected_rules = self.deployment.inspect_pd_network(self.affected_tidb_target)
+        affected_rules = self.deployment.network.inspect_pd_network(self.affected_tidb_target)
         affected_source_address = self._source_address(affected_rules, self.affected_tidb_target)
         shadow_egress = self._shadow_egress_evidence(affected_rules)
         if len(shadow_egress) != len(self.pd_targets):
@@ -539,7 +533,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
             )
         response_shadow_addresses = {
             target: self._source_address(
-                self.deployment.inspect_pd_network(target),
+                self.deployment.network.inspect_pd_network(target),
                 target,
             )
             for target in self.pd_response_shadow_targets
@@ -547,7 +541,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
         response_evidence = []
         response_shadow_evidence = []
         for pd_target in self.pd_targets:
-            pd_rules = self.deployment.inspect_pd_network(pd_target)
+            pd_rules = self.deployment.network.inspect_pd_network(pd_target)
             response_rule_count = self._pd_response_rule_count(
                 pd_rules,
                 marker=self.pd_response_rule_marker,
@@ -567,7 +561,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
                 "rule_count": response_rule_count,
             })
         for pd_target in self.pd_targets:
-            pd_rules = self.deployment.inspect_pd_network(pd_target)
+            pd_rules = self.deployment.network.inspect_pd_network(pd_target)
             response_shadow_evidence.append({
                 "pd_target": pd_target,
                 "rules": self._pd_response_shadow_evidence(
@@ -585,9 +579,9 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
                 f"actual={len(stale_egress)}, marker={self.tidb_stale_egress_rule_marker!r}, "
                 f"rules={affected_rules!r}"
             )
-        control_rules = self.deployment.inspect_pd_network(self.control_tidb_target)
+        control_rules = self.deployment.network.inspect_pd_network(self.control_tidb_target)
         control_rule_count = control_rules.count("--dport 2379")
-        protected_rules = self.deployment.inspect_pd_network(self.protected_tidb_target)
+        protected_rules = self.deployment.network.inspect_pd_network(self.protected_tidb_target)
         protected_rule_count = protected_rules.count("--dport 2379")
         if (
             self.affected_stale_pd_address not in affected_rules
@@ -600,17 +594,17 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
             )
         source_addresses = {
             self.control_tidb_target: self._source_address(
-                self.deployment.inspect_pd_network(self.control_tidb_target),
+                self.deployment.network.inspect_pd_network(self.control_tidb_target),
                 self.control_tidb_target,
             ),
             self.protected_tidb_target: self._source_address(
-                self.deployment.inspect_pd_network(self.protected_tidb_target),
+                self.deployment.network.inspect_pd_network(self.protected_tidb_target),
                 self.protected_tidb_target,
             ),
         }
         shadow_evidence = []
         for pd_target in self.pd_shadow_ingress_targets:
-            pd_rules = self.deployment.inspect_pd_network(pd_target)
+            pd_rules = self.deployment.network.inspect_pd_network(pd_target)
             if not self._shadow_ingress_rule_present(
                 pd_rules,
                 self.pd_ingress_rule_marker,
@@ -631,7 +625,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
             })
         decoy_evidence = []
         for pd_target, source_target in self.pd_ingress_decoy_rules:
-            pd_rules = self.deployment.inspect_pd_network(pd_target)
+            pd_rules = self.deployment.network.inspect_pd_network(pd_target)
             marker = self._ingress_marker(source_target)
             source_address = source_addresses[source_target]
             decoy_rule_count = self._ingress_rule_count(
@@ -713,7 +707,7 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
         }
 
     def _inject_recovered_control_plane_noise(self, env) -> None:
-        self.deployment.block_pd_network(self.control_tidb_target)
+        self.deployment.network.block_pd_network(self.control_tidb_target)
         region_sql = f"SHOW TABLE {self.db}.{self.table} REGIONS"
         payload = parse_json_object(
             env.execute_sql(region_sql, target=self.control_tidb_target),
@@ -724,8 +718,8 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
                 "region-unavailable recovered control-plane noise did not produce a PD-dependent failure: "
                 f"target={self.control_tidb_target!r}, sql={region_sql!r}, payload={payload!r}"
         )
-        self.deployment.allow_pd_network(self.control_tidb_target)
-        self.deployment.block_pd_network_address(
+        self.deployment.network.allow_pd_network(self.control_tidb_target)
+        self.deployment.network.block_pd_network_address(
             self.control_tidb_target,
             self.control_stale_pd_address,
         )
@@ -733,99 +727,99 @@ class TidbSystemFailureRegionUnavailableInjector(BaseFaultInjector):
 
     def _inject_pd_ingress_decoys(self) -> None:
         for pd_target, source_target in self.pd_ingress_decoy_rules:
-            self.deployment.block_pd_network_ingress_decoy(source_target, pd_target)
+            self.deployment.network.block_pd_network_ingress_decoy(source_target, pd_target)
 
     def _inject_pd_shadow_ingress(self) -> None:
         for pd_target in self.pd_shadow_ingress_targets:
-            self.deployment.block_pd_network_ingress_shadow(
+            self.deployment.network.block_pd_network_ingress_shadow(
                 self.affected_tidb_target,
                 pd_target,
             )
 
     def _inject_protected_neighbor_noise(self) -> None:
-        self.deployment.block_pd_network_address(
+        self.deployment.network.block_pd_network_address(
             self.protected_tidb_target,
             self.protected_stale_pd_address,
         )
 
     def quiesce(self, context: FaultLifecycleContext) -> None:
         self._configure(context.config, context.env)
-        self.deployment.disarm_pd_network_rehydration(self.affected_tidb_target)
+        self.deployment.network.disarm_pd_network_rehydration(self.affected_tidb_target)
         for pd_target in self.pd_shadow_ingress_targets:
-            self.deployment.allow_pd_network_ingress_shadow(
+            self.deployment.network.allow_pd_network_ingress_shadow(
                 self.affected_tidb_target,
                 pd_target,
             )
-        self.deployment.allow_pd_network_egress_shadow(
+        self.deployment.network.allow_pd_network_egress_shadow(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.allow_pd_network_stale_egress(
+        self.deployment.network.allow_pd_network_stale_egress(
             self.affected_tidb_target,
             self.pd_targets,
         )
         for pd_target, source_target in self.pd_ingress_decoy_rules:
-            self.deployment.allow_pd_network_ingress_decoy(source_target, pd_target)
+            self.deployment.network.allow_pd_network_ingress_decoy(source_target, pd_target)
         for pd_target in self.pd_targets:
-            self.deployment.allow_pd_network_response_shadow(
+            self.deployment.network.allow_pd_network_response_shadow(
                 pd_target,
                 self.pd_response_shadow_targets,
             )
         for pd_target in self.pd_targets:
-            self.deployment.allow_pd_network(pd_target)
-        self.deployment.allow_pd_network(self.affected_tidb_target)
-        self.deployment.allow_pd_network_address(
+            self.deployment.network.allow_pd_network(pd_target)
+        self.deployment.network.allow_pd_network(self.affected_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.affected_tidb_target,
             self.affected_stale_pd_address,
         )
-        self.deployment.allow_pd_network(self.control_tidb_target)
-        self.deployment.allow_pd_network_address(
+        self.deployment.network.allow_pd_network(self.control_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.control_tidb_target,
             self.control_stale_pd_address,
         )
-        self.deployment.allow_pd_network(self.protected_tidb_target)
-        self.deployment.allow_pd_network_address(
+        self.deployment.network.allow_pd_network(self.protected_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.protected_tidb_target,
             self.protected_stale_pd_address,
         )
 
     def recover(self, context: FaultLifecycleContext) -> None:
         self._configure(context.config, context.env)
-        self.deployment.disarm_pd_network_rehydration(self.affected_tidb_target)
+        self.deployment.network.disarm_pd_network_rehydration(self.affected_tidb_target)
         for pd_target in self.pd_shadow_ingress_targets:
-            self.deployment.allow_pd_network_ingress_shadow(
+            self.deployment.network.allow_pd_network_ingress_shadow(
                 self.affected_tidb_target,
                 pd_target,
             )
-        self.deployment.allow_pd_network_egress_shadow(
+        self.deployment.network.allow_pd_network_egress_shadow(
             self.affected_tidb_target,
             self.pd_targets,
         )
-        self.deployment.allow_pd_network_stale_egress(
+        self.deployment.network.allow_pd_network_stale_egress(
             self.affected_tidb_target,
             self.pd_targets,
         )
         for pd_target, source_target in self.pd_ingress_decoy_rules:
-            self.deployment.allow_pd_network_ingress_decoy(source_target, pd_target)
+            self.deployment.network.allow_pd_network_ingress_decoy(source_target, pd_target)
         for pd_target in self.pd_targets:
-            self.deployment.allow_pd_network_response_shadow(
+            self.deployment.network.allow_pd_network_response_shadow(
                 pd_target,
                 self.pd_response_shadow_targets,
             )
         for pd_target in self.pd_targets:
-            self.deployment.allow_pd_network(pd_target)
-        self.deployment.allow_pd_network(self.affected_tidb_target)
-        self.deployment.allow_pd_network_address(
+            self.deployment.network.allow_pd_network(pd_target)
+        self.deployment.network.allow_pd_network(self.affected_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.affected_tidb_target,
             self.affected_stale_pd_address,
         )
-        self.deployment.allow_pd_network(self.control_tidb_target)
-        self.deployment.allow_pd_network_address(
+        self.deployment.network.allow_pd_network(self.control_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.control_tidb_target,
             self.control_stale_pd_address,
         )
-        self.deployment.allow_pd_network(self.protected_tidb_target)
-        self.deployment.allow_pd_network_address(
+        self.deployment.network.allow_pd_network(self.protected_tidb_target)
+        self.deployment.network.allow_pd_network_address(
             self.protected_tidb_target,
             self.protected_stale_pd_address,
         )

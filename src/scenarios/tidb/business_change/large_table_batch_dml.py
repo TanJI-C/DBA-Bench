@@ -4,17 +4,12 @@ from src.scenarios.evaluation.tidb.business_change.large_table_batch_dml import 
     TidbBusinessChangeLargeTableBatchDmlEvaluatorCase,
     TidbBusinessChangeLargeTableSettlementRebucketEvaluatorCase,
 )
-from src.scenarios.evaluation.protocol import structured_reference_report
-from src.scenarios.workloads import WorkloadProfile
+from src.protocols.report import structured_reference_report
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _SOURCE_DB = "bc04_app"

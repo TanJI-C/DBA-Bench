@@ -5,7 +5,6 @@ import json
 import os
 import platform
 import signal
-import socket
 import subprocess
 import sys
 import time
@@ -17,23 +16,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.agent_language import AGENT_LANGUAGE_ENV
-from src.scenarios.base import DatabaseSystem
 from .adapters.persistent_scenario import build_persistent_scenario_command
-from .adapters.scenario import build_scenario_command
+from .adapters.scenario import build_scenario_command, validate_scenario_target, assert_fault_snapshots_exist
 from .commands import container_name
-from .commands import script_options
 from .aggregate import aggregate, write_aggregate
 from .isolation import (
     allocate_workers,
-    assert_fault_snapshots_exist,
     derive_worker_demand,
     requires_host_exclusive,
 )
+from .host_resources import reserve_host_resources
+from src.execution.host_ports import PORT_LEASE_ENV, PortLease, reserve_host_ports
 from .manifest import ExperimentManifest
-from .models import BoundedScenarioRunSpec, PersistentScenarioRunSpec, RunRecord, ScenarioKind, WorkerAllocation
+from .models import (
+    BoundedScenarioRunSpec,
+    PersistentScenarioRunSpec,
+    RunRecord,
+    ScenarioKind,
+    WorkerAllocation,
+)
 from .store import ExperimentStore, atomic_write_json
-from src.execution.metric_catalog import metric_catalog_for_system
-from src.execution.postgres_metrics import CompositePostgresMetricCatalog
 
 
 # Run the entrypoint and capture the source state from the active checkout.
@@ -42,21 +44,6 @@ from src.execution.postgres_metrics import CompositePostgresMetricCatalog
 # Linked worktrees share the Git common directory for artifacts, but commands
 # must execute the entrypoint and source files from the active checkout.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-# These PostgreSQL scenario entrypoints reserve task-local port ranges. The
-# experiment manifest still assigns a logical port to every run, but the
-# entrypoint must receive the scenario's real base port when runs are serial.
-SCENARIO_PORT_BASES = {
-    "pg_health_check_autovacuum_sustainability": 15801,
-    "pg_health_check_backup_rpo_certification": 15811,
-    "pg_resource_governance_pgbouncer_connection_budget": 15821,
-    "pg_resource_governance_container_cpu_budget": 15831,
-    "pg_system_failure_checkpoint_archive": 15841,
-    "pg_business_change_lwlock_pgbouncer_cascade": 15851,
-    "pg_resource_governance_partition_cleanup": 15861,
-    "pg_resource_governance_io_context_workload": 15871,
-}
-
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -355,50 +342,6 @@ _PORT_FLAGS = (
 )
 
 
-def _port_free(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(("0.0.0.0", port))
-        except OSError:
-            return False
-    return True
-
-
-def rebase_command_ports(command: list[str]) -> tuple[list[str], int | None]:
-    """Pick a free port when the planned one is still held.
-
-    Scenario cells bind their published host port at container start; a
-    co-tenant container or a docker-proxy entry in TIME_WAIT keeps the planned
-    port busy and the cell would die before the agent does any work. Probe the
-    planned port (and every companion port the scenario derives from it) and
-    shift to the next free port, preserving all relative offsets. Returns the
-    possibly rebased command and the chosen base port (None when unchanged).
-    """
-    if "--port" not in command and "--primary-port" not in command:
-        return command, None
-    base_flag = "--primary-port" if "--primary-port" in command else "--port"
-    planned = int(command[command.index(base_flag) + 1])
-    offsets: dict[str, int] = {}
-    for name in _PORT_FLAGS:
-        if name in command:
-            offsets[name] = int(command[command.index(name) + 1]) - planned
-    chosen = planned
-    for _ in range(64):
-        if all(_port_free(chosen + offset) for offset in set(offsets.values())):
-            break
-        chosen += 1
-    else:
-        raise RuntimeError(
-            f"No free port within 64 of the planned port {planned}: "
-            f"ports={sorted({planned + offset for offset in offsets.values()})}"
-        )
-    if chosen == planned:
-        return command, None
-    rebased = list(command)
-    for name, offset in offsets.items():
-        rebased[rebased.index(name) + 1] = str(chosen + offset)
-    return rebased, chosen
-
 def validate_execution_plan(
     manifest: ExperimentManifest,
     specs: list[BoundedScenarioRunSpec | PersistentScenarioRunSpec],
@@ -406,45 +349,7 @@ def validate_execution_plan(
     for spec in specs:
         build_command(spec, manifest)
         if isinstance(spec, BoundedScenarioRunSpec):
-            case = _history_case_for_spec(spec)
-            if case is not None:
-                if manifest.runtime.fault_snapshot != "off":
-                    raise ValueError(
-                        "Frozen history Cases require manifest.runtime.fault_snapshot='off': "
-                        f"scenario={spec.scenario_id!r}, case={spec.case_id!r}, "
-                        f"fault_snapshot={manifest.runtime.fault_snapshot!r}"
-                    )
-                history = case.frozen_history
-                catalog = metric_catalog_for_system(spec.system)
-                # Scenario-owned catalogs are validated by the environment;
-                # runner preflight only needs lookbacks known to the shared catalog.
-                known_lookbacks = [
-                    float(catalog.definition(metric).lookback_seconds)
-                    for metric in history.required_metrics
-                    if metric in catalog.metric_names
-                ]
-                warmup = max(
-                    float(case.background_workload.warmup_seconds),
-                    max(known_lookbacks, default=0.0),
-                )
-                startup_budget = (
-                    manifest.runtime.tidb_cold_start_timeout_sec
-                    if spec.system is DatabaseSystem.TIDB
-                    else manifest.runtime.postgres_cold_start_timeout_sec
-                )
-                minimum_timeout = int(
-                    startup_budget
-                    + warmup
-                    + history.normal_capture_seconds
-                    + history.fault_capture_seconds
-                    + 120
-                )
-                if manifest.runtime.timeout_seconds < minimum_timeout:
-                    raise ValueError(
-                        "Experiment timeout does not cover frozen-history deployment, captures, and Agent execution: "
-                        f"scenario={spec.scenario_id!r}, case={spec.case_id!r}, "
-                        f"timeout_seconds={manifest.runtime.timeout_seconds}, minimum_timeout_seconds={minimum_timeout}"
-                    )
+            validate_scenario_target(spec, manifest)
     if manifest.benchmark.scenario_kind is ScenarioKind.PERSISTENT:
         if manifest.runtime.concurrency != 1:
             raise ValueError("Persistent Scenario experiment execution requires runtime.concurrency=1")
@@ -472,41 +377,8 @@ def validate_execution_plan(
     )
 
 
-def _history_case_for_spec(spec: BoundedScenarioRunSpec):
-    from src.scenarios import SCENARIO_REGISTRY
-
-    registrations = [item for item in SCENARIO_REGISTRY if item.scenario_id == spec.scenario_id]
-    if len(registrations) != 1:
-        raise ValueError(
-            "BoundedScenarioRunSpec must resolve to exactly one registered scenario: "
-            f"scenario_id={spec.scenario_id!r}, matches={len(registrations)}"
-        )
-    cases = [case for case in registrations[0].scenario.cases if case.case_id == spec.case_id]
-    if len(cases) != 1:
-        raise ValueError(
-            "BoundedScenarioRunSpec must resolve to exactly one registered case: "
-            f"scenario_id={spec.scenario_id!r}, case_id={spec.case_id!r}, matches={len(cases)}"
-        )
-    return cases[0] if getattr(cases[0], "frozen_history", None) is not None else None
 
 
-def _frozen_history_catalog_for_case(spec: BoundedScenarioRunSpec, case):
-    """Resolve the same public metric catalog that PGEnv installs for the Case."""
-    catalog = metric_catalog_for_system(spec.system)
-    adapter = getattr(case, "frozen_history_adapter", None)
-    definitions = getattr(adapter, "metric_definitions", None)
-    if callable(definitions):
-        extensions = definitions()
-        if spec.system is DatabaseSystem.POSTGRESQL:
-            return CompositePostgresMetricCatalog(extensions)
-        with_extensions = getattr(catalog, "with_extensions", None)
-        if not callable(with_extensions):
-            raise ValueError(
-                "Frozen history adapter requires a catalog extension hook: "
-                f"system={spec.system.value!r}, adapter={type(adapter).__name__!r}"
-            )
-        catalog = with_extensions(extensions)
-    return catalog
 
 
 class ExperimentRunner:
@@ -529,6 +401,7 @@ class ExperimentRunner:
         self.stopping = False
         self._processes: dict[str, subprocess.Popen] = {}
         self._process_lock = threading.Lock()
+        self._reservation_fds: tuple[int, ...] = ()
 
     def initialize(self, specs: list[BoundedScenarioRunSpec | PersistentScenarioRunSpec]) -> None:
         self.store.initialize(
@@ -570,7 +443,22 @@ class ExperimentRunner:
             previous_handlers[signum] = signal.getsignal(signum)
             signal.signal(signum, self._request_stop)
         try:
-            failures = self._run_selected(selected)
+            with reserve_host_resources(
+                self.manifest.experiment_id, selected, self.manifest.runtime.isolation,
+                self.manifest.runtime.concurrency,
+                run_records=tuple(self.store.record_path(spec.run_id) for spec in selected),
+            ) as reservation:
+                self.workers = reservation.workers
+                self._reservation_fds = reservation.pass_fds
+                atomic_write_json(self.store.root / "host-reservation.json", reservation.evidence)
+                environment_path = self.store.root / "environment.json"
+                environment = json.loads(environment_path.read_text())
+                environment["workers"] = [asdict(worker) for worker in self.workers]
+                atomic_write_json(environment_path, environment)
+                try:
+                    failures = self._run_selected(selected)
+                finally:
+                    self._reservation_fds = ()
         finally:
             for signum, handler in previous_handlers.items():
                 signal.signal(signum, handler)
@@ -672,6 +560,29 @@ class ExperimentRunner:
         spec: BoundedScenarioRunSpec | PersistentScenarioRunSpec,
         worker: WorkerAllocation | None = None,
     ) -> RunRecord:
+        if self.stopping:
+            record = self.store.load(spec.run_id)
+            assert record is not None
+            return record
+        command = build_command(spec, self.manifest)
+        base_flag = '--primary-port' if '--primary-port' in command else '--port'
+        base = int(command[command.index(base_flag) + 1])
+        flags = {flag: int(command[command.index(flag) + 1]) - base for flag in _PORT_FLAGS if flag in command}
+        offsets = tuple(sorted(set(spec.host_ports.offsets) | set(flags.values())))
+        with reserve_host_ports(base, offsets, owner=spec.run_id,
+                                allowed_range=spec.host_ports.allowed_range) as ports:
+            shift = min(ports.ports) - base - min(offsets)
+            for flag in flags:
+                command[command.index(flag) + 1] = str(base + shift + flags[flag])
+            return self._execute_reserved(spec, worker, command, ports)
+
+    def _execute_reserved(
+        self,
+        spec: BoundedScenarioRunSpec | PersistentScenarioRunSpec,
+        worker: WorkerAllocation | None,
+        command: list[str],
+        ports: PortLease,
+    ) -> RunRecord:
         record = self.store.load(spec.run_id)
         assert record is not None
         if self.stopping:
@@ -683,14 +594,14 @@ class ExperimentRunner:
         trace_path = attempt_dir / ("persistent_scenario_trace.json" if isinstance(spec, PersistentScenarioRunSpec) else "trace.json")
         evaluator_path = attempt_dir / ("persistent_scenario_evaluation.json" if isinstance(spec, PersistentScenarioRunSpec) else "evaluator.json")
         command = _isolate_scenario_attempt(
-            build_command(spec, self.manifest),
+            command,
             spec,
             self.manifest,
             attempt,
         )
-        command, rebased_port = rebase_command_ports(command)
-        if rebased_port is not None:
-            record.port = rebased_port
+        base_flag = '--primary-port' if '--primary-port' in command else '--port'
+        record.port = int(command[command.index(base_flag) + 1])
+        atomic_write_json(attempt_dir / 'port-reservation.json', {'ports': ports.ports})
 
         record.status = "running"
         record.run_status = "pending"
@@ -808,6 +719,7 @@ class ExperimentRunner:
                 "--",
                 *command,
             ]
+        env[PORT_LEASE_ENV] = ports.process_environment
         stdout_path.parent.mkdir(parents=True, exist_ok=True)
         start = time.monotonic()
         with stdout_path.open("w", encoding="utf-8") as log:
@@ -820,6 +732,7 @@ class ExperimentRunner:
                     stderr=subprocess.STDOUT,
                     text=True,
                     start_new_session=True,
+                    pass_fds=self._reservation_fds + ports.pass_fds,
                 )
             except OSError as exc:
                 return self._finish_failed_start(record, attempt, start, exc)

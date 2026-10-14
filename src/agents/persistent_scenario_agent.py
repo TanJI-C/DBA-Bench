@@ -7,8 +7,11 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 
-from src.scenarios.evaluation.protocol import STRUCTURED_REPORT_JSON_SCHEMA
-from src.persistent_scenarios.runtime.ports import PersistentScenarioAgentProtocolError, PersistentScenarioAgentProviderError
+from src.protocols.report import STRUCTURED_REPORT_JSON_SCHEMA
+from src.persistent_scenarios.runtime.ports import (
+    PersistentScenarioAgentProtocolError,
+    PersistentScenarioAgentProviderError,
+)
 
 
 PERSISTENT_SCENARIO_CONTROL_TOOL_SCHEMAS = (

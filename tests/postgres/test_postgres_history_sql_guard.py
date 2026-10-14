@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.execution.postgres_history import reject_postgres_public_historical_sql
 
 

@@ -183,7 +183,7 @@ knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
 A processed chunk still carries the complete maintenance fields, plus:
 
 ~~~
-source_class
+source_kind
 source_origin_id
 source_origin_path
 source_origin_url
@@ -194,7 +194,7 @@ provenance records, one entry per chunk:
 
 ~~~
 chunk_id
-source_class
+source_kind
 source_origin_id
 source_origin_path
 source_origin_url
@@ -519,7 +519,7 @@ The unified knowledge base has two provenance isolation boundaries:
 
 1. the serving projection blanks source identity at the physical data layer and checks for
    leakage;
-2. _search_tidb_knowledge() in src/execution/environment.py only allows returning:
+2. _search_tidb_knowledge() in src/execution/environments/tidb.py only allows returning:
 
 ~~~
 rank
@@ -549,7 +549,7 @@ Chroma metadata, or the provenance sidecar directly.
 | raw -> processed -> serving | scripts/merge_tidb_curated_knowledge.py |
 | SQLite/Chroma build CLI | scripts/build_tidb_knowledge_base.py |
 | manual query CLI | scripts/query_tidb_unified_knowledge.py |
-| Agent-facing projection | src/execution/environment.py |
+| Agent-facing projection | src/execution/environments/tidb.py |
 | tool schema | src/execution/tidb_tool_definitions.py |
 | unified smoke test | scripts/smoke_tidb_unified_knowledge.py |
 

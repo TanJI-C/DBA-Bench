@@ -12,13 +12,13 @@ from src.scenarios.evaluation.semantic import (
     SemanticJudgment,
 )
 from src.database.query_results import capture_query_result_truth
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun, FaultLifecycleContext
 from src.scenarios.tidb import TidbQueryPerfSetAutocommitStormScenario
 from src.scenarios.tidb.query_perf.set_autocommit_storm import (
     TidbQueryPerfSetAutocommitStormInjector,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
 
 SCENARIO = TidbQueryPerfSetAutocommitStormScenario()

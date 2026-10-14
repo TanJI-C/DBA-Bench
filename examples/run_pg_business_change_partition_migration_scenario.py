@@ -8,10 +8,10 @@ sys.path.insert(0, project_root)
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.evaluation.base import evaluation_passed
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.postgres import (
     PgBusinessChangePartitionMigrationCase,
     PgBusinessChangePartitionMigrationScenario,
@@ -278,7 +278,7 @@ def main():
         "--container-name",
         default="aiopsbench-run-pg-business-change-partition-migration-scenario",
     )
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")

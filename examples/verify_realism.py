@@ -20,8 +20,8 @@ sys.path.insert(0, project_root)
 
 from src.scenarios.postgres import PgQueryPerfMissingIndexScenario
 from src.scenarios.runtime.workload_runner import WorkloadRunner
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.workloads.tpcds import TPCDSWorkload, get_tpcds_query
 from scripts.scenario_case_support import inject_case, recover_case
 

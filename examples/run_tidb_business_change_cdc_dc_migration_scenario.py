@@ -7,9 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.tidb import TidbBusinessChangeCdcDcMigrationScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 SCENARIO = TidbBusinessChangeCdcDcMigrationScenario()
@@ -178,83 +178,146 @@ def _mirror_probe_sql(case):
     )
 
 
-def _checkout_rollback_mock_responses(case):
-    feed_status = _feed_status_query(case)
-    migration_state = _migration_state_query(case)
-    rollback_route = _rollback_route_sql(case)
-    mirror_probe = _mirror_probe_sql(case)
+def _restore_reverse_coverage_sql(case):
+    return (
+        f"UPDATE {case.control_db}.{case.changefeed_table} SET region_filter='all' "
+        f"WHERE feed_id='{case.reverse_feed_id}' "
+        f"AND direction='{case.target_dc}_to_{case.source_dc}' AND state='normal' AND enabled=1"
+    )
+
+
+def _restore_reverse_ordering_sql(case):
+    return (
+        f"UPDATE {case.control_db}.{case.changefeed_table} SET apply_ordering='authority_epoch' "
+        f"WHERE feed_id='{case.reverse_feed_id}'"
+    )
+
+
+def _restore_reverse_namespace_sql(case):
+    return (
+        f"UPDATE {case.control_db}.{case.changefeed_table} SET namespace_binding='source_incarnation', source_incarnation_filter='{case.target_incarnation}', event_namespace=("
+        f"SELECT incarnation_id FROM {case.control_db}.stream_incarnations "
+        f"WHERE source_dc='{case.target_dc}' AND service_name='{case.route_service}' "
+        "AND lifecycle='current') "
+        f"WHERE feed_id='{case.reverse_feed_id}' "
+        f"AND direction='{case.target_dc}_to_{case.source_dc}' AND state='normal' AND enabled=1"
+    )
+
+
+def _replay_reverse_sql(case):
+    return (
+        f"UPDATE {case.control_db}.{case.changefeed_table} "
+        "SET last_applied_event_id=0 "
+        f"WHERE feed_id='{case.reverse_feed_id}' "
+        f"AND direction='{case.target_dc}_to_{case.source_dc}' AND state='normal' AND enabled=1"
+    )
+
+
+def _checkout_replay_mock_responses(case, *, rollback=False):
     control = case.control_db
-    source = _qualified(case, case.source_db, case.order_table)
-    target = _qualified(case, case.target_db, case.order_table)
-    return [
+    reads = [
+        f"SELECT * FROM {control}.{case.route_table} ORDER BY service_name",
+        f"SELECT * FROM {control}.{case.changefeed_table} ORDER BY feed_id",
+        f"SELECT * FROM {control}.{case.migration_table} ORDER BY migration_id",
+        f"SELECT * FROM {control}.{case.validation_table} ORDER BY request_id",
+        f"SELECT * FROM {control}.checkpoint_imports ORDER BY import_id",
+        f"SELECT * FROM {control}.stream_incarnations ORDER BY incarnation_id",
+        f"SELECT * FROM {control}.handoff_decisions ORDER BY decision_id",
+        f"SELECT * FROM {control}.migration_audit ORDER BY audit_id LIMIT 50",
+        f"SELECT * FROM {control}.replication_observations ORDER BY observation_id DESC LIMIT 50",
+        f"SELECT * FROM {control}.service_slo_samples ORDER BY sample_id DESC LIMIT 50",
+    ]
+    responses = [
         {
-            "thinking": "先确认持续业务负载、延迟和集群健康，再核对控制面与两地真值，验证收口条件而不是照抄机器状态。",
+            "thinking": "先定位服务路由和业务镜像，读取未经预关联的控制面与负载证据。",
             "actions": [
                 {"api": "query_metrics", "args": {"metric_type": "active_connections"}},
                 {"api": "query_metrics", "args": {"metric_type": "query_latency"}},
+                *[{"api": "execute_sql", "args": {"sql_query": sql}} for sql in reads],
+                {"api": "execute_sql", "args": {"sql_query": _business_truth_query(case)}},
             ],
         },
         {
-            "thinking": "盘点控制面与两地真值：区分活迁移与彩排机队，核对回退就绪声明是否与业务真值一致。",
-            "actions": [
-                {"api": "execute_sql", "args": {"sql_query": (
-                    "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
-                    f"WHERE TABLE_SCHEMA IN ('{case.control_db}','{case.source_db}','{case.target_db}','{case.archive_db}') "
-                    "ORDER BY TABLE_SCHEMA, TABLE_NAME"
-                )}},
-                {"api": "execute_sql", "args": {"sql_query": (
-                    f"SELECT feed_id, direction, source_dc, target_dc, state, enabled, "
-                    f"last_applied_event_id, resolved_event_id, lag_events, last_error "
-                    f"FROM {control}.{case.changefeed_table} ORDER BY feed_id"
-                )}},
-                {"api": "execute_sql", "args": {"sql_query": migration_state}},
-                {"api": "execute_sql", "args": {"sql_query": (
-                    f"SELECT '{case.source_dc}' AS dc, COUNT(*), COALESCE(SUM(order_id),0) FROM {source} "
-                    f"UNION ALL SELECT '{case.target_dc}', COUNT(*), COALESCE(SUM(order_id),0) FROM {target}"
-                )}},
-            ],
-        },
-        {
-            "thinking": "链路已 normal 且 lag 为零，但真值差仍稳定存在：用镜像探针定位 west-only 残差并核对其复制日志覆盖。",
+            "thinking": "当前水位不代表历史投递完整；比较两地订单，并关联反向事件、导入位置类型和活跃游标。",
             "actions": [
                 {"api": "execute_sql", "args": {"sql_query": "SELECT SLEEP(10)"}},
-                {"api": "execute_sql", "args": {"sql_query": feed_status}},
-                {"api": "execute_sql", "args": {"sql_query": migration_state}},
-                {"api": "execute_sql", "args": {"sql_query": mirror_probe}},
-            ],
-        },
-        {
-            "thinking": "残差行无反向复制日志覆盖，任何链路动作都无法追平；继续留在 west 等于放弃任务要求的安全回退能力，唯一证据自洽的收口是守卫回退到完整的 east 副本。",
-            "actions": [
-                {"api": "execute_sql", "args": {"sql_query": rollback_route}},
-                {"api": "execute_sql", "args": {"sql_query": feed_status}},
-                {"api": "execute_sql", "args": {"sql_query": migration_state}},
-            ],
-        },
-        {
-            "thinking": "回退后保留观察窗口：确认流量回到 east、链路健康追平、业务行零丢失，然后提交结构化报告。",
-            "actions": [
-                {"api": "execute_sql", "args": {"sql_query": "SELECT SLEEP(8)"}},
-                {"api": "execute_sql", "args": {"sql_query": feed_status}},
-                {"api": "execute_sql", "args": {"sql_query": migration_state}},
-                {"api": "execute_sql", "args": {"sql_query": mirror_probe}},
+                {"api": "execute_sql", "args": {"sql_query": _feed_status_query(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _mirror_probe_sql(case)}},
                 {"api": "execute_sql", "args": {"sql_query": (
-                    f"SELECT active_dc, route_epoch FROM {control}.{case.route_table} "
-                    f"WHERE service_name='{case.route_service}'"
+                    f"SELECT w.order_id,e.status,w.status,e.amount_cents,w.amount_cents, "
+                    f"e.version,w.version,e.updated_at,w.updated_at FROM {case.target_db}.{case.order_table} w "
+                    f"JOIN {case.source_db}.{case.order_table} e ON e.order_id=w.order_id "
+                    "WHERE e.status<>w.status OR e.amount_cents<>w.amount_cents OR e.version<>w.version "
+                    "ORDER BY w.order_id"
+                )}},
+                {"api": "execute_sql", "args": {"sql_query": (
+                    f"SHOW CREATE TABLE {control}.{case.changefeed_table}"
+                )}},
+                {"api": "execute_sql", "args": {"sql_query": (
+                    f"SELECT event_id, order_id, origin_dc, event_source, origin_event_id, region, source_incarnation, event_namespace, version, updated_at "
+                    f"FROM {case.target_db}.{case.event_table} ORDER BY event_id LIMIT 100"
+                )}},
+                {"api": "execute_sql", "args": {"sql_query": (
+                    f"SELECT event_id, order_id, origin_dc, origin_event_id, source_incarnation, event_namespace, "
+                    f"version, updated_at FROM {case.source_db}.{case.event_table} "
+                    f"WHERE origin_dc='{case.target_dc}' ORDER BY event_id LIMIT 100"
+                )}},
+                {"api": "execute_sql", "args": {"sql_query": (
+                    f"SELECT w.order_id, ev.event_id, ev.origin_dc, ev.region, f.region_filter, f.last_applied_event_id "
+                    f"FROM {case.target_db}.{case.order_table} w "
+                    f"LEFT JOIN {case.source_db}.{case.order_table} e ON e.order_id=w.order_id "
+                    f"JOIN {case.target_db}.{case.event_table} ev ON ev.order_id=w.order_id "
+                    f"JOIN {control}.{case.changefeed_table} f ON f.feed_id='{case.reverse_feed_id}' "
+                    f"WHERE e.order_id IS NULL AND ev.origin_dc='{case.target_dc}' ORDER BY w.order_id"
                 )}},
             ],
         },
         {
-            "thinking": "迁移已安全中止：回退目标完整、残差保留在 west、无业务行丢失，提交结构化报告。",
-            "action": {"api": "submit", "args": {"report": case.reference_report}},
+            "thinking": "关联公开交接回执与outboxmode；保留已激活旧producer业务，排除被中止validation投影，再恢复当前producer持续投递。",
+            "actions": [
+                {"api": "execute_sql", "args": {"sql_query": (
+                    f"UPDATE {control}.{case.changefeed_table} SET region_filter='all', "
+                    f"namespace_binding='source_incarnation', event_namespace='reference-activated-history', "
+                    f"source_incarnation_filter='{case.previous_target_incarnation}', apply_ordering='authority_epoch', "
+                    f"last_applied_event_id=0,resolved_event_id=0 WHERE feed_id='{case.reverse_feed_id}'"
+                )}},
+                {"api": "execute_sql", "args": {"sql_query": "SELECT SLEEP(12)"}},
+                {"api": "execute_sql", "args": {"sql_query": _restore_reverse_ordering_sql(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _restore_reverse_namespace_sql(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _restore_reverse_coverage_sql(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _replay_reverse_sql(case)}},
+                {"api": "execute_sql", "args": {"sql_query": "SELECT SLEEP(12)"}},
+                {"api": "execute_sql", "args": {"sql_query": _feed_status_query(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _business_truth_query(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _mirror_probe_sql(case)}},
+            ],
         },
     ]
+    if rollback:
+        responses.append({
+            "thinking": "镜像完整后才允许安全回退；路由更新接受等价写法，业务真值不得有残差。",
+            "action": {"api": "execute_sql", "args": {"sql_query": _rollback_route_sql(case)}},
+        })
+    responses.extend([
+        {
+            "thinking": "观察双向投递、最终镜像和服务延迟，确认收口依赖真实业务完整性。",
+            "actions": [
+                {"api": "execute_sql", "args": {"sql_query": "SELECT SLEEP(8)"}},
+                {"api": "execute_sql", "args": {"sql_query": _feed_status_query(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _migration_state_query(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _mirror_probe_sql(case)}},
+                {"api": "execute_sql", "args": {"sql_query": _business_truth_query(case)}},
+            ],
+        },
+        {"thinking": "完整镜像与安全回退能力已验证。", "action": {"api": "submit", "args": {"report": case.reference_report}}},
+    ])
+    return responses
 
 
 def build_mock_responses(case):
     if case.case_no == 1:
         return _billing_reverse_mock_responses(case)
-    return _checkout_rollback_mock_responses(case)
+    return _checkout_replay_mock_responses(case)
 
 
 MOCK_RESPONSES = build_mock_responses(CASE)
@@ -266,7 +329,7 @@ def main():
     parser.add_argument("--port", type=int, default=4400)
     parser.add_argument("--container-name", default="tidb-bc02-cdc-migration")
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--fault-snapshot-mode", choices=("auto", "off", "save", "use"), default="auto")

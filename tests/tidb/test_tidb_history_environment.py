@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.records import (
     FrozenHistoricalRecordStore,
     HistoricalCoverage,
@@ -189,7 +189,7 @@ def test_capture_reanchors_shifted_samples_within_tolerance_without_raising(monk
 
 
 def test_lightning_capture_frames_stay_anonymous_at_the_variant_level(monkeypatch):
-    from src.execution.deployment import lightning_job_id
+    from src.execution.deployments.tidb import lightning_job_id
     from src.execution.tidb_metrics import TiDBMetricCatalog
 
     job_id = lightning_job_id("frozen-history-unit")

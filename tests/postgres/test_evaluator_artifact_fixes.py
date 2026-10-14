@@ -23,7 +23,8 @@ from src.scenarios.evaluation.postgres.system_failure.page_corruption import (
     _SERVICE_INDEX_PRESERVED,
 )
 from src.scenarios.evaluation.postgres.system_failure.wal_checkpoint_storm import _CHECKPOINT_CONFIG
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.safety import (
     NoUnapprovedRestartRule,
     SafetyContext,

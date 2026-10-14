@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.agents.agent import LLMAgent
-from src.scenarios.base import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.scenarios.runtime.orchestrator import Orchestrator
 from src.visualization.exporter import export_run_trace
 

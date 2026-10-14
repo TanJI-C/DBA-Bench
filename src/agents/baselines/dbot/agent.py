@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Mapping, Optional
 import numpy as np
 
 from src.agents.agent import BaseAgent, LLMAgent, split_diagnostic_token_usage
-from src.scenarios.evaluation.protocol import structured_submission
+from src.protocols.report import structured_submission
 from src.agents.baselines.dbot.knowledge import DbotKnowledge
 from src.agents.baselines.dbot.mcts import DiagnosisNode, DiagnosisTree, TreeSearchConfig
 from src.agents.baselines.dbot.prompts import (

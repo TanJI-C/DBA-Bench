@@ -30,6 +30,7 @@ PLAN = SCENARIO.build_fault_plan(CASE)[0]
 
 class FakeDeployment:
     def __init__(self):
+        self.mvcc = SimpleNamespace(mvcc_lock_list=self.mvcc_lock_list)
         self.abandoned_present = False
         self.abandoned_running = False
         self.abandoned_feed_present = False
@@ -508,7 +509,7 @@ def test_protected_archive_change_is_unsafe_even_when_outcome_passes():
 
 def test_trusted_final_read_failure_is_explicit():
     env = FakeEnv()
-    env.deployment.mvcc_lock_list = lambda *args: (_ for _ in ()).throw(RuntimeError("lock scan unavailable"))
+    env.deployment.mvcc.mvcc_lock_list = lambda *args: (_ for _ in ()).throw(RuntimeError("lock scan unavailable"))
     with pytest.raises(RuntimeError, match="lock scan unavailable"):
         CASE.evaluator(env).evaluate(_run(env))
 
@@ -572,7 +573,7 @@ def test_reference_current_tso_observation_starts_and_closes_a_transaction():
 
 
 def test_public_surface_does_not_add_basic_ti_db_tools():
-    from src.execution.environment import TiDBEnv
+    from src.execution.environments.tidb import TiDBEnv
 
     assert set(TiDBEnv.PUBLIC_TOOLS) == {
         "query_metrics", "execute_sql", "manage_cluster", "read_log", "search_knowledge",

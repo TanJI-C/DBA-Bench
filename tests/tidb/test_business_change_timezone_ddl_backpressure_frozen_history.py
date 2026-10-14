@@ -1,6 +1,6 @@
 import inspect
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios import TIDB_SCENARIO_REGISTRY
 from src.scenarios.tidb import (
     TidbBusinessChangeTimezoneDdlBackpressureFrozenHistoryInjector,
@@ -9,7 +9,7 @@ from src.scenarios.tidb import (
 from src.scenarios.tidb.business_change.timezone_ddl_backpressure_frozen_history import (
     _FROZEN_HISTORY_HISTORY,
 )
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 
 
 SCENARIO = TidbBusinessChangeTimezoneDdlBackpressureFrozenHistoryScenario()

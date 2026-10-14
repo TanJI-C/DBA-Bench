@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.business_change.runtime.pitr_checkpoint_recovery import PitrCheckpointRecoveryEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbBusinessChangePitrCheckpointRecoveryScenario
 
@@ -198,14 +198,14 @@ def main():
     )
     parser.add_argument("--case", required=True, choices=[case.case_id for case in SCENARIO.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--port", type=int, default=5920)
     parser.add_argument("--container-name", default="aiopsbench-tidb-k08")
     args = parser.parse_args()
     case = SCENARIO.get_case(args.case)
-    env = TiDBEnv(
+    env = PitrCheckpointRecoveryEnv(
         run_id=args.container_name.removeprefix("aiopsbench-"),
         port_base=args.port,
         enabled_tools=K08_ENABLED_TOOLS,

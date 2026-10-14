@@ -20,8 +20,9 @@ from typing import Callable, Mapping
 
 import psycopg2
 
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
+from src.execution.specs import HostPortLayout
 from src.persistent_scenarios.model.spec import PersistentScenarioSpec
 from src.persistent_scenarios.backend.postgres.workloads.htap_replica_freshness import (
     FreshnessDatasetScale,
@@ -332,6 +333,10 @@ class PostgresEnvironmentProvider:
             return raw
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
         return f"{raw[:107]}-{digest}"
+
+    def host_ports(self, spec: PersistentScenarioSpec) -> HostPortLayout:
+        allowed_range = (25200, 25299) if self._binding is not None and self._binding.style == 'htap' else (1024, 65535)
+        return HostPortLayout(offsets=tuple(range(len(spec.environment.nodes))), allowed_range=allowed_range)
 
     def create(self, spec: PersistentScenarioSpec, run_id: str, port: int, *, time_scale: float = 1.0):
         if self._binding is not None and self._binding.style == "htap":

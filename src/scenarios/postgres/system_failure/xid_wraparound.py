@@ -27,19 +27,14 @@ from src.scenarios.evaluation.postgres.system_failure import (
 )
 
 from src.workloads.tpcds import get_tpcds_query
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec, PostgresRuntimeSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresRuntimeSpec,
-    PostgresScenarioCase,
 )
 
 _DEFAULT_SYSTEM_FAILURE_RESOURCES = CaseResourceSpec(

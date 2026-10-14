@@ -143,10 +143,14 @@ def allocate_workers(
     sys_root: Path = Path("/sys"),
     allowed_cpus: set[int] | None = None,
     cpuset_cpus: str | None = None,
+    *,
+    reserved_cores: frozenset[str] = frozenset(),
+    reserved_memory_kb: dict[int, int] | None = None,
 ) -> tuple[WorkerAllocation, ...]:
     cores_by_node: dict[int, list[PhysicalCore]] = defaultdict(list)
     for core in discover_physical_cores(sys_root=sys_root, allowed_cpus=allowed_cpus):
-        cores_by_node[core.numa_node].append(core)
+        if core.id not in reserved_cores:
+            cores_by_node[core.numa_node].append(core)
     pinned_cpus = expand_linux_set(cpuset_cpus, "worker cpuset") if cpuset_cpus else None
     if pinned_cpus is not None:
         host_cpus = set(os.sched_getaffinity(0) if allowed_cpus is None else allowed_cpus)
@@ -156,6 +160,11 @@ def allocate_workers(
                 f"Worker cpuset contains unavailable CPUs: cpuset_cpus={cpuset_cpus!r}, "
                 f"unavailable={unavailable!r}"
             )
+        occupied = pinned_cpus - {
+            cpu for cores in cores_by_node.values() for core in cores for cpu in core.logical_cpus
+        }
+        if occupied:
+            raise RuntimeError(f"Worker cpuset overlaps reserved physical cores: CPUs={sorted(occupied)}")
         for node in tuple(cores_by_node):
             cores_by_node[node] = [
                 core
@@ -163,7 +172,7 @@ def allocate_workers(
                 if set(core.logical_cpus) & pinned_cpus
             ]
     node_available_memory_kb = {
-        node: _node_available_memory_kb(node, sys_root)
+        node: _node_available_memory_kb(node, sys_root) - (reserved_memory_kb or {}).get(node, 0)
         for node in cores_by_node
     }
     required_memory_kb = demand.memory_mb_per_worker * 1024
@@ -331,60 +340,3 @@ def derive_worker_demand(
 
 def requires_host_exclusive(spec: BoundedScenarioRunSpec) -> bool:
     return spec.scenario_id in HOST_EXCLUSIVE_SCENARIOS
-
-
-def assert_fault_snapshots_exist(specs: list[BoundedScenarioRunSpec]) -> dict[str, str]:
-    from src.scenarios import DatabaseSystem, SCENARIOS_BY_ID
-    from src.execution.environment import PGEnv, TiDBEnv
-
-    snapshots = {}
-    snapshot_environments = {}
-    for scenario_id, case_id in sorted({
-        (spec.scenario_id, spec.case_id)
-        for spec in specs
-    }):
-        registration = SCENARIOS_BY_ID[scenario_id]
-        scenario = registration.scenario
-        case = scenario.get_case(case_id)
-        if registration.system is DatabaseSystem.POSTGRESQL:
-            env = PGEnv()
-        elif registration.system is DatabaseSystem.TIDB:
-            image_group_key = case.runtime.image_group_key
-            if image_group_key is None:
-                raise ValueError(
-                    f"TiDB fault snapshot requires an image_group_key: "
-                    f"scenario={scenario_id!r}, case={case_id!r}"
-                )
-            env = TiDBEnv(
-                run_id=f"snapshot-check-{scenario_id}-{case_id}",
-                image_group_key=image_group_key,
-            )
-            env.configure_case(case)
-        else:
-            raise ValueError(
-                f"Fault snapshots are unavailable for system={registration.system.value!r}, "
-                f"scenario={scenario_id!r}, case={case_id!r}"
-            )
-        snapshot_name = env.snapshot_name(scenario_id, case)
-        if snapshot_name is None:
-            raise ValueError(
-                f"Fault snapshot identity is unavailable: scenario={scenario_id!r}, case={case_id!r}"
-            )
-        key = f"{scenario_id}/{case_id}"
-        snapshots[key] = snapshot_name
-        snapshot_environments[key] = env
-    missing = {
-        scenario_id: snapshot_name
-        for scenario_id, snapshot_name in snapshots.items()
-        if not snapshot_environments[scenario_id].snapshot_exists(snapshot_name)
-    }
-    if missing:
-        details = ", ".join(
-            f"{scenario_id}={snapshot_name}"
-            for scenario_id, snapshot_name in missing.items()
-        )
-        raise RuntimeError(
-            "fault_snapshot='use' requires every fault snapshot to exist before execution; "
-            f"missing: {details}"
-        )
-    return snapshots

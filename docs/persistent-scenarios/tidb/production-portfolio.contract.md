@@ -200,7 +200,7 @@ The same business loss is recorded once in its service ledger; overlapping fault
 
 ## 10. Current Capabilities, Implementation Gaps, and Parallel-Work Boundaries
 
-The reading evidence is the existing [TiDB scenario catalog](../../catalogs/tidb-scenarios.catalog.md), the [TiDB runtime specification](../../../src/scenarios/tidb/runtime.py), the [tool definitions](../../../src/execution/tidb_tool_definitions.py), and the [Persistent API](../../../src/persistent_scenarios/api.py). Catalog counts are not a commitment of this document; the actually registered code is authoritative.
+The reading evidence is the existing [TiDB scenario catalog](../../catalogs/tidb-scenarios.catalog.md), the [TiDB runtime specification](../../../src/execution/tidb_runtime.py), the [tool definitions](../../../src/execution/tidb_tool_definitions.py), and the [Persistent API](../../../src/persistent_scenarios/api.py). Catalog counts are not a commitment of this document; the actually registered code is authoritative.
 
 Existing mechanisms can reference the five scenario categories: query_perf's statistics/optimistic conflict, system_failure's slow store/MDL/replication, health_check's placement/replication trend/MVCC, business_change's Lightning/online DDL, and resource_governance's RU/connection balance/placement. The bounded verifier's fixed objects, action matching, or catalog permissions must not be carried over directly into long-running scenarios.
 

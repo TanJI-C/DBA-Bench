@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.diagnosis import DiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.tidb.system_failure.mdl_blocking import (
     MdlBlockingOutcomeVerifier,
 )

@@ -251,7 +251,7 @@ def test_hc09_runtime_fault_orders_target_before_write_and_decoys_after(monkeypa
     monkeypatch.setattr(
         injector, "_commit_new_versions", lambda: calls.append(("commit", None))
     )
-    current_tsos = iter((200, 500))
+    current_tsos = iter((40, 50, 200, 500))
     monkeypatch.setattr(injector, "_read_current_tso", lambda: next(current_tsos))
     integrity = iter(((200, 0, 1), (200, 20, 2)))
     monkeypatch.setattr(injector, "_read_integrity", lambda _env: next(integrity))
@@ -296,13 +296,44 @@ def test_hc09_runtime_fault_orders_target_before_write_and_decoys_after(monkeypa
             pass
 
     monkeypatch.setattr(injector, "_connection", lambda **_kwargs: HistoricalConnection())
-    injector._start_runtime_fault(SimpleNamespace())
+    injector._start_runtime_fault(SimpleNamespace(execute_sql=lambda _sql: {"status": "success", "result": [["hc09_order_versions", 104], ["hc09_order_versions_settled", 105]]}))
 
     assert calls[0] == ("snapshot", CASE.target_worker_alias)
     assert calls[1] == ("commit", None)
     assert calls[-2:] == [("rows", 13, 3, 500), ("verify", None)]
     assert injector._target_snapshot_tso == 100
     assert injector._write_boundary_tso == 200
+
+
+def test_easy_source_chronology_preserves_an_older_released_reader(monkeypatch):
+    case = SCENARIO.get_case("single_handoff_mvcc_review")
+    injector = INJECTOR()
+    injector._configure(SCENARIO.build_fault_plan(case)[0].config, SimpleNamespace())
+    calls = []
+    snapshots = iter([(object(), 51, 75), (object(), 61, 90),
+                      (object(), 42, 100), (object(), 52, 400)])
+    monkeypatch.setattr(injector, "_start_snapshot", lambda alias, query:
+                        (calls.append(("snapshot", alias, query)), next(snapshots))[1])
+    monkeypatch.setattr(injector, "_commit_source_versions", lambda table: calls.append(("settled_commit", table)))
+    monkeypatch.setattr(injector, "_commit_new_versions", lambda: calls.append(("commit", None)))
+    markers = iter((50, 60, 200, 500))
+    monkeypatch.setattr(injector, "_read_current_tso", lambda: next(markers))
+    truths = iter(((400, 12, 1), (400, 24, 2)))
+    monkeypatch.setattr(injector, "_read_integrity", lambda env: next(truths))
+    monkeypatch.setattr(injector, "_write_runtime_rows", lambda current, abandoned, tso:
+                        calls.append(("rows", current, abandoned)))
+    monkeypatch.setattr(injector, "_verify_runtime_state", lambda env: None)
+    injector._start_runtime_fault(SimpleNamespace(execute_sql=lambda _sql: {"status": "success", "result": [["hc09_order_versions", 104], ["hc09_order_versions_settled", 105]]}))
+    assert calls[0] == ("settled_commit", "test.hc09_order_versions_settled")
+    assert calls[1][1] == "worker-01"
+    assert calls[2][1] == "worker-01" and "hc09_order_versions_settled" in calls[2][2]
+    assert calls[3][1] == "worker-02" and "FROM test.hc09_order_versions " in calls[3][2]
+    assert calls[4] == ("commit", None)
+    assert injector._valid_session_ids == [51, 52]
+    assert injector._target_session_id == 42
+    assert injector._non_blocking_abandoned_session_ids == [61]
+    assert injector._settled_boundary_tso < 75 < 90 < injector._target_snapshot_tso < injector._write_boundary_tso
+    assert calls[-1] == ("rows", {1: 51, 2: 52}, {1: 61})
 
 
 def test_hc09_prepare_observability_exports_complete_unfiltered_evidence(monkeypatch):
@@ -480,19 +511,20 @@ def test_hc09_injector_methods_accept_only_lifecycle_context(phase):
 def test_hc09_case1_single_handoff_review_reduces_noise_neighbors():
     focused = SCENARIO.get_case("single_handoff_mvcc_review")
     assert focused.case_no == 1
-    assert focused.worker_aliases == ("worker-01", "worker-02", "worker-03")
-    assert focused.stale_worker_id == 3
-    assert focused.non_blocking_abandoned_worker_ids == (2,)
+    assert focused.worker_aliases == ("worker-01", "worker-02")
+    assert focused.stale_worker_id == 2
+    assert focused.non_blocking_abandoned_worker_ids == (1,)
     assert focused.historical_processlist_aliases == ()
     assert focused.delayed_checkpoint_worker_ids == ()
-    assert focused.history_row_count == 5
-    assert focused.checkpoint_row_count == 10
+    assert focused.history_row_count == 2
+    assert focused.settled_source_table == "hc09_order_versions_settled"
+    assert focused.checkpoint_row_count == 3
 
     config = SCENARIO.build_fault_plan(focused)[0].config
     assert config["worker_aliases"] == focused.worker_aliases
     assert config["historical_processlist_aliases"] == ()
     assert config["delayed_checkpoint_worker_ids"] == ()
-    assert config["stale_worker_id"] == 3
+    assert config["stale_worker_id"] == 2
 
     processlist_verifier = next(
         verifier
@@ -501,5 +533,46 @@ def test_hc09_case1_single_handoff_review_reduces_noise_neighbors():
     )
     runtime_sql = processlist_verifier.sql(focused)
     assert "worker-history" not in runtime_sql
-    for alias in ("worker-01", "worker-02", "worker-03"):
+    for alias in ("worker-01", "worker-02"):
         assert f"'{alias}'" in runtime_sql
+
+
+def test_hc09_source_mapping_excludes_the_oldest_released_reader():
+    from examples.run_tidb_health_check_long_transaction_mvcc_scenario import _retaining_sessions
+
+    transactions = [[41, 100, '105'], [42, 200, '104']]
+    events = [[1, 1, 'worker-01', 1, 'RELEASED', '10:15', 41, 'detached'],
+              [2, 2, 'worker-02', 1, 'RELEASED', '10:15', 42, 'detached']]
+    checkpoints = [[1, 0, '10:00', 'COMMITTED', 50, 'orders', '', 'batch1', 105],
+                   [2, 0, '10:00', 'COMMITTED', 300, 'orders', '', 'batch1', 104],
+                   [3, 0, '10:30', 'COMMITTED', 90, 'orders', '', 'batch1', 104],
+                   [4, 0, '12:00', 'COMMITTED', 500, 'another-stream', '', 'batch1', 104],
+                   [5, 0, '12:00', 'COMMITTED', 500, 'orders', '', 'batch2', 104]]
+    registry = [[1, 'worker-01', '', '', '', '', '', 51, 'orders', 'batch1'],
+                [2, 'worker-02', '', '', '', '', '', 52, 'orders', 'batch1']]
+    assert _retaining_sessions(events, checkpoints, registry, transactions) == [[42, 2, 200, 300]]
+
+
+def test_easy_checkpoint_publisher_does_not_identify_the_reader_source():
+    case = SCENARIO.get_case("single_handoff_mvcc_review")
+    injector = INJECTOR()
+    statements = []
+    env = SimpleNamespace(execute_sql=lambda sql: (statements.append(sql), {"status": "success"})[1])
+    injector._configure(SCENARIO.build_fault_plan(case)[0].config, env)
+    injector._target_session_id = 42
+    injector._historical_boundary_tso = 60
+    injector._settled_boundary_tso = 50
+    injector._source_table_ids = {"test.hc09_order_versions": 104, "test.hc09_order_versions_settled": 105}
+    injector._write_boundary_tso = 200
+    injector._write_runtime_rows({1: 51, 2: 52}, {1: 61}, 500)
+    registry, history, checkpoints = statements
+    assert injector.history_row_count == 2
+    assert ", 51, 'order-version-rollout', 'orders-0807-01')" in registry
+    assert ", 52, 'order-version-rollout', 'orders-0807-01')" in registry
+    assert "1, 'RELEASED', '2026-08-07 10:15:00.000000', 42" in history
+    assert "1, 'RELEASED', '2026-08-07 10:15:00.000000', 61" in history
+    assert "CURRENT" not in history
+    assert "1, 'CURRENT', '2026-08-07 11:45:00.000000', 61" not in history
+
+    assert "(1, 0," in checkpoints and "(2, 0," in checkpoints
+    assert "104)" in checkpoints and "105)" in checkpoints

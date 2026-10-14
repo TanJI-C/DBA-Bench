@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import StructuredReport
-from src.execution.environment import TiDBEnv
+from src.protocols.report import StructuredReport
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb.resource_governance.br_slo_frozen_history import (
     TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario,
@@ -301,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run the TiDB BR SLO frozen history calibration Case.")
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=42)
     parser.add_argument("--seed", type=int, default=20260816)

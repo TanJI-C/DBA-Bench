@@ -19,7 +19,6 @@ Resource lease (tidb5-portfolio batch):
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,7 +33,9 @@ from typing import Any, Mapping
 import pymysql
 import yaml
 
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, TiDBReleaseSpec
+from src.execution.tidb_runtime import TIDB_V8_1_0, TiDBReleaseSpec
+from src.execution.docker_network import create_tidb_network
+from src.execution.host_ports import claim_host_ports
 
 _NETWORK_TOOL_IMAGE = (
     "docker.m.daocloud.io/nicolaka/netshoot@"
@@ -49,7 +50,6 @@ MYSQL_IMAGE = "mysql@sha256:43bd9764df60666fb2ba2cf8217dd17b3d2414c150005d2fdd07
 
 RUN_ID_PREFIX = "tidb5-backend-"
 PORT_RANGE = (26000, 26499)
-_NETWORK_SUBNET_PREFIX = "10.252"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMPOSE_TEMPLATE_DIR = _REPO_ROOT / "config" / "docker" / "tidb-docker"
 DATA_ROOT = _REPO_ROOT / "data" / "tidb5-backend"
@@ -241,7 +241,8 @@ class TiDBPersistentDeployment:
         self.data_dir = self.data_root / run_id
         self.project_name = f"aiopsbench-{run_id}"
         self.network_name = f"{self.project_name}-network"
-        self.network_subnet = f"{_NETWORK_SUBNET_PREFIX}.{int(hashlib.sha256(run_id.encode()).hexdigest()[:2], 16)}.0/24"
+        self.network_subnet: str | None = None
+        self._network_created = False
         self.enable_monitoring = enable_monitoring
         self.ports = build_port_plan(topology, port_base, enable_monitoring=enable_monitoring)
         self.tidb_endpoints = {
@@ -265,6 +266,7 @@ class TiDBPersistentDeployment:
         self.compose_file = self.runtime_dir / "docker-compose.yml"
         self._env: dict[str, str] = dict(os.environ)
         self._deployed = False
+        self._port_lease = None
 
     # -- basic properties -----------------------------------------------------
 
@@ -719,6 +721,8 @@ class TiDBPersistentDeployment:
         return tuple(stages)
 
     def _preflight(self) -> None:
+        if self._port_lease is None:
+            self._port_lease = claim_host_ports(self.ports.host_ports, owner=self.run_id)
         self._run(["docker", "version"], component="docker")
         self._run(["docker", "compose", "version"], component="docker")
         monitoring_images = _MONITORING_IMAGES if self.enable_monitoring else ()
@@ -753,24 +757,10 @@ class TiDBPersistentDeployment:
         return self._run(["docker", "info", "--format", "{{.DockerRootDir}}"], component="docker").strip()
 
     def _ensure_network(self) -> None:
-        inspected = subprocess.run(
-            ["docker", "network", "inspect", self.network_name],
-            capture_output=True, text=True, env=self._env,
-        )
-        if inspected.returncode == 0:
-            raise TiDBPersistentDeploymentError(
-                f"TiDB persistent network already exists: run_id={self.run_id!r}, "
-                f"network={self.network_name!r}, subnet={self.network_subnet!r}"
-            )
-        if inspected.returncode != 1:
-            raise TiDBPersistentDeploymentError(
-                f"TiDB persistent network inspection failed: run_id={self.run_id!r}, "
-                f"network={self.network_name!r}, returncode={inspected.returncode}, stderr={inspected.stderr.strip()!r}"
-            )
-        self._run(
-            ["docker", "network", "create", "--driver", "bridge", "--subnet", self.network_subnet, self.network_name],
-            component="network",
-        )
+        if self._network_created:
+            return
+        self.network_subnet = create_tidb_network(self.network_name, env=self._env)
+        self._network_created = True
 
     def _wait_ready(self) -> None:
         if self.enable_monitoring:
@@ -1008,7 +998,12 @@ class TiDBPersistentDeployment:
                 self._run(self._compose + ["down", "--volumes", "--remove-orphans"], component="cluster", timeout=600)
             except Exception as exc:
                 errors.append(f"compose down failed: {exc!r}")
-        subprocess.run(["docker", "network", "rm", self.network_name], capture_output=True, env=self._env)
+        if self._network_created:
+            try:
+                self._run(["docker", "network", "rm", self.network_name], component="network")
+                self._network_created = False
+            except Exception as exc:
+                errors.append(f"network removal failed: {exc!r}")
         self._deployed = False
         if self.data_dir.exists():
             try:
@@ -1019,6 +1014,9 @@ class TiDBPersistentDeployment:
             raise TiDBPersistentDeploymentError(
                 f"TiDB persistent teardown reported errors: run_id={self.run_id!r}, errors={errors!r}"
             )
+        if self._port_lease is not None:
+            self._port_lease.close()
+            self._port_lease = None
 
     def remove_data(self) -> None:
         """Remove the run data dir through a root one-shot container.

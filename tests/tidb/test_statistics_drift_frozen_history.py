@@ -24,7 +24,7 @@ from src.scenarios.tidb.query_perf.statistics_drift_frozen_history import (
     NOISE_TABLES,
     TARGET_TABLES,
 )
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
+from src.execution.tidb_runtime import TIDB_V8_1_0
 from src.scenarios.base import CaseRun
 
 
@@ -101,6 +101,7 @@ def test_identity_history_contract_and_registry():
         decoy for decoy in CASE.frozen_history.decoys if decoy.decoy_id == "benign-compaction"
     )
     assert compaction_decoy.field == "write_mb_per_second"
+    assert (compaction_decoy.count, compaction_decoy.duration_seconds) == (2, 60)
     session_toggle_decoy = next(
         decoy for decoy in CASE.frozen_history.decoys if decoy.decoy_id == "session-toggle-decoy"
     )

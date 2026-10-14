@@ -9,8 +9,8 @@ from src.scenarios.tidb import (
     TidbQueryPerfOptimisticWriteConflictScenario,
     TidbQueryPerfStatisticsDriftScenario,
 )
-from src.scenarios.tidb.runtime import tidb_runtime, TIDB_V8_1_0
-from src.execution.deployment import TiDBDockerDeployment
+from src.execution.tidb_runtime import tidb_runtime, TIDB_V8_1_0
+from src.execution.deployments.tidb import TiDBDockerDeployment
 
 
 QP_SCENARIO_TYPES = (
@@ -46,11 +46,11 @@ def test_runtime_image_group_key_configures_deployment(tmp_path, monkeypatch):
     deployment.configure_runtime(runtime)
 
     try:
-        assert deployment.image_group_key == "qp-runtime-contract"
-        assert deployment.image_group_snapshot_name().startswith(
+        assert deployment.snapshots.image_group_key == "qp-runtime-contract"
+        assert deployment.snapshots.image_group_snapshot_name().startswith(
             "aiopsbench-tidb-group-qp-runtime-contract-"
         )
-        assert deployment.bootstrap_cache_path is None
-        assert deployment.persistent_storage_enabled is False
+        assert deployment.snapshots.bootstrap_cache_path is None
+        assert deployment.snapshots.persistent_storage_enabled is False
     finally:
         shutil.rmtree(deployment.runtime_dir)

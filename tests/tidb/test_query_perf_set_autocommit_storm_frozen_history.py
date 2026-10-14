@@ -17,7 +17,7 @@ from src.execution.tidb_metrics import TIDB_METRIC_CATALOG
 from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.tidb import (
     TidbQueryPerfSetAutocommitStormFrozenHistoryScenario,
 )
@@ -281,11 +281,11 @@ def test_frozen_history_fixture_preparation_is_internal_and_context_bound():
     assert "_prepare_observability()" in orchestrator
 
 
-def test_entrypoint_is_seeded_and_gpt_only_without_new_tidb_tool_path():
+def test_entrypoint_is_seeded_and_accepts_explicit_model_without_new_tidb_tool_path():
     entry = ROOT / "examples/run_tidb_query_perf_set_autocommit_storm_frozen_history_scenario.py"
     source = entry.read_text(encoding="utf-8")
     assert 'parser.add_argument("--seed", required=True, type=int)' in source
-    assert 'parser.add_argument("--model", required=True, help="LLM model name")' in source
+    assert 'parser.add_argument("--model", help="LLM model name")' in source
     assert 'model=args.model' in source
     assert "MockLLMAgent" not in source
     assert "claude" not in source.casefold()

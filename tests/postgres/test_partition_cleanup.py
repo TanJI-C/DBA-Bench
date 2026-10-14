@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
-from src.benchmark.runner import script_options
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
+from src.benchmark.commands import script_options
 from src.scenarios.evaluation.postgres.resource_governance.partition_cleanup import (
     PgResourceGovernancePartitionCleanupForFilesystemCleanupPressureEvaluatorCase,
 )
@@ -159,8 +159,8 @@ def test_partition_cleanup_fault_plan_rejects_duplicate_or_out_of_range_aux_port
     monkeypatch.setenv("AIOPS_PARTITION_CLEANUP_AUX_PORTS", "15862,15862")
     with pytest.raises(ValueError, match="unique auxiliary ports"):
         scenario.build_fault_plan(HARD_CASE)
-    monkeypatch.setenv("AIOPS_PARTITION_CLEANUP_AUX_PORTS", "15862,15900")
-    with pytest.raises(ValueError, match="15862-15869"):
+    monkeypatch.setenv("AIOPS_PARTITION_CLEANUP_AUX_PORTS", "59000,65536")
+    with pytest.raises(ValueError, match="1024-65535"):
         scenario.build_fault_plan(HARD_CASE)
 
 
@@ -421,7 +421,7 @@ def test_partition_cleanup_metric_provider_caps_agent_window():
 def test_partition_cleanup_entrypoint_exposes_mock_and_zero_modes():
     module = runpy.run_path("examples/run_pg_resource_governance_partition_cleanup_scenario.py")
     assert callable(module["build_full_score_mock_agent"])
-    assert module["DEFAULT_AUX_PORTS"] == tuple(range(15862, 15870))
+    assert HARD_CASE.runtime.host_ports.offsets == (0, 1, 2)
     assert "--container-name" in script_options(
         Path("examples/run_pg_resource_governance_partition_cleanup_scenario.py")
     )

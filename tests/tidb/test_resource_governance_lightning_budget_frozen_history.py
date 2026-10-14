@@ -10,8 +10,8 @@ from examples.run_tidb_resource_governance_lightning_budget_frozen_history_scena
 from src.scenarios.tidb import (
     TidbResourceGovernanceLightningBudgetFrozenHistoryScenario,
 )
-from src.scenarios.workloads import WorkloadProfile
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.workloads.specs import WorkloadProfile
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.scenarios.evaluation.safety import SafetyContext, TraceEvent
@@ -29,8 +29,8 @@ import src.scenarios.evaluation.tidb.resource_governance.lightning_budget_frozen
 from src.scenarios.tidb.resource_governance.lightning_budget_frozen_history import (
     TidbResourceGovernanceLightningBudgetFrozenHistoryInjector,
 )
-from src.execution.deployment import lightning_decoy_job_id, lightning_job_id
-from src.execution.environment import TiDBEnv
+from src.execution.deployments.tidb_support import lightning_decoy_job_id, lightning_job_id
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.metrics import MetricFrame, MetricQuery
 from src.execution.history.records import CapturedRecords, HistoricalCoverage, HistoricalRecordSource
 from src.execution.tidb_metrics import TiDBMetricCatalog

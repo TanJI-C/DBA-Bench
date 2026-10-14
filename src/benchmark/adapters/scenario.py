@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 
 from src.scenarios import SCENARIO_REGISTRY
-from src.scenarios.base import DatabaseSystem
+from src.execution.metric_catalog import metric_catalog_for_system
+from src.database.system import DatabaseSystem
 
 from ..manifest import ExperimentManifest
 from ..models import BoundedScenarioRunSpec
@@ -124,6 +125,7 @@ def plan_bounded_scenario_runs(manifest: ExperimentManifest) -> list[BoundedScen
                         seed=seed,
                         port=manifest.runtime.port_base + index * port_stride,
                         resources=case.runtime.resources,
+                        host_ports=case.runtime.host_ports,
                     ))
                     index += 1
     unmatched_exclusions = manifest.exclude_cells - matched_exclusions
@@ -263,3 +265,104 @@ def build_scenario_command(
     if "--warm-start-timeout" in options:
         command.extend(["--warm-start-timeout", str(manifest.runtime.tidb_warm_start_timeout_sec)])
     return command
+
+
+def validate_scenario_target(spec: BoundedScenarioRunSpec, manifest: ExperimentManifest) -> None:
+    case = _history_case_for_spec(spec)
+    if case is not None:
+        if manifest.runtime.fault_snapshot != "off":
+            raise ValueError(
+                "Frozen-history history Cases require manifest.runtime.fault_snapshot='off': "
+                f"scenario={spec.scenario_id!r}, case={spec.case_id!r}, "
+                f"fault_snapshot={manifest.runtime.fault_snapshot!r}"
+            )
+        history = case.frozen_history
+        catalog = metric_catalog_for_system(spec.system)
+        # Scenario-owned catalogs are validated by the environment;
+        # runner preflight only needs lookbacks known to the shared catalog.
+        known_lookbacks = [
+            float(catalog.definition(metric).lookback_seconds)
+            for metric in history.required_metrics
+            if metric in catalog.metric_names
+        ]
+        warmup = max(
+            float(case.background_workload.warmup_seconds),
+            max(known_lookbacks, default=0.0),
+        )
+        startup_budget = (
+            manifest.runtime.tidb_cold_start_timeout_sec
+            if spec.system is DatabaseSystem.TIDB
+            else manifest.runtime.postgres_cold_start_timeout_sec
+        )
+        minimum_timeout = int(
+            startup_budget
+            + warmup
+            + history.normal_capture_seconds
+            + history.fault_capture_seconds
+            + 120
+        )
+        if manifest.runtime.timeout_seconds < minimum_timeout:
+            raise ValueError(
+                "Experiment timeout does not cover frozen-history deployment, captures, and Agent execution: "
+                f"scenario={spec.scenario_id!r}, case={spec.case_id!r}, "
+                f"timeout_seconds={manifest.runtime.timeout_seconds}, minimum_timeout_seconds={minimum_timeout}"
+            )
+
+
+def assert_fault_snapshots_exist(specs: list[BoundedScenarioRunSpec]) -> dict[str, str]:
+    from src.database.system import DatabaseSystem
+    from src.scenarios import SCENARIOS_BY_ID
+    from src.execution.environments.postgres import PGEnv
+    from src.execution.environments.tidb import TiDBEnv
+
+    snapshots = {}
+    snapshot_environments = {}
+    for scenario_id, case_id in sorted({
+        (spec.scenario_id, spec.case_id)
+        for spec in specs
+    }):
+        registration = SCENARIOS_BY_ID[scenario_id]
+        scenario = registration.scenario
+        case = scenario.get_case(case_id)
+        if registration.system is DatabaseSystem.POSTGRESQL:
+            env = PGEnv()
+        elif registration.system is DatabaseSystem.TIDB:
+            image_group_key = case.runtime.image_group_key
+            if image_group_key is None:
+                raise ValueError(
+                    f"TiDB fault snapshot requires an image_group_key: "
+                    f"scenario={scenario_id!r}, case={case_id!r}"
+                )
+            env = TiDBEnv(
+                run_id=f"snapshot-check-{scenario_id}-{case_id}",
+                image_group_key=image_group_key,
+            )
+            env.configure_case(case)
+        else:
+            raise ValueError(
+                f"Fault snapshots are unavailable for system={registration.system.value!r}, "
+                f"scenario={scenario_id!r}, case={case_id!r}"
+            )
+        snapshot_name = env.snapshot_name(scenario_id, case)
+        if snapshot_name is None:
+            raise ValueError(
+                f"Fault snapshot identity is unavailable: scenario={scenario_id!r}, case={case_id!r}"
+            )
+        key = f"{scenario_id}/{case_id}"
+        snapshots[key] = snapshot_name
+        snapshot_environments[key] = env
+    missing = {
+        scenario_id: snapshot_name
+        for scenario_id, snapshot_name in snapshots.items()
+        if not snapshot_environments[scenario_id].snapshot_exists(snapshot_name)
+    }
+    if missing:
+        details = ", ".join(
+            f"{scenario_id}={snapshot_name}"
+            for scenario_id, snapshot_name in missing.items()
+        )
+        raise RuntimeError(
+            "fault_snapshot='use' requires every fault snapshot to exist before execution; "
+            f"missing: {details}"
+        )
+    return snapshots

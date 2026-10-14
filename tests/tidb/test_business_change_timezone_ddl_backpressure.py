@@ -12,9 +12,9 @@ from src.scenarios.evaluation.semantic import SemanticConditionJudgment, Semanti
 from src.scenarios.base import CaseRun
 from src.scenarios import TIDB_SCENARIO_REGISTRY
 from src.scenarios.tidb import TidbBusinessChangeTimezoneDdlBackpressureScenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, tidb_runtime
-from src.execution.deployment import TiDBDockerDeployment
-from src.execution.environment import TiDBEnv
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.deployments.tidb import TiDBDockerDeployment
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.business_change.timezone_ddl_backpressure import (
     TidbBusinessChangeTimezoneDdlBackpressureInjector,
@@ -835,9 +835,9 @@ def test_replication_runtime_renders_isolated_services_and_ports():
             services = yaml.safe_load(handle)["services"]
         assert CASE.runtime.image_group_key is None
         assert CASE.runtime.bootstrap_cache_enabled is False
-        assert deployment.image_group_key is None
-        assert deployment.bootstrap_cache_enabled is True
-        assert deployment.bootstrap_cache_path is not None
+        assert deployment.snapshots.image_group_key is None
+        assert deployment.snapshots.bootstrap_cache_enabled is True
+        assert deployment.snapshots.bootstrap_cache_path is not None
         assert deployment.replication_runtime is CASE.runtime.replication
         assert {"mysql-0", "ticdc-0"} <= set(services)
         assert services["mysql-0"]["ports"] == ["4905:3306"]

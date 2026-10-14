@@ -15,7 +15,7 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from src.project_paths import REPOSITORY_ROOT  # noqa: E402
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.knowledge.embedding_model_runtime import ensure_embedding_model
 from src.knowledge.tidb_knowledge_base import TiDBKnowledgeBase
 

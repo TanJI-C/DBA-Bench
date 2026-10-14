@@ -151,7 +151,7 @@ def test_case_identity_plan_and_hard_contract_are_explicit():
 
 
 def test_no_new_tidb_basic_tool_is_registered():
-    from src.execution.environment import TiDBEnv
+    from src.execution.environments.tidb import TiDBEnv
 
     assert TiDBEnv.FROZEN_HISTORY_PUBLIC_TOOLS == (
         "query_metrics", "execute_sql", "manage_cluster",

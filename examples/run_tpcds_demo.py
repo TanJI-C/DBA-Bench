@@ -5,7 +5,7 @@ import time
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.postgres import PgQueryPerfStaleStatisticsScenario
 from src.workloads.tpcds import TPCDSWorkload
 from src.agents.agent import HumanAgent

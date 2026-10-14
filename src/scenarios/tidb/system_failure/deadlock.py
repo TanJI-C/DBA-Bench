@@ -6,12 +6,9 @@ from src.scenarios.evaluation.tidb.system_failure.deadlock import (
     TidbSystemFailureDeadlockForWalletPairReverseOrderDeadlockEvaluatorCase,
     TidbSystemFailureDeadlockFocusedEvaluatorCase,
 )
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-)
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration
+from src.workloads.specs import WorkloadProfile
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.tidb.common import (
     connect_tidb,
@@ -22,7 +19,7 @@ from src.scenarios.tidb.common import (
 )
 
 from ...base import FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

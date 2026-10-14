@@ -10,16 +10,12 @@ from typing import Any, Dict, Optional
 
 from src.agent_language import agent_text
 from src.agents.prompt_manager import PromptManager
-from src.execution.deployment import lightning_decoy_job_id
-from src.scenarios.evaluation.protocol import parse_submission_report
+from src.execution.deployments.tidb_support import lightning_decoy_job_id
+from src.protocols.report import parse_submission_report
 from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher, SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import OpenAISemanticDiagnosisJudge
-from src.scenarios.base import (
-    BackgroundWorkloadStartPhase,
-    CaseRun,
-    InjectionRecord,
-    InjectionState,
-)
+from src.workloads.specs import BackgroundWorkloadStartPhase
+from src.scenarios.base import CaseRun, InjectionRecord, InjectionState
 from src.scenarios.runtime.env_gateway import EnvGateway
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.runtime.metric_history import (

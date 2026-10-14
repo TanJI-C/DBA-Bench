@@ -6,7 +6,7 @@ import pytest
 from src.execution.history.metrics import MetricFrame, validate_metric_frame
 from src.execution.metric_catalog import metric_catalog_for_system
 from src.execution.postgres_metrics import POSTGRES_METRIC_CATALOG, POSTGRES_QUERY_METRICS_TOOL_DEFINITION
-from src.scenarios.base import DatabaseSystem
+from src.database.system import DatabaseSystem
 
 
 def test_postgres_catalog_declares_all_series_and_bounds():

@@ -13,7 +13,7 @@ from src.scenarios.evaluation.semantic import (
     SemanticDiagnosisJudge,
     SemanticJudgment,
 )
-from src.scenarios.evaluation.protocol import DiagnosisCondition, StructuredReport
+from src.protocols.report import DiagnosisCondition, StructuredReport
 
 
 @dataclass(frozen=True, slots=True)

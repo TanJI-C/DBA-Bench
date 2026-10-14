@@ -3,7 +3,7 @@ import json
 import pytest
 
 from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 

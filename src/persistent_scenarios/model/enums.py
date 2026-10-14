@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from enum import Enum
 
+from src.database.system import DatabaseSystem
 
-class DatabaseSystem(str, Enum):
-    POSTGRESQL = "postgresql"
-    TIDB = "tidb"
+
 
 
 class CalibrationStatus(str, Enum):

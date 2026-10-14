@@ -10,9 +10,10 @@ import pytest
 from src.execution.tidb_tool_definitions import TIDB_TOOL_DEFINITIONS
 from src.execution.history.records import HistoricalRecordSource
 from src.scenarios import TIDB_SCENARIO_REGISTRY
-from src.scenarios.base import BackgroundWorkloadStartPhase, CaseRun
+from src.workloads.specs import BackgroundWorkloadStartPhase
+from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.scenarios.faults import FaultLifecycleContext
 import src.scenarios.tidb.resource_governance.br_slo_frozen_history as frozen_history_module

@@ -144,7 +144,7 @@ class OnlineUnsafeRecoveryFinishedVerifier(OutcomeVerifier):
     check_id = "online_unsafe_recovery_finished"
 
     def verify(self, context) -> OutcomeCheck:
-        output = context.case_run.env.deployment.online_unsafe_recovery("get")
+        output = context.case_run.env.deployment.pd_recovery.online_unsafe_recovery("get")
         text = json.dumps(output, ensure_ascii=False, default=str)
         finished = "unsafe recovery finished" in text.casefold()
         failed = "unsafe recovery failed" in text.casefold()

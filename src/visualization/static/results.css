@@ -39,6 +39,8 @@ button,select { font:inherit; }
 .matrix-table th,.matrix-table td { padding:4px 6px; text-align:center; border-right:1px solid var(--rs-border); border-bottom:1px solid var(--rs-border); white-space:nowrap; }
 .matrix-table .cat-head { color:var(--cat); font-weight:600; letter-spacing:.3px; }
 .matrix-table .num { color:var(--cat); font-variant-numeric:tabular-nums; }
+.matrix-table .num-hstripes { background:repeating-linear-gradient(0deg,rgba(102,112,133,.45) 0 3px,transparent 3px 7px); }
+.matrix-table .num-vstripes { background:repeating-linear-gradient(90deg,rgba(102,112,133,.45) 0 3px,transparent 3px 7px); }
 .matrix-table .num-hard { text-decoration:underline; text-underline-offset:2px; }
 .matrix-table .num-unknown { text-decoration:line-through; }
 .matrix-table .cat-start { border-left:3px solid var(--rs-muted); }

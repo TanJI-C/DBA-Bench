@@ -14,20 +14,15 @@ from src.scenarios.tidb.common import json_object, require_sql_success, validate
 
 from dataclasses import dataclass, replace
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 from src.scenarios.evaluation.tidb.resource_governance import (
     TidbResourceGovernanceEmptyRegionMergeBudgetEvaluatorCase,
     TidbResourceGovernanceEmptyRegionMergeBudgetReducedInventoryEvaluatorCase,
 )
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _DB = "test"

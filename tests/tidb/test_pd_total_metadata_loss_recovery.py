@@ -1,4 +1,7 @@
 from __future__ import annotations
+from src.execution.deployments.tidb_components.stores import TiDBStores
+from src.execution.deployments.tidb_components.pd_recovery import TiDBPdRecovery
+from src.execution.deployments.tidb_components.snapshots import TiDBSnapshots
 
 import json
 from types import SimpleNamespace
@@ -12,7 +15,7 @@ from examples.run_tidb_system_failure_pd_metadata_recovery_scenario import (
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.scenarios.tidb.system_failure.pd_total_metadata_loss_recovery import (
     K03_DP_FACTORS,
@@ -20,8 +23,9 @@ from src.scenarios.tidb.system_failure.pd_total_metadata_loss_recovery import (
     extract_allocator_high_water,
     extract_original_cluster_id,
 )
-from src.execution.deployment import TiDBDockerDeployment, canonical_pd_config
-from src.execution.environment import TiDBEnv
+from src.execution.deployments.tidb import TiDBDockerDeployment
+from src.execution.deployments.tidb_support import canonical_pd_config
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.tidb_tool_definitions import TIDB_TOOL_DEFINITIONS
 
 
@@ -253,7 +257,10 @@ def _k03_semantic_matcher():
 
 
 def _branch_scope_deployment():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.pd_recovery = TiDBPdRecovery(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k03-branch-scope-test"
     deployment.COMPONENTS = {"pd": ("pd-0", "pd-1", "pd-2")}
     deployment.NODES = {
@@ -278,7 +285,7 @@ def _branch_scope_deployment():
     )
     non_empty = {"file_count": 3, "bytes": 30}
     empty = {"file_count": 0, "bytes": 0}
-    deployment._pd_recovery_artifact = {
+    deployment.pd_recovery._pd_recovery_artifact = {
         "maintenance_index": [
             {"record_id": "partial-record", "observed_at": "2026-08-22T00:00:00+00:00"},
             {"record_id": "historical-full-loss", "observed_at": "2026-08-22T00:07:00+00:00"},
@@ -302,7 +309,7 @@ def _branch_scope_deployment():
         "post_wipe_data": {service: empty for service in deployment.COMPONENTS["pd"]},
         "current_fault_record_id": MAINTENANCE_RECORD_ID,
     }
-    deployment._pd_recovery_audit = []
+    deployment.pd_recovery._pd_recovery_audit = []
     deployment.node_states = lambda: {
         target: {"running": target.startswith("pd/")}
         for target in deployment.database_nodes
@@ -392,14 +399,17 @@ def test_k03_original_cluster_id_accepts_bootstrap_cluster_log_evidence():
 
 
 def test_k03_pd_recovery_inspection_separates_current_and_history_views(tmp_path):
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.pd_recovery = TiDBPdRecovery(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k03-view-test"
     deployment.COMPONENTS = {"pd": ("pd-0", "pd-1", "pd-2")}
     pd_paths = tuple(tmp_path / service for service in ("pd-0", "pd-1", "pd-2"))
     for path in pd_paths:
         path.mkdir()
         (path / "new.db").write_bytes(b"rebuilt")
-    deployment._pd_recovery_artifact = {
+    deployment.pd_recovery._pd_recovery_artifact = {
         "product_version": "v8.1.0",
         "pre_wipe_data": {service: {"file_count": 3, "bytes": 30} for service in ("pd-0", "pd-1", "pd-2")},
         "post_wipe_data": {service: {"file_count": 0, "bytes": 0} for service in ("pd-0", "pd-1", "pd-2")},
@@ -436,14 +446,14 @@ def test_k03_pd_recovery_inspection_separates_current_and_history_views(tmp_path
             }
         },
     }
-    deployment._pd_recovery_audit = []
+    deployment.pd_recovery._pd_recovery_audit = []
     with patch.object(deployment, "exec", return_value="Release Version: v8.1.0"):
-        with patch.object(deployment, "_pd_data_paths", return_value=pd_paths):
-            current = deployment.pd_recovery_inspection()
-            maintenance = deployment.pd_recovery_inspection(
+        with patch.object(deployment.pd_recovery, "_pd_data_paths", return_value=pd_paths):
+            current = deployment.pd_recovery.pd_recovery_inspection()
+            maintenance = deployment.pd_recovery.pd_recovery_inspection(
                 "history", "maintenance", "pd/pd-0", "maintenance-1"
             )
-            identity = deployment.pd_recovery_inspection(
+            identity = deployment.pd_recovery.pd_recovery_inspection(
                 "history", "identity", "pd/pd-0", "maintenance-1"
             )
 
@@ -463,39 +473,45 @@ def test_k03_pd_recovery_inspection_separates_current_and_history_views(tmp_path
 
 
 def test_k03_pd_recovery_inspection_rejects_unknown_view_without_fallback():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.pd_recovery = TiDBPdRecovery(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k03-view-test"
     deployment.COMPONENTS = {"pd": ("pd-0", "pd-1", "pd-2")}
-    deployment._pd_recovery_artifact = {}
+    deployment.pd_recovery._pd_recovery_artifact = {}
     with pytest.raises(ValueError, match="Unsupported PD recovery inspection view"):
-        deployment.pd_recovery_inspection("all")
+        deployment.pd_recovery.pd_recovery_inspection("all")
     with pytest.raises(ValueError, match="requires phase"):
-        deployment.pd_recovery_inspection("history")
+        deployment.pd_recovery.pd_recovery_inspection("history")
     with pytest.raises(ValueError, match="requires one PD target"):
-        deployment.pd_recovery_inspection("history", "maintenance")
+        deployment.pd_recovery.pd_recovery_inspection("history", "maintenance")
 
 
 def test_k03_pd_recovery_history_requires_known_record_id_and_current_rejects_it():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.pd_recovery = TiDBPdRecovery(deployment)
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.run_id = "k03-view-test"
     deployment.COMPONENTS = {"pd": ("pd-0", "pd-1", "pd-2")}
-    deployment._pd_recovery_artifact = {
+    deployment.pd_recovery._pd_recovery_artifact = {
         "maintenance_index": [{"record_id": "maintenance-1"}],
         "maintenance_observations": {"maintenance-1": {"pd-0": {}}},
     }
     with pytest.raises(ValueError, match="requires record_id"):
-        deployment.pd_recovery_inspection("history", "maintenance", "pd/pd-0")
+        deployment.pd_recovery.pd_recovery_inspection("history", "maintenance", "pd/pd-0")
     with pytest.raises(ValueError, match="Unknown PD recovery history record_id"):
-        deployment.pd_recovery_inspection("history", "maintenance", "pd/pd-0", "maintenance-2")
+        deployment.pd_recovery.pd_recovery_inspection("history", "maintenance", "pd/pd-0", "maintenance-2")
     with pytest.raises(ValueError, match="does not accept record_id"):
-        deployment.pd_recovery_inspection("current", record_id="maintenance-1")
+        deployment.pd_recovery.pd_recovery_inspection("current", record_id="maintenance-1")
 
 
 def test_k03_entirely_rebuild_rejects_partial_record_before_binary_execution():
     deployment = _branch_scope_deployment()
     with patch.object(deployment, "exec", side_effect=AssertionError("pd-recover must not run")) as execute:
         with pytest.raises(ValueError, match="entirely_rebuild branch requires one record"):
-            deployment.execute_pd_recovery(
+            deployment.pd_recovery.execute_pd_recovery(
                 "pd/pd-0",
                 ORIGINAL_CLUSTER_ID,
                 SAFE_ALLOCATOR_FLOOR,
@@ -503,14 +519,14 @@ def test_k03_entirely_rebuild_rejects_partial_record_before_binary_execution():
                 "partial-record",
             )
     assert execute.call_count == 0
-    assert deployment._pd_recovery_audit == []
+    assert deployment.pd_recovery._pd_recovery_audit == []
 
 
 def test_k03_entirely_rebuild_rejects_historical_full_loss_record_before_binary_execution():
     deployment = _branch_scope_deployment()
     with patch.object(deployment, "exec", side_effect=AssertionError("pd-recover must not run")) as execute:
         with pytest.raises(ValueError, match="must bind the active maintenance window") as error:
-            deployment.execute_pd_recovery(
+            deployment.pd_recovery.execute_pd_recovery(
                 "pd/pd-0",
                 ORIGINAL_CLUSTER_ID,
                 SAFE_ALLOCATOR_FLOOR,
@@ -518,7 +534,7 @@ def test_k03_entirely_rebuild_rejects_historical_full_loss_record_before_binary_
                 "historical-full-loss",
             )
     assert execute.call_count == 0
-    assert deployment._pd_recovery_audit == []
+    assert deployment.pd_recovery._pd_recovery_audit == []
     assert "current_record_id='maintenance-1'" in str(error.value)
 
 
@@ -526,7 +542,7 @@ def test_k03_surviving_member_rejects_current_all_loss_before_binary_execution()
     deployment = _branch_scope_deployment()
     with patch.object(deployment, "exec", side_effect=AssertionError("pd-recover must not run")) as execute:
         with pytest.raises(ValueError, match="surviving_member branch is invalid for the selected current"):
-            deployment.execute_pd_recovery(
+            deployment.pd_recovery.execute_pd_recovery(
                 "pd/pd-0",
                 ORIGINAL_CLUSTER_ID,
                 SAFE_ALLOCATOR_FLOOR,
@@ -534,14 +550,14 @@ def test_k03_surviving_member_rejects_current_all_loss_before_binary_execution()
                 MAINTENANCE_RECORD_ID,
             )
     assert execute.call_count == 0
-    assert deployment._pd_recovery_audit == []
+    assert deployment.pd_recovery._pd_recovery_audit == []
 
 
 def test_k03_surviving_member_rejects_non_current_record_without_current_fault_aggregate():
     deployment = _branch_scope_deployment()
     with patch.object(deployment, "exec", side_effect=AssertionError("pd-recover must not run")) as execute:
         with pytest.raises(ValueError, match="surviving_member branch is not authorized") as error:
-            deployment.execute_pd_recovery(
+            deployment.pd_recovery.execute_pd_recovery(
                 "pd/pd-0",
                 ORIGINAL_CLUSTER_ID,
                 SAFE_ALLOCATOR_FLOOR,
@@ -554,7 +570,7 @@ def test_k03_surviving_member_rejects_non_current_record_without_current_fault_a
 
 def test_k03_entirely_rebuild_accepts_trusted_full_loss_record_and_audits_scope():
     deployment = _branch_scope_deployment()
-    result = deployment.execute_pd_recovery(
+    result = deployment.pd_recovery.execute_pd_recovery(
         "pd/pd-0",
         ORIGINAL_CLUSTER_ID,
         SAFE_ALLOCATOR_FLOOR,
@@ -563,11 +579,13 @@ def test_k03_entirely_rebuild_accepts_trusted_full_loss_record_and_audits_scope(
     )
     assert result["recovery_branch"] == "entirely_rebuild"
     assert result["record_id"] == MAINTENANCE_RECORD_ID
-    assert deployment._pd_recovery_audit[0]["record_id"] == MAINTENANCE_RECORD_ID
+    assert deployment.pd_recovery._pd_recovery_audit[0]["record_id"] == MAINTENANCE_RECORD_ID
 
 
 def test_k03_pd_quorum_restart_uses_graceful_stop_timeout():
-    deployment = object.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.COMPONENTS = {"pd": ("pd-0", "pd-1", "pd-2")}
     deployment._env = {"DOCKER_ROOT_DIR": "/tmp"}
     deployment.project_name = "k03-view-test"
@@ -581,6 +599,7 @@ def test_k03_pd_quorum_restart_uses_graceful_stop_timeout():
 def test_k03_manage_cluster_pd_inspect_forwards_explicit_history_view():
     class FakeDeployment:
         def __init__(self):
+            self.pd_recovery = SimpleNamespace(pd_recovery_inspection=self.pd_recovery_inspection)
             self.views = []
 
         def pd_recovery_inspection(self, view, phase, target, record_id):

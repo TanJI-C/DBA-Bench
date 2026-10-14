@@ -8,10 +8,10 @@ sys.path.insert(0, project_root)
 
 from src.agents.agent import LLMAgent, MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.postgres import PgSystemFailureFdExhaustionScenario
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.workloads.tpcds import TPCDSWorkload
 
@@ -387,7 +387,7 @@ def main():
                         help="Which agent drives the --mode llm path. Default: llm.")
     parser.add_argument("--port", type=int, default=15709)
     parser.add_argument("--container-name", default="aiopsbench-pg-system-09")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--max-output-tokens", type=int)

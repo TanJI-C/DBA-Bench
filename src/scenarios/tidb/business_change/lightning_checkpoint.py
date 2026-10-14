@@ -1,22 +1,16 @@
 from dataclasses import dataclass
 
 from src.database.sql import sql_literal
-from src.scenarios.workloads import WorkloadProfile
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.workloads.specs import WorkloadProfile
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.business_change.lightning_checkpoint import (
     TidbBusinessChangeLightningCheckpointForLightningCheckpointScaleOutEvaluatorCase,
     TidbBusinessChangeLightningCheckpointForPartitionResumeEvaluatorCase,
 )
 
-from ...base import (
-    BackgroundWorkloadStartPhase,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadStartPhase, BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

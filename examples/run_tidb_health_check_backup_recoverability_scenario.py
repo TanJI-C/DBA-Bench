@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.scenarios.tidb import TidbHealthCheckBackupRecoverabilityScenario
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.health_check.runtime.backup_recoverability import BackupRecoverabilityEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -229,7 +229,7 @@ def main() -> None:
     )
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -241,7 +241,7 @@ def main() -> None:
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
-    env = TiDBEnv(
+    env = BackupRecoverabilityEnv(
         run_id=args.container_name.removeprefix("aiopsbench-"),
         port_base=args.port,
     )

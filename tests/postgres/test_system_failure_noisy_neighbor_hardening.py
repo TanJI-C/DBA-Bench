@@ -103,7 +103,8 @@ class _FakeEnv:
 
 def _evaluate(env, monkeypatch, *, culprit_running=False, protected_running=True,
               protected_running_at_handoff=True, transient_running=False):
-    from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+    from src.scenarios.evaluation.protocol import EvaluationContext
+    from src.protocols.report import StructuredReport
 
     scenario = _scenario()
     case = _simple_case()

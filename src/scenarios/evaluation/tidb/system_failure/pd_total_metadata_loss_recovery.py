@@ -8,9 +8,14 @@ from typing import Any
 import pymysql
 from src.database.sql import execute_result_rows
 from src.scenarios.evaluation.common import condition
-from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, build_outcome_result, execute_sql_rows
+from src.scenarios.evaluation.outcome import (
+    OutcomeCheck,
+    OutcomeVerifier,
+    build_outcome_result,
+    execute_sql_rows,
+)
 from src.scenarios.evaluation.protocol import EvaluationContext
-from src.execution.deployment import canonical_pd_config
+from src.execution.deployments.tidb_support import canonical_pd_config
 from src.scenarios.evaluation.safety import (
     NoUnapprovedRestartRule,
     SafetyContext,

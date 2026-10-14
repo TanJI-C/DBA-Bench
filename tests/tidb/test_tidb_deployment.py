@@ -1,3 +1,4 @@
+from src.execution.deployments.tidb_components.snapshots import TiDBSnapshots
 import os
 import json
 import shutil
@@ -5,19 +6,15 @@ import time
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("isolated_host_ports")
 import yaml
 
 from src.scenarios.tidb import TidbQueryPerfIndexMergeSelectionFailureScenario
-from src.scenarios.base import TiDBReplicationRuntime, TiDBTopologySpec
-from src.scenarios.tidb.runtime import (
-    MYSQL_8_4,
-    TICDC_V8_1_0,
-    TIDB_V5_4_3,
-    TIDB_V8_1_0,
-    tidb_runtime,
-)
-from src.execution.deployment import TiDBDockerDeployment
-from src.execution.environment import TiDBEnv
+from src.execution.specs import TiDBReplicationRuntime, TiDBTopologySpec
+from src.execution.tidb_runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V5_4_3, TIDB_V8_1_0, tidb_runtime
+from src.execution.deployments.tidb import TiDBDockerDeployment
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.evaluation.safety import _parse_sql, TraceEvent
 from src.scenarios.runtime.orchestrator import Orchestrator
 
@@ -103,11 +100,11 @@ def test_online_unsafe_recovery_accepts_pd_registration_text(monkeypatch):
         lambda target, command: 'Success! Request has been accepted."',
     )
 
-    result = deployment.online_unsafe_recovery("start", (11, 12))
+    result = deployment.pd_recovery.online_unsafe_recovery("start", (11, 12))
 
     assert result["state"] == "accepted"
     assert result["failed_store_ids"] == [11, 12]
-    assert deployment.online_unsafe_recovery_started is True
+    assert deployment.pd_recovery.online_unsafe_recovery_started is True
 
 
 def test_case_topology_renders_compose_and_prometheus_targets():
@@ -122,7 +119,7 @@ def test_case_topology_renders_compose_and_prometheus_targets():
             "name": deployment.network_name,
             "external": True,
         }
-        assert deployment.network_subnet.startswith("10.252.")
+        assert deployment.network_subnet is None  # Allocated when Docker creates the network.
         assert set(compose["services"]) == {
             "pd-0", "tikv-0", "tikv-1", "tidb-0", "prometheus", "cadvisor",
         }
@@ -176,7 +173,7 @@ def test_case_topology_renders_compose_and_prometheus_targets():
             "tidb": ["tidb-0:10080"],
             "cadvisor": ["cadvisor:8080"],
         }
-        expected_tikv_volume = f"{deployment.bootstrap_data_paths[('tikv', 'tikv-0')]}:/data/tikv"
+        expected_tikv_volume = f"{deployment.snapshots.bootstrap_data_paths[('tikv', 'tikv-0')]}:/data/tikv"
         assert compose["services"]["tikv-0"]["volumes"][-1] == expected_tikv_volume
         assert compose["services"]["tidb-0"]["command"][0] == "--config=/tidb.toml"
         assert compose["services"]["tidb-0"]["volumes"][0].endswith("/config/tidb.toml:/tidb.toml:ro")
@@ -250,34 +247,19 @@ def test_tidb_network_is_created_with_an_explicit_run_subnet(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="network-capacity-contract", port_base=4620)
     deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
     calls = []
-    monkeypatch.setattr(
-        "src.execution.deployment.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="not found"),
-    )
-    monkeypatch.setattr(
-        deployment,
-        "_run",
-        lambda command, component: calls.append((command, component)) or "network-id\n",
-    )
+
+    def allocate(name, *, env):
+        calls.append((name, env))
+        return "10.252.42.0/24"
+
+    monkeypatch.setattr("src.execution.deployments.tidb.create_tidb_network", allocate)
 
     try:
         deployment._ensure_network()
+        deployment._ensure_network()
         assert deployment._network_created is True
-        assert calls == [
-            (
-                [
-                    "docker",
-                    "network",
-                    "create",
-                    "--driver",
-                    "bridge",
-                    "--subnet",
-                    deployment.network_subnet,
-                    deployment.network_name,
-                ],
-                "network",
-            )
-        ]
+        assert deployment.network_subnet == "10.252.42.0/24"
+        assert calls == [(deployment.network_name, deployment._env)]
     finally:
         shutil.rmtree(deployment.runtime_dir)
 
@@ -286,13 +268,15 @@ def test_tidb_network_identity_conflict_is_not_reused(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="network-identity-conflict", port_base=4630)
     deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
     monkeypatch.setattr(
-        "src.execution.deployment.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="existing", stderr=""),
+        "src.execution.docker_network.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="existing-id", stderr=""),
     )
 
     try:
         with pytest.raises(RuntimeError, match="network identity already exists"):
             deployment._ensure_network()
+        assert deployment._network_created is False
+        assert deployment.network_subnet is None
     finally:
         shutil.rmtree(deployment.runtime_dir)
 
@@ -520,15 +504,15 @@ def test_persistent_baseline_is_saved_then_cloned_into_a_new_run(tmp_path, monke
         storage_root=str(tmp_path),
     )
     first.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
-    first._prepare_persistent_state()
+    first.snapshots._prepare_persistent_state()
     first._env["DOCKER_ROOT_DIR"] = "/tmp"
-    monkeypatch.setattr(first, "_make_persistent_state_user_accessible", lambda: None)
+    monkeypatch.setattr(first.snapshots, "_make_persistent_state_user_accessible", lambda: None)
     for service in ("pd-0", "tikv-0"):
-        (first._persistent_run_dir / service / "initialized.marker").write_text(service, encoding="utf-8")
+        (first.snapshots._persistent_run_dir / service / "initialized.marker").write_text(service, encoding="utf-8")
     monkeypatch.setattr(first, "_run", lambda command, component="cluster": "")
     monkeypatch.setattr(first, "_wait", lambda label, check, timeout: None)
-    first.persist_initial_state()
-    first.release_persistence_lock()
+    first.snapshots.persist_initial_state()
+    first.snapshots.release_persistence_lock()
 
     metadata = json.loads(
         (tmp_path / "qp07-baseline" / "baseline" / "metadata.json").read_text(encoding="utf-8")
@@ -542,13 +526,13 @@ def test_persistent_baseline_is_saved_then_cloned_into_a_new_run(tmp_path, monke
         storage_root=str(tmp_path),
     )
     second.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
-    second._prepare_persistent_state()
+    second.snapshots._prepare_persistent_state()
     try:
-        assert second.persistent_state_reused is True
-        assert (second._persistent_run_dir / "pd-0" / "initialized.marker").read_text(encoding="utf-8") == "pd-0"
-        assert (second._persistent_run_dir / "tikv-0" / "initialized.marker").read_text(encoding="utf-8") == "tikv-0"
+        assert second.snapshots.persistent_state_reused is True
+        assert (second.snapshots._persistent_run_dir / "pd-0" / "initialized.marker").read_text(encoding="utf-8") == "pd-0"
+        assert (second.snapshots._persistent_run_dir / "tikv-0" / "initialized.marker").read_text(encoding="utf-8") == "tikv-0"
     finally:
-        second.release_persistence_lock()
+        second.snapshots.release_persistence_lock()
         shutil.rmtree(first.runtime_dir)
         shutil.rmtree(second.runtime_dir)
 
@@ -562,8 +546,8 @@ def test_readiness_timeout_preserves_last_error_and_service_diagnostics(monkeypa
         clock_calls["count"] += 1
         return 0.0 if clock_calls["count"] < 3 else 2.0
 
-    monkeypatch.setattr("src.execution.deployment.time.monotonic", clock)
-    monkeypatch.setattr("src.execution.deployment.time.sleep", lambda seconds: None)
+    monkeypatch.setattr("src.execution.deployments.tidb.time.monotonic", clock)
+    monkeypatch.setattr("src.execution.deployments.tidb.time.sleep", lambda seconds: None)
     monkeypatch.setattr(deployment, "_assert_stage_running", lambda label: None)
     monkeypatch.setattr(
         deployment,
@@ -600,15 +584,15 @@ def test_upgrade_precheck_wait_retries_until_cluster_is_ready(monkeypatch):
     def wait(label, check, timeout):
         assert label == "upgrade precheck"
         assert timeout == deployment.warm_tidb_readiness_timeout_sec
-        monkeypatch.setattr("src.execution.deployment.time.monotonic", lambda: 0.0)
-        monkeypatch.setattr("src.execution.deployment.time.sleep", lambda seconds: None)
+        monkeypatch.setattr("src.execution.deployments.tidb.time.monotonic", lambda: 0.0)
+        monkeypatch.setattr("src.execution.deployments.tidb.time.sleep", lambda seconds: None)
         monkeypatch.setattr(deployment, "_assert_stage_running", lambda stage: None)
         real_wait(label, check, timeout)
 
-    monkeypatch.setattr(deployment, "upgrade_precheck", upgrade_precheck)
+    monkeypatch.setattr(deployment.rollout, "upgrade_precheck", upgrade_precheck)
     monkeypatch.setattr(deployment, "_wait", wait)
     try:
-        assert deployment.wait_for_upgrade_precheck() == {
+        assert deployment.rollout.wait_for_upgrade_precheck() == {
             "tikv_up": 1,
             "current_version": "v6.5.0",
         }
@@ -705,7 +689,7 @@ def test_stopped_service_error_includes_recent_service_diagnostics(monkeypatch):
 def test_command_error_contains_run_component_and_output(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="failed-run")
     monkeypatch.setattr(
-        "src.execution.deployment.subprocess.run",
+        "src.execution.deployments.tidb.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=7,
             stdout="partial output",
@@ -728,7 +712,7 @@ def test_wait_store_state_uses_tikv_target_as_readiness_stage(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="store-state-readiness-stage")
     deployment.configure_runtime(_runtime(pd_count=1, tikv_count=4, tidb_count=1))
     labels = []
-    monkeypatch.setattr(deployment, "_store_for_target", lambda target: {
+    monkeypatch.setattr(deployment.stores, "_store_for_target", lambda target: {
         "store": {"id": 4, "state_name": "Up", "address": "tikv-3:20160"},
         "status": {"leader_count": 0, "region_count": 0},
     })
@@ -739,7 +723,7 @@ def test_wait_store_state_uses_tikv_target_as_readiness_stage(monkeypatch):
     )
 
     try:
-        observed = deployment._wait_store_state("tikv/tikv-3", "Up", timeout=17)
+        observed = deployment.stores._wait_store_state("tikv/tikv-3", "Up", timeout=17)
         assert observed["store"]["state_name"] == "Up"
         assert labels == [("tikv/tikv-3", 17)]
         assert deployment._stage_services(labels[0][0]) == ("tikv-3",)
@@ -1035,10 +1019,16 @@ def test_deploy_starts_tikv_as_one_stage(monkeypatch):
     commands = []
     waits = []
 
+    def allocate(name, *, env):
+        commands.append((["allocate", name], "network"))
+        return "10.252.42.0/24"
+
+    monkeypatch.setattr("src.execution.deployments.tidb.create_tidb_network", allocate)
+
     try:
         monkeypatch.setattr(deployment, "preflight", lambda: None)
         monkeypatch.setattr(deployment, "_project_exists", lambda: False)
-        monkeypatch.setattr(deployment, "_save_bootstrap_cache", lambda: None)
+        monkeypatch.setattr(deployment.snapshots, "_save_bootstrap_cache", lambda: None)
         deployment._env["DOCKER_ROOT_DIR"] = "/srv/docker-xfs"
         monkeypatch.setattr(
             deployment,
@@ -1050,7 +1040,7 @@ def test_deploy_starts_tikv_as_one_stage(monkeypatch):
             "_wait",
             lambda label, check, timeout: waits.append((label, timeout)),
         )
-        monkeypatch.setattr(deployment, "_save_bootstrap_cache", lambda: None)
+        monkeypatch.setattr(deployment.snapshots, "_save_bootstrap_cache", lambda: None)
 
         deployment.deploy()
 
@@ -1245,7 +1235,7 @@ def test_pd_control_plane_readiness_requires_pd_ctl_store(monkeypatch):
     monkeypatch.setattr(deployment, "_pd_stores", lambda: checks.append("stores"))
 
     try:
-        deployment._check_pd_control_plane()
+        deployment.rollout._check_pd_control_plane()
         assert checks == ["members", "stores"]
     finally:
         shutil.rmtree(deployment.runtime_dir)
@@ -1266,12 +1256,12 @@ def test_tikv_leader_transfer_waits_for_pd_to_evacuate_all_leaders(monkeypatch):
         target_store["status"]["leader_count"] = 0
         check()
 
-    monkeypatch.setattr(deployment, "_store_for_target", lambda target: target_store)
+    monkeypatch.setattr(deployment.stores, "_store_for_target", lambda target: target_store)
     monkeypatch.setattr(deployment, "_pd_ctl", lambda *args: pd_commands.append(args))
     monkeypatch.setattr(deployment, "_wait", wait)
 
     try:
-        assert deployment._transfer_tikv_leaders("tikv/tikv-0", 1, 2) == 2
+        assert deployment.rollout._transfer_tikv_leaders("tikv/tikv-0", 1, 2) == 2
         assert waits == [("TiKV leader transfer", 300)]
         assert pd_commands == [
             ("scheduler", "add", "evict-leader-scheduler", "1"),
@@ -1289,13 +1279,13 @@ def test_tikv_leader_transfer_fails_when_pd_does_not_evacuate_leaders(monkeypatc
         "status": {"leader_count": 1},
     }
     pd_commands = []
-    monkeypatch.setattr(deployment, "_store_for_target", lambda target: target_store)
+    monkeypatch.setattr(deployment.stores, "_store_for_target", lambda target: target_store)
     monkeypatch.setattr(deployment, "_pd_ctl", lambda *args: pd_commands.append(args))
     monkeypatch.setattr(deployment, "_wait", lambda label, check, timeout: check())
 
     try:
         with pytest.raises(RuntimeError, match="leader evacuation is incomplete"):
-            deployment._transfer_tikv_leaders("tikv/tikv-0", 1, 1)
+            deployment.rollout._transfer_tikv_leaders("tikv/tikv-0", 1, 1)
         assert pd_commands == [
             ("scheduler", "add", "evict-leader-scheduler", "1"),
             ("scheduler", "remove", "evict-leader-scheduler-1"),
@@ -1332,7 +1322,7 @@ def test_reused_tidb_storage_uses_warm_tikv_readiness_timeout():
         run_id="warm-tikv-readiness",
         warm_tidb_readiness_timeout_sec=601,
     )
-    deployment.persistent_state_reused = True
+    deployment.snapshots.persistent_state_reused = True
     assert deployment._tikv_readiness_timeout() == 601
 
 
@@ -1406,8 +1396,8 @@ def test_tidb_bootstrap_cache_uses_distinct_runtime_data_dirs(monkeypatch, tmp_p
     monkeypatch.setenv("AIOPS_TIDB_BOOTSTRAP_CACHE_DIR", str(tmp_path / "cache"))
     cold = TiDBDockerDeployment(run_id="cache-cold", port_base=4900)
     cold.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
-    cached_path = cold.bootstrap_cache_path
-    metadata = cold._bootstrap_cache_metadata()
+    cached_path = cold.snapshots.bootstrap_cache_path
+    metadata = cold.snapshots._bootstrap_cache_metadata()
     for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-0")):
         source = os.path.join(cached_path, node_type, service)
         os.makedirs(source)
@@ -1420,19 +1410,19 @@ def test_tidb_bootstrap_cache_uses_distinct_runtime_data_dirs(monkeypatch, tmp_p
     warm.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
 
     try:
-        assert warm.bootstrap_cache_used is True
-        assert warm.bootstrap_cache_path == cached_path
-        assert warm.bootstrap_data_paths != cold.bootstrap_data_paths
+        assert warm.snapshots.bootstrap_cache_used is True
+        assert warm.snapshots.bootstrap_cache_path == cached_path
+        assert warm.snapshots.bootstrap_data_paths != cold.snapshots.bootstrap_data_paths
         for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-0")):
             runtime_marker = os.path.join(
-                warm.bootstrap_data_paths[(node_type, service)], "bootstrap.marker"
+                warm.snapshots.bootstrap_data_paths[(node_type, service)], "bootstrap.marker"
             )
             with open(runtime_marker, encoding="utf-8") as handle:
                 assert handle.read() == node_type
         with open(warm.compose_file, encoding="utf-8") as handle:
             compose = yaml.safe_load(handle)
         assert any(
-            warm.bootstrap_data_paths[("pd", "pd-0")] in volume
+            warm.snapshots.bootstrap_data_paths[("pd", "pd-0")] in volume
             for volume in compose["services"]["pd-0"]["volumes"]
         )
     finally:
@@ -1455,17 +1445,17 @@ def test_tidb_bootstrap_cache_can_be_disabled_for_a_fresh_topology(monkeypatch, 
     )
 
     try:
-        assert deployment.bootstrap_cache_enabled is False
-        assert deployment.bootstrap_cache_used is False
-        assert deployment.bootstrap_cache_key is None
-        assert deployment.bootstrap_cache_path is None
-        assert set(deployment.bootstrap_data_paths) == {
+        assert deployment.snapshots.bootstrap_cache_enabled is False
+        assert deployment.snapshots.bootstrap_cache_used is False
+        assert deployment.snapshots.bootstrap_cache_key is None
+        assert deployment.snapshots.bootstrap_cache_path is None
+        assert set(deployment.snapshots.bootstrap_data_paths) == {
             *(('pd', f'pd-{index}') for index in range(3)),
             *(('tikv', f'tikv-{index}') for index in range(5)),
         }
         assert not list(cache_root.iterdir())
         with pytest.raises(RuntimeError, match="bootstrap cache is disabled"):
-            deployment._save_bootstrap_cache()
+            deployment.snapshots._save_bootstrap_cache()
     finally:
         shutil.rmtree(deployment.runtime_dir)
 
@@ -1484,15 +1474,15 @@ def test_tidb_bootstrap_cache_is_saved_after_a_cold_deploy(monkeypatch, tmp_path
             handle.write(node_type)
 
     monkeypatch.setattr(
-        deployment,
+        deployment.snapshots,
         "_snapshot_component_data",
         snapshot_component_data,
     )
 
     try:
-        deployment._save_bootstrap_cache()
-        assert deployment.bootstrap_cache_used is True
-        assert os.path.isfile(os.path.join(deployment.bootstrap_cache_path, "metadata.json"))
+        deployment.snapshots._save_bootstrap_cache()
+        assert deployment.snapshots.bootstrap_cache_used is True
+        assert os.path.isfile(os.path.join(deployment.snapshots.bootstrap_cache_path, "metadata.json"))
         assert ["stop" in command[0] for command in commands] == [True, False, False, False]
         assert ["start" in command[0] for command in commands] == [False, True, True, True]
 
@@ -1504,8 +1494,8 @@ def test_tidb_bootstrap_cache_is_never_loaded_for_a_deferred_topology(monkeypatc
     monkeypatch.setenv("AIOPS_TIDB_BOOTSTRAP_CACHE_DIR", str(tmp_path / "cache"))
     full = TiDBDockerDeployment(run_id="cache-full-topology", port_base=4950)
     full.configure_runtime(_runtime(pd_count=3, tikv_count=6, tidb_count=2))
-    cached_path = full.bootstrap_cache_path
-    metadata = full._bootstrap_cache_metadata()
+    cached_path = full.snapshots.bootstrap_cache_path
+    metadata = full.snapshots._bootstrap_cache_metadata()
     for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-4")):
         source = os.path.join(cached_path, node_type, service)
         os.makedirs(source)
@@ -1520,12 +1510,12 @@ def test_tidb_bootstrap_cache_is_never_loaded_for_a_deferred_topology(monkeypatc
     )
 
     try:
-        assert deferred.bootstrap_cache_used is False
-        assert deferred.bootstrap_cache_key is None
-        assert deferred.bootstrap_cache_path is None
+        assert deferred.snapshots.bootstrap_cache_used is False
+        assert deferred.snapshots.bootstrap_cache_key is None
+        assert deferred.snapshots.bootstrap_cache_path is None
         assert os.path.isdir(cached_path)
         for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-4")):
-            assert os.listdir(deferred.bootstrap_data_paths[(node_type, service)]) == []
+            assert os.listdir(deferred.snapshots.bootstrap_data_paths[(node_type, service)]) == []
     finally:
         shutil.rmtree(full.runtime_dir)
         shutil.rmtree(deferred.runtime_dir)
@@ -1536,29 +1526,29 @@ def test_tidb_retry_after_cache_seeded_failure_discards_the_cache(monkeypatch, t
     deployment = TiDBDockerDeployment(run_id="cache-retry-discard", port_base=4990)
     deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
     deployment._env["DOCKER_ROOT_DIR"] = "/var/lib/docker"
-    cached_path = deployment.bootstrap_cache_path
-    metadata = deployment._bootstrap_cache_metadata()
+    cached_path = deployment.snapshots.bootstrap_cache_path
+    metadata = deployment.snapshots._bootstrap_cache_metadata()
     for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-0")):
         source = os.path.join(cached_path, node_type, service)
         os.makedirs(source)
         with open(os.path.join(source, "bootstrap.marker"), "w", encoding="utf-8") as handle:
             handle.write(node_type)
         shutil.copytree(
-            source, deployment.bootstrap_data_paths[(node_type, service)], dirs_exist_ok=True
+            source, deployment.snapshots.bootstrap_data_paths[(node_type, service)], dirs_exist_ok=True
         )
     with open(os.path.join(cached_path, "metadata.json"), "w", encoding="utf-8") as handle:
         json.dump(metadata, handle)
-    deployment.bootstrap_cache_used = True
+    deployment.snapshots.bootstrap_cache_used = True
     monkeypatch.setattr(deployment, "_run", lambda command, component: "")
     monkeypatch.setattr(deployment, "_start_cluster", lambda: None)
 
     try:
         deployment._retry_cluster_start(RuntimeError("first cluster start failed"))
 
-        assert deployment.bootstrap_cache_used is False
+        assert deployment.snapshots.bootstrap_cache_used is False
         assert not os.path.exists(cached_path)
         for node_type, service in (("pd", "pd-0"), ("tikv", "tikv-0")):
-            runtime_dir = deployment.bootstrap_data_paths[(node_type, service)]
+            runtime_dir = deployment.snapshots.bootstrap_data_paths[(node_type, service)]
             assert os.listdir(runtime_dir) == []
     finally:
         shutil.rmtree(deployment.runtime_dir)
@@ -1666,6 +1656,10 @@ def test_tidb_readiness_reports_exited_container_immediately(monkeypatch):
 
 
 def test_deferred_tikv_is_created_without_starting(monkeypatch):
+    monkeypatch.setattr(
+        "src.execution.deployments.tidb.create_tidb_network",
+        lambda name, *, env: "10.252.42.0/24",
+    )
     deployment = TiDBDockerDeployment(run_id="deferred-tikv", port_base=4950)
     deployment.configure_runtime(
         _runtime(pd_count=1, tikv_count=2, tidb_count=1, deferred_tikv_count=1)
@@ -1797,13 +1791,13 @@ def test_image_group_cold_render_keeps_pd_and_tikv_data_inside_container(monkeyp
             for volume in compose["services"]["tikv-0"]["volumes"]
             if volume.endswith(":/tikv.toml:ro")
         )
-        assert tikv_config == deployment.image_group_tikv_config_path
+        assert tikv_config == deployment.snapshots.image_group_tikv_config_path
         with open(tikv_config, encoding="utf-8") as handle:
             assert 'capacity = "8GB"' in handle.read()
-        assert deployment.image_group_snapshot_name().startswith(
+        assert deployment.snapshots.image_group_snapshot_name().startswith(
             "aiopsbench-tidb-group-qp01-object-listing-"
         )
-        assert deployment.image_group_exists(deployment.image_group_name) is False
+        assert deployment.snapshots.image_group_exists(deployment.snapshots.image_group_name) is False
     finally:
         shutil.rmtree(deployment.runtime_dir)
 
@@ -1826,22 +1820,22 @@ def test_image_group_identity_changes_with_topology_and_reuses_only_matching_ima
     second.configure_runtime(_runtime(pd_count=1, tikv_count=3, tidb_count=1))
 
     try:
-        assert first.image_group_name != second.image_group_name
-        first.image_group_metadata_path.parent.mkdir(parents=True)
-        first.image_group_metadata_path.write_text(
-            json.dumps(first.image_group_metadata),
+        assert first.snapshots.image_group_name != second.snapshots.image_group_name
+        first.snapshots.image_group_metadata_path.parent.mkdir(parents=True)
+        first.snapshots.image_group_metadata_path.write_text(
+            json.dumps(first.snapshots.image_group_metadata),
             encoding="utf-8",
         )
         monkeypatch.setattr(
-            "src.execution.deployment.subprocess.run",
+            "src.execution.deployments.tidb.subprocess.run",
             lambda *args, **kwargs: SimpleNamespace(returncode=0),
         )
-        assert first.image_group_exists(first.image_group_name) is True
-        first.select_image_group(first.image_group_name, first.base_image_snapshot_name())
+        assert first.snapshots.image_group_exists(first.snapshots.image_group_name) is True
+        first.snapshots.select_image_group(first.snapshots.image_group_name, first.snapshots.base_image_snapshot_name())
         with open(first.compose_file, encoding="utf-8") as handle:
             compose = yaml.safe_load(handle)
-        assert compose["services"]["pd-0"]["image"] == first.image_group_images["pd-0"]
-        assert compose["services"]["tikv-0"]["image"] == first.image_group_images["tikv-0"]
+        assert compose["services"]["pd-0"]["image"] == first.snapshots.image_group_images["pd-0"]
+        assert compose["services"]["tikv-0"]["image"] == first.snapshots.image_group_images["tikv-0"]
         assert all(
             "/data/" not in volume
             for service in ("pd-0", "tikv-0")
@@ -1876,8 +1870,8 @@ def test_image_group_save_commits_each_database_storage_container(monkeypatch, t
     deployment._container_ids.update({"pd-0": "stale-pd", "tikv-0": "stale-tikv"})
 
     try:
-        deployment.save_image_group(deployment.image_group_name, {"case": "qp01"})
-        assert deployment.image_group_metadata_path.is_file()
+        deployment.snapshots.save_image_group(deployment.snapshots.image_group_name, {"case": "qp01"})
+        assert deployment.snapshots.image_group_metadata_path.is_file()
         commit_commands = [
             command
             for command, component in commands
@@ -1889,20 +1883,20 @@ def test_image_group_save_commits_each_database_storage_container(monkeypatch, t
             "container-tikv-0",
         }
         assert {command[-1] for command in commit_commands} == {
-            deployment.image_group_images["pd-0"],
-            deployment.image_group_images["tikv-0"],
+            deployment.snapshots.image_group_images["pd-0"],
+            deployment.snapshots.image_group_images["tikv-0"],
         }
         assert all("/data/pd" not in " ".join(command) for command in commit_commands)
         assert all("/data/tikv" not in " ".join(command) for command in commit_commands)
-        assert deployment.image_group_selected is True
-        assert deployment.image_group_reused is True
+        assert deployment.snapshots.image_group_selected is True
+        assert deployment.snapshots.image_group_reused is True
         assert deployment._container_ids == {}
         with open(deployment.compose_file, encoding="utf-8") as handle:
             compose = yaml.safe_load(handle)
-        assert compose["services"]["pd-0"]["image"] == deployment.image_group_images["pd-0"]
-        assert compose["services"]["tikv-0"]["image"] == deployment.image_group_images["tikv-0"]
+        assert compose["services"]["pd-0"]["image"] == deployment.snapshots.image_group_images["pd-0"]
+        assert compose["services"]["tikv-0"]["image"] == deployment.snapshots.image_group_images["tikv-0"]
     finally:
-        deployment.release_image_group_lock()
+        deployment.snapshots.release_image_group_lock()
         shutil.rmtree(deployment.runtime_dir)
 
 
@@ -1939,6 +1933,10 @@ def test_cold_tikv_readiness_uses_case_runtime_timeout():
 
 
 def test_image_group_deploy_does_not_save_bootstrap_cache(monkeypatch):
+    monkeypatch.setattr(
+        "src.execution.deployments.tidb.create_tidb_network",
+        lambda name, *, env: "10.252.42.0/24",
+    )
     deployment = TiDBDockerDeployment(
         run_id="image-group-no-bootstrap-cache",
         image_group_key="qp01-object-listing",
@@ -1948,11 +1946,11 @@ def test_image_group_deploy_does_not_save_bootstrap_cache(monkeypatch):
     deployment._env["DOCKER_ROOT_DIR"] = "/tmp"
     monkeypatch.setattr(deployment, "preflight", lambda: None)
     monkeypatch.setattr(deployment, "_project_exists", lambda: False)
-    monkeypatch.setattr(deployment, "_prepare_persistent_state", lambda: None)
+    monkeypatch.setattr(deployment.snapshots, "_prepare_persistent_state", lambda: None)
     monkeypatch.setattr(deployment, "_start_database_services", lambda: None)
     monkeypatch.setattr(deployment, "_run", lambda *args: "")
     monkeypatch.setattr(deployment, "_wait", lambda *args: None)
-    monkeypatch.setattr(deployment, "_save_bootstrap_cache", lambda: saved.append(True))
+    monkeypatch.setattr(deployment.snapshots, "_save_bootstrap_cache", lambda: saved.append(True))
 
     try:
         deployment.deploy()
@@ -1981,7 +1979,7 @@ def test_teardown_normalizes_data_for_stopped_containers(monkeypatch):
 
     monkeypatch.setattr(deployment, "_run", fake_run)
     monkeypatch.setattr(deployment, "_docker_info", lambda: None)
-    monkeypatch.setattr("src.execution.deployment.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("src.execution.deployments.tidb.subprocess.run", fake_subprocess_run)
     deployment.teardown()
 
     assert len(helper_calls) == 2
@@ -1996,7 +1994,7 @@ def _teardown_with_incomplete_runtime_audit(monkeypatch, tmp_path):
     monkeypatch.setattr(deployment, "_run", lambda command, component: "")
     monkeypatch.setattr(deployment, "_docker_info", lambda: None)
     monkeypatch.setattr(
-        "src.execution.deployment.subprocess.run",
+        "src.execution.deployments.tidb.subprocess.run",
         lambda command, **kwargs: SimpleNamespace(returncode=0, stdout="[]", stderr=""),
     )
     deployment._env["AIOPS_RUNTIME_AUDIT_PATH"] = str(tmp_path / "docker-runtime.json")
@@ -2040,7 +2038,7 @@ def test_region_health_observation_reads_current_pd_state(monkeypatch):
     monkeypatch.setattr(deployment, "_pd_ctl", lambda *args: [{"kind": "operator"}])
 
     try:
-        assert deployment.region_health_observation() == {
+        assert deployment.stores.region_health_observation() == {
             "stores": [{"store": {"id": 1, "state_name": "Up"}}],
             "operators": [{"kind": "operator"}],
         }
@@ -2083,14 +2081,14 @@ def test_tikv_stage_running_assert_skips_deferred_services(monkeypatch):
 
 def test_port_block_stays_on_free_planned_ports(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="port-block-free", port_base=4400)
-    monkeypatch.setattr(TiDBDockerDeployment, "_port_bindable", staticmethod(lambda port: True))
+    monkeypatch.setattr("src.execution.host_ports._bindable", lambda port: True)
     try:
         deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
         assert deployment.port_base == 4400
         assert deployment.tidb_endpoints == {"tidb/tidb-0": ("127.0.0.1", 4400)}
         assert deployment.prometheus_port == 4402
     finally:
-        deployment._release_port_holds()
+        deployment._port_lease.close()
         shutil.rmtree(deployment.runtime_dir)
 
 
@@ -2100,9 +2098,7 @@ def test_port_block_shifts_past_occupied_ports(monkeypatch):
     preflight after planning."""
     deployment = TiDBDockerDeployment(run_id="port-block-shift", port_base=4400)
     monkeypatch.setattr(
-        TiDBDockerDeployment,
-        "_port_bindable",
-        staticmethod(lambda port: port >= 4403),
+        "src.execution.host_ports._bindable", lambda port: port >= 4403,
     )
     try:
         deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
@@ -2110,14 +2106,14 @@ def test_port_block_shifts_past_occupied_ports(monkeypatch):
         assert deployment.tidb_endpoints == {"tidb/tidb-0": ("127.0.0.1", 4403)}
         assert deployment.prometheus_port == 4405
     finally:
-        deployment._release_port_holds()
+        deployment._port_lease.close()
         shutil.rmtree(deployment.runtime_dir)
 
 
 def test_port_block_selection_exhaustion_raises(monkeypatch):
     deployment = TiDBDockerDeployment(run_id="port-block-exhausted", port_base=4400)
-    monkeypatch.setattr(TiDBDockerDeployment, "_port_bindable", staticmethod(lambda port: False))
-    with pytest.raises(RuntimeError, match="port block selection exhausted"):
+    monkeypatch.setattr("src.execution.host_ports._bindable", lambda port: False)
+    with pytest.raises(RuntimeError, match="Host port reservation failed"):
         deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
 
 
@@ -2133,9 +2129,7 @@ def test_replication_port_block_span_covers_downstream_and_ticdc(monkeypatch):
         ticdc_count=2,
     )
     monkeypatch.setattr(
-        TiDBDockerDeployment,
-        "_port_bindable",
-        staticmethod(lambda port: port >= 4407),
+        "src.execution.host_ports._bindable", lambda port: port >= 4407,
     )
     try:
         deployment.configure_runtime(
@@ -2146,7 +2140,7 @@ def test_replication_port_block_span_covers_downstream_and_ticdc(monkeypatch):
         assert deployment.downstream_port == 4415
         assert deployment.ticdc_ports == {"ticdc/ticdc-0": 4416, "ticdc/ticdc-1": 4417}
     finally:
-        deployment._release_port_holds()
+        deployment._port_lease.close()
         shutil.rmtree(deployment.runtime_dir)
 
 
@@ -2187,7 +2181,7 @@ def test_cluster_start_retry_resets_partial_deployment(monkeypatch):
             for cmd, component in commands
         )
         # A bootstrap-cache miss wipes the dirty data directories for a fresh bootstrap.
-        for destination in deployment.bootstrap_data_paths.values():
+        for destination in deployment.snapshots.bootstrap_data_paths.values():
             assert os.path.isdir(destination) and not os.listdir(destination)
     finally:
         shutil.rmtree(deployment.runtime_dir)
@@ -2218,7 +2212,7 @@ def test_cluster_start_retry_skipped_for_persistent_storage(monkeypatch):
         storage_key="retry-key", storage_root="/tmp/aiopsbench-retry-storage",
     )
     monkeypatch.setattr(
-        TiDBDockerDeployment,
+        TiDBSnapshots,
         "persistent_storage_enabled",
         property(lambda self: True),
     )
@@ -2233,19 +2227,19 @@ def test_cluster_start_reset_restores_bootstrap_cache_data(tmp_path, monkeypatch
     deployment.configure_runtime(_runtime(pd_count=1, tikv_count=1, tidb_count=1))
     deployment._env["DOCKER_ROOT_DIR"] = "/tmp/docker-root"
     cache_dir = tmp_path / "cache"
-    for node_type, service in deployment.bootstrap_data_paths:
+    for node_type, service in deployment.snapshots.bootstrap_data_paths:
         blob = cache_dir / node_type / service
         blob.mkdir(parents=True)
         (blob / "payload").write_text("cached")
-    monkeypatch.setattr(deployment, "bootstrap_cache_used", True)
-    monkeypatch.setattr(deployment, "bootstrap_cache_path", str(cache_dir))
+    monkeypatch.setattr(deployment.snapshots, "bootstrap_cache_used", True)
+    monkeypatch.setattr(deployment.snapshots, "bootstrap_cache_path", str(cache_dir))
     monkeypatch.setattr(deployment, "_run", lambda cmd, component="cluster": "")
-    dirty_destination = next(iter(deployment.bootstrap_data_paths.values()))
+    dirty_destination = next(iter(deployment.snapshots.bootstrap_data_paths.values()))
     with open(os.path.join(dirty_destination, "stale"), "w", encoding="utf-8") as handle:
         handle.write("dirty")
     try:
         deployment._reset_partial_cluster()
-        for destination in deployment.bootstrap_data_paths.values():
+        for destination in deployment.snapshots.bootstrap_data_paths.values():
             assert sorted(os.listdir(destination)) == ["payload"]
     finally:
         shutil.rmtree(deployment.runtime_dir)

@@ -169,7 +169,7 @@ knowledge/tidb_unified/provenance/tidb81_provenance.jsonl
 processed chunk 仍然拥有完整的维护字段，并额外包含：
 
 ~~~
-source_class
+source_kind
 source_origin_id
 source_origin_path
 source_origin_url
@@ -180,7 +180,7 @@ provenance 一条一条地记录：
 
 ~~~
 chunk_id
-source_class
+source_kind
 source_origin_id
 source_origin_path
 source_origin_url
@@ -488,7 +488,7 @@ conda run -n aiops python scripts/smoke_tidb_unified_knowledge.py
 统一知识库有两道来源隔离：
 
 1. serving projection 在物理数据层将 source identity 置空并检查泄漏；
-2. src/execution/environment.py 的 _search_tidb_knowledge() 只允许返回：
+2. src/execution/environments/tidb.py 的 _search_tidb_knowledge() 只允许返回：
 
 ~~~
 rank
@@ -517,7 +517,7 @@ JSONL、SQLite 表、Chroma metadata 或 provenance sidecar。
 | raw -> processed -> serving | scripts/merge_tidb_curated_knowledge.py |
 | SQLite/Chroma build CLI | scripts/build_tidb_knowledge_base.py |
 | 人工查询 CLI | scripts/query_tidb_unified_knowledge.py |
-| Agent-facing projection | src/execution/environment.py |
+| Agent-facing projection | src/execution/environments/tidb.py |
 | 工具 schema | src/execution/tidb_tool_definitions.py |
 | 统一 smoke | scripts/smoke_tidb_unified_knowledge.py |
 

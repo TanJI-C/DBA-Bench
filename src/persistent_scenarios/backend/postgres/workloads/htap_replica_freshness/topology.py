@@ -23,6 +23,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from src.execution.host_ports import claim_host_ports
+
 import psycopg2
 
 
@@ -91,10 +93,13 @@ class HtapReplicaTopology:
         # qdisc; tc operations are serialized so sidecar creation and qdisc
         # state changes cannot interleave.
         self._tc_lock = threading.RLock()
+        self._port_lease = None
 
     # -- deploy / teardown -------------------------------------------------
 
     def deploy(self, *, seed_sql: str | None = None, bootstrap_timeout: int = 600) -> None:
+        if self._port_lease is None:
+            self._port_lease = claim_host_ports((self.config.primary_port, self.config.standby_port), owner=self.config.run_id)
         self._assert_ports_free()
         self._run(["docker", "network", "create", self.network_name])
         for volume in (
@@ -138,6 +143,9 @@ class HtapReplicaTopology:
         ):
             self._run(["docker", "volume", "rm", "-f", volume], check=False)
         self._run(["docker", "network", "rm", self.network_name], check=False)
+        if self._port_lease is not None:
+            self._port_lease.close()
+            self._port_lease = None
 
     # -- connections / sql -------------------------------------------------
 

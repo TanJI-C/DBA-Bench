@@ -197,8 +197,8 @@ runtime state, not an Agent operation parameter, and OP does not check a fixed U
 string.
 
 The Injector exclusively owns the source/target schema, MinIO, the BR controller, the target
-deployment, checkpoint/attempt artifacts, and cleanup; `TiDBEnv` only hangs recovery-domain
-actions under the existing `manage_cluster` resource, and the Orchestrator is responsible for
+deployment, checkpoint/attempt artifacts, and cleanup; the scenario-owned `PitrCheckpointRecoveryEnv` only hangs recovery-domain
+actions under the existing `manage_cluster` resource, and the Agent SQL observation and BR logs are integrated by this environment. Orchestrator is responsible for
 the five-phase lifecycle, workload, trace, recovery, and teardown. `recover` must release the
 BR, log backup, MinIO, target deployment, network endpoints, and source scenario tables.
 

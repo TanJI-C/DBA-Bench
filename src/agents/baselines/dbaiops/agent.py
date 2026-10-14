@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.agents.agent import BaseAgent, LLMAgent
-from src.scenarios.evaluation.protocol import StructuredReport, structured_submission
+from src.protocols.report import StructuredReport, structured_submission
 from src.agents.baselines.dbaiops.adf import AdaptiveDetectorFunction
 from src.agents.baselines.dbaiops.anomaly_model import (
     AnomalyModel,

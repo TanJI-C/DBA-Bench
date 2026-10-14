@@ -6,10 +6,10 @@ import time
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbSystemFailureTiCdcGcSafepointScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 
 
 SCENARIO = TidbSystemFailureTiCdcGcSafepointScenario()
@@ -354,7 +354,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run TiDB K02 TiCDC OOM and GC service safepoint composite fault.")
     parser.add_argument("--case", required=True, choices=[case.case_id for case in SCENARIO.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--knowledge-mode", choices=("no-kb", "unified-kb"), default="unified-kb")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=40)

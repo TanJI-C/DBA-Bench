@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.scenarios.base import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.benchmark.dataset import (
     aggregate_dataset,
     create_dataset_spec,

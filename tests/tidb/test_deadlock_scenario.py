@@ -317,7 +317,7 @@ def test_sf05_semantic_paraphrase_passes():
             },
         )()
     )
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     result = semantic.match(
         case.evaluator(None).diagnosis_conditions,

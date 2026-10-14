@@ -67,6 +67,7 @@
         return section;
     }
 
+    const MARKS={"*":{cls:"num-hstripes",label:"历史证据"},"^":{cls:"num-vstripes",label:"知识推理"}};
     function renderMatrix(resultSet,categories,analysis){
         const section=document.getElementById("matrix-section");section.hidden=false;
         const prevScroll=section.querySelector(".matrix-scroll")?.scrollLeft??0;
@@ -101,17 +102,19 @@
         categories.forEach(payload=>{
             const cat=payload.category.id;
             catRow+=`<th class="cat-head cat-${escapeHtml(cat)} cat-start" colspan="${payload.cases.length}">${escapeHtml(payload.category.title||cat)} · ${payload.cases.length}</th><th class="rate-gap" colspan="2">OP 通过率</th>`;
-            payload.cases.forEach((item,i)=>{
-                numRow+=`<th class="num cat-${escapeHtml(cat)}${item.difficulty==="hard"?" num-hard":""}${String(item.difficulty).toLowerCase()==="unknown"?" num-unknown":""}${i===0?" cat-start":""}" data-name="${escapeHtml(item.case_name)}" data-case="${escapeHtml(item.case_id)}" data-scenario="${escapeHtml(item.scenario_id)}" data-difficulty="${escapeHtml(capitalize(item.difficulty))}" data-depth="${item.diagnostic_depth??""}" data-complex="${formatNumber(item.environmental_complexity)}">${String(item.alias).padStart(2,"0")}</th>`;
+            const cases=[...payload.cases].sort((a,b)=>Number(a.citation_tag.split("-").at(-1))-Number(b.citation_tag.split("-").at(-1)));
+            cases.forEach((item,i)=>{
+                const mark=MARKS[item.mark];
+                numRow+=`<th class="num cat-${escapeHtml(cat)}${item.difficulty==="hard"?" num-hard":""}${String(item.difficulty).toLowerCase()==="unknown"?" num-unknown":""}${mark?` ${mark.cls}`:""}${i===0?" cat-start":""}" data-citation-tag="${escapeHtml(item.citation_tag)}" data-name="${escapeHtml(item.case_name)}" data-case="${escapeHtml(item.case_id)}" data-scenario="${escapeHtml(item.scenario_id)}" data-difficulty="${escapeHtml(capitalize(item.difficulty))}" data-depth="${item.diagnostic_depth??""}" data-complex="${formatNumber(item.environmental_complexity)}" data-mark="${item.mark??""}">${escapeHtml(item.citation_tag.split("-").at(-1))}</th>`;
             });
             numRow+=`<th class="rate">easy</th><th class="rate">hard</th>`;
             resultSet.models.forEach(m=>{
-                cellsByModel[m.id]+=payload.cases.map((item,i)=>{
+                cellsByModel[m.id]+=cases.map((item,i)=>{
                     const cellKey=`${cat}|${item.scenario_id}/${item.case_id}|${m.id}`;
                     const hit=marks.get(cellKey);
                     const run=runMap.get(cellKey);
                     const rec=run&&hit!=="s"?analysisByRun[run.run_key]:null;
-                    const staleTitle=hit==="s"?' title="场景增强前的旧结果，已作废待重跑"':"";
+                    const staleTitle=hit==="s"?' title="场景经 PR #260 增强前的旧结果，已作废待重跑"':"";
                     return `<td class="cell cat-${escapeHtml(cat)}${i===0?" cat-start":""}${rec?" cell-analyzed":""}"${rec?` data-run-key="${escapeHtml(run.run_key)}"`:""}${staleTitle}>${hit?`<span class="mark mark-${hit.toLowerCase()}">${hit}</span>`:""}</td>`;
                 }).join("");
                 const b=rates[cat][m.id]||{};
@@ -119,7 +122,7 @@
             });
         });
         const body=resultSet.models.map(m=>`<tr><th class="model-col">${escapeHtml(m.name)}</th>${cellsByModel[m.id]}</tr>`).join("");
-        section.innerHTML=`<div class="matrix-head"><h2>模型 × Case 覆盖矩阵</h2><div class="matrix-meta">T = 有效判定且 OP 通过 · F = 有效判定但 OP 未通过 · S = 场景增强前的旧结果已作废 · 空白 = 无有效结果 · 列号带下划线 = Hard · 列号带中划线 = Unknown · 单元格下划线 = 该 run 已人工分析（悬浮查看结论；作废 run 不显示）· 每类末尾 easy/hard 列为该难度 OP 通过率（分子,分母,百分比）· 悬浮列号查看 Case 名称</div></div><div class="matrix-scroll"><table class="matrix-table"><thead><tr>${catRow}</tr><tr>${numRow}</tr></thead><tbody>${body}</tbody></table></div>`;
+        section.innerHTML=`<div class="matrix-head"><h2>模型 × Case 覆盖矩阵</h2><div class="matrix-meta">T = 有效判定且 OP 通过 · F = 有效判定但 OP 未通过 · S = 场景增强前的旧结果已作废 · 空白 = 无有效结果 · 列号带下划线 = Hard · 列号带中划线 = Unknown · 列号横条纹 = 历史证据 · 列号竖条纹 = 知识推理 · 单元格下划线 = 该 run 已人工分析（悬浮查看结论；作废 run 不显示）· 每类末尾 easy/hard 列为该难度 OP 通过率（分子,分母,百分比）· 悬浮列号查看 Case 名称</div></div><div class="matrix-scroll"><table class="matrix-table"><thead><tr>${catRow}</tr><tr>${numRow}</tr></thead><tbody>${body}</tbody></table></div>`;
         const sc=section.querySelector(".matrix-scroll");
         if(sc&&prevScroll)sc.scrollLeft=prevScroll;
     }
@@ -128,7 +131,9 @@
     function showMatrixTooltip(th){
         if(!matrixTooltip){matrixTooltip=document.createElement("div");matrixTooltip.className="matrix-tooltip";document.body.appendChild(matrixTooltip);}
         const depth=th.dataset.depth||"—",complex=th.dataset.complex||"—";
-        matrixTooltip.innerHTML=`<div class="t-name">${escapeHtml(th.dataset.case||"")}</div><div class="t-sub">${escapeHtml(th.dataset.scenario||"")}</div><div class="t-sub">${escapeHtml(th.dataset.name||"")}</div><div class="t-sub">${escapeHtml(th.dataset.difficulty||"")} · 诊断深度 ${escapeHtml(depth)} · 环境复杂度 ${escapeHtml(complex)}</div>`;
+        const mark=MARKS[th.dataset.mark];
+        const markLine=mark?`<div class="t-sub">标记：${mark.label}</div>`:"";
+        matrixTooltip.innerHTML=`<div class="t-name">${escapeHtml(th.dataset.citationTag)}</div><div class="t-sub">${escapeHtml(th.dataset.case||"")}</div><div class="t-sub">${escapeHtml(th.dataset.scenario||"")}</div><div class="t-sub">${escapeHtml(th.dataset.name||"")}</div><div class="t-sub">${escapeHtml(th.dataset.difficulty||"")} · 诊断深度 ${escapeHtml(depth)} · 环境复杂度 ${escapeHtml(complex)}</div>${markLine}`;
         matrixTooltip.style.display="block";
         const rect=th.getBoundingClientRect(),w=matrixTooltip.offsetWidth,h=matrixTooltip.offsetHeight;
         const left=Math.max(8,Math.min(rect.left+rect.width/2-w/2,window.innerWidth-w-8));
@@ -142,9 +147,9 @@
         if(!matrixTooltip){matrixTooltip=document.createElement("div");matrixTooltip.className="matrix-tooltip";document.body.appendChild(matrixTooltip);}
         const labels=(rec.dominant_labels||[]).join(", ")||"无";
         const artifact=rec.measurement_artifact
-            ?`<div class="t-sub">评测伪影：${escapeHtml(rec.measurement_artifact.kind||"")}${rec.measurement_artifact.check?` · ${escapeHtml(rec.measurement_artifact.check)}`:""}<br>${escapeHtml(rec.measurement_artifact.detail||"")}</div>`
+            ?`<div class="t-sub">评测伪影：${escapeHtml(rec.measurement_artifact)}</div>`
             :"";
-        matrixTooltip.innerHTML=`<div class="t-name">Run 分析 · ${escapeHtml(String(rec.analyzed_at||"").replace("T"," ").slice(0,16))}</div><div class="t-sub">主导标签：${escapeHtml(labels)}</div><div class="t-body">${escapeHtml(rec.verdict||"")}</div>${artifact}`;
+        matrixTooltip.innerHTML=`<div class="t-name">Run 分析 · ${escapeHtml(rec.review_pass||"")}</div><div class="t-sub">主导标签：${escapeHtml(labels)}</div><div class="t-body">${escapeHtml(rec.verdict||"")}</div>${artifact}`;
         matrixTooltip.style.display="block";
         const rect=td.getBoundingClientRect(),w=matrixTooltip.offsetWidth,h=matrixTooltip.offsetHeight;
         const left=Math.max(8,Math.min(rect.left+rect.width/2-w/2,window.innerWidth-w-8));
@@ -156,7 +161,7 @@
 
     function caseTable(payload){
         const id=`${payload.result_set_id}:${payload.category.id}:cases`;
-        const rows=payload.cases.map(item=>`<tr><td class="number" data-sort-value="${item.alias}">${item.alias}</td><td data-filter-value="${escapeHtml(item.scenario_id)}">${escapeHtml(item.scenario_name)}</td><td data-filter-value="${escapeHtml(item.case_id)}">${escapeHtml(item.case_name)}</td><td>${escapeHtml(capitalize(item.difficulty))}</td><td class="number">${item.diagnostic_depth}</td><td class="number">${formatNumber(item.environmental_complexity)}</td></tr>`).join("");
+        const rows=payload.cases.map(item=>`<tr><td class="number" data-sort-value="${item.citation_tag}">${item.citation_tag}</td><td data-filter-value="${escapeHtml(item.scenario_id)}">${escapeHtml(item.scenario_name)}</td><td data-filter-value="${escapeHtml(item.case_id)}">${escapeHtml(item.case_name)}</td><td>${escapeHtml(capitalize(item.difficulty))}</td><td class="number">${item.diagnostic_depth}</td><td class="number">${formatNumber(item.environmental_complexity)}</td></tr>`).join("");
         return table(`<table class="results-table" data-table-id="${id}"><thead><tr><th class="number">别名</th><th data-filter>Scenario</th><th data-filter>ScenarioCase</th><th>难度</th><th class="number">诊断深度</th><th class="number">环境复杂度</th></tr></thead><tbody>${rows}</tbody></table>`);
     }
 
@@ -164,13 +169,13 @@
         const id=`${payload.result_set_id}:${payload.category.id}:runs`;
         const cases=new Map(payload.cases.map(item=>[`${item.scenario_id}/${item.case_id}`,item]));
         const rows=[...payload.runs].sort((a,b)=>{
-            const aa=cases.get(`${a.scenario_id}/${a.case_id}`).alias;
-            const ba=cases.get(`${b.scenario_id}/${b.case_id}`).alias;
-            return aa-ba||a.model.agent_id.localeCompare(b.model.agent_id)||a.repetition-b.repetition;
+            const aa=cases.get(`${a.scenario_id}/${a.case_id}`).citation_tag;
+            const ba=cases.get(`${b.scenario_id}/${b.case_id}`).citation_tag;
+            return aa.localeCompare(ba)||a.model.agent_id.localeCompare(b.model.agent_id)||a.repetition-b.repetition;
         }).map(run=>{
             const item=cases.get(`${run.scenario_id}/${run.case_id}`),evaluation=run.evaluation||{},timing=run.timing||{};
             const trace=run.provenance&&run.provenance.trace_path?`<a class="trace-link" href="/${escapeHtml(run.provenance.trace_path)}">Trace</a>`:"-";
-            return `<tr><td class="number" data-sort-value="${item.alias}">${item.alias}</td><td data-filter-value="${escapeHtml(item.scenario_id)}">${escapeHtml(item.scenario_name)}</td><td data-filter-value="${escapeHtml(item.case_id)}">${escapeHtml(item.case_name)}</td><td data-filter-value="${escapeHtml(run.model.agent_id)}">${escapeHtml(run.model.model_name)}</td><td><span class="status ${escapeHtml(run.execution.status)}">${escapeHtml(run.execution.status)}</span>${run.evaluation&&run.evaluation.superseded?'<div class="run-sub">旧结果已作废</div>':""}</td><td class="number" data-sort-value="${sortNum(run.interaction&&run.interaction.iterations)}">${show(run.interaction&&run.interaction.iterations)}</td><td class="number" data-sort-value="${sortNum(run.interaction&&run.interaction.tool_calls)}">${show(run.interaction&&run.interaction.tool_calls)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.input)}">${show(run.tokens&&run.tokens.input)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.cache_input)}">${show(run.tokens&&run.tokens.cache_input)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.output)}">${show(run.tokens&&run.tokens.output)}</td><td class="center" data-sort-value="${passSort(evaluation.DiagnosisPass)}">${pass(evaluation.DiagnosisPass)}</td><td class="center" data-sort-value="${passSort(evaluation.OutcomePass)}">${pass(evaluation.OutcomePass)}</td><td class="center" data-sort-value="${passSort(evaluation.SafePass)}">${pass(evaluation.SafePass)}</td><td class="number" data-sort-value="${sortNum(timing.container_start_seconds)}">${seconds(timing.container_start_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.preparation_seconds)}">${seconds(timing.preparation_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.agent_interaction_seconds)}">${seconds(timing.agent_interaction_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.evaluation_seconds)}">${seconds(timing.evaluation_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.cleanup_seconds)}">${seconds(timing.cleanup_seconds)}</td><td class="number" data-sort-value="${sortNum(run.execution.duration_seconds)}">${seconds(run.execution.duration_seconds)}</td><td class="center" data-sort-value="${run.fault_snapshot&&run.fault_snapshot.used?1:0}">${run.fault_snapshot&&run.fault_snapshot.used?"是":"否"}</td><td>${trace}</td></tr>`;
+            return `<tr><td class="number" data-sort-value="${item.citation_tag}">${item.citation_tag}</td><td data-filter-value="${escapeHtml(item.scenario_id)}">${escapeHtml(item.scenario_name)}</td><td data-filter-value="${escapeHtml(item.case_id)}">${escapeHtml(item.case_name)}</td><td data-filter-value="${escapeHtml(run.model.agent_id)}">${escapeHtml(run.model.model_name)}</td><td><span class="status ${escapeHtml(run.execution.status)}">${escapeHtml(run.execution.status)}</span>${run.evaluation&&run.evaluation.superseded?'<div class="run-sub">场景增强前的旧结果已作废</div>':""}</td><td class="number" data-sort-value="${sortNum(run.interaction&&run.interaction.iterations)}">${show(run.interaction&&run.interaction.iterations)}</td><td class="number" data-sort-value="${sortNum(run.interaction&&run.interaction.tool_calls)}">${show(run.interaction&&run.interaction.tool_calls)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.input)}">${show(run.tokens&&run.tokens.input)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.cache_input)}">${show(run.tokens&&run.tokens.cache_input)}</td><td class="number" data-sort-value="${sortNum(run.tokens&&run.tokens.output)}">${show(run.tokens&&run.tokens.output)}</td><td class="center" data-sort-value="${passSort(evaluation.DiagnosisPass)}">${pass(evaluation.DiagnosisPass)}</td><td class="center" data-sort-value="${passSort(evaluation.OutcomePass)}">${pass(evaluation.OutcomePass)}</td><td class="center" data-sort-value="${passSort(evaluation.SafePass)}">${pass(evaluation.SafePass)}</td><td class="number" data-sort-value="${sortNum(timing.container_start_seconds)}">${seconds(timing.container_start_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.preparation_seconds)}">${seconds(timing.preparation_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.agent_interaction_seconds)}">${seconds(timing.agent_interaction_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.evaluation_seconds)}">${seconds(timing.evaluation_seconds)}</td><td class="number" data-sort-value="${sortNum(timing.cleanup_seconds)}">${seconds(timing.cleanup_seconds)}</td><td class="number" data-sort-value="${sortNum(run.execution.duration_seconds)}">${seconds(run.execution.duration_seconds)}</td><td class="center" data-sort-value="${run.fault_snapshot&&run.fault_snapshot.used?1:0}">${run.fault_snapshot&&run.fault_snapshot.used?"是":"否"}</td><td>${trace}</td></tr>`;
         }).join("");
         const body=rows||`<tr class="empty-row"><td colspan="21" class="empty">暂无 Run</td></tr>`;
         return table(`<table class="results-table run-table" data-table-id="${id}"><thead><tr><th class="number">Case</th><th data-filter>Scenario</th><th data-filter>ScenarioCase</th><th data-filter>模型</th><th>状态</th><th class="number">轮数</th><th class="number">工具</th><th class="number">Input</th><th class="number">Cache input</th><th class="number">Output</th><th class="center">DP</th><th class="center">OP</th><th class="center">SP</th><th class="number">容器</th><th class="number">准备</th><th class="number">交互</th><th class="number">评估</th><th class="number">清理</th><th class="number">总时长</th><th class="center">Snapshot</th><th>溯源</th></tr></thead><tbody>${body}</tbody></table>`);

@@ -9,8 +9,8 @@ sys.path.insert(0, project_root)
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.postgres import PgBusinessChangeFkValidationScenario
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -274,7 +274,7 @@ def main():
     parser.add_argument("--mode", choices=["mock", "zero", "llm", "all"], default="mock")
     parser.add_argument("--port", type=int, default=15461)
     parser.add_argument("--container-name", default="aiopsbench-run-pg-business-change-fk-validation")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
@@ -287,8 +287,6 @@ def main():
         raise ValueError("--max-turns must be <= 30")
     if args.mode != "llm" and args.diagnosis_match_mode == "semantic":
         raise ValueError("semantic diagnosis matching requires --mode llm")
-    if args.diagnosis_match_mode == "semantic" and args.diagnosis_semantic_model != args.model:
-        raise ValueError("semantic diagnosis judge model must match the agent model")
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode=args.fault_snapshot_mode,
         fault_snapshot_name=args.fault_snapshot_name,

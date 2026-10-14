@@ -2,14 +2,8 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
 from src.scenarios.evaluation.tidb.system_failure.clustered_index_consistency import (
     TidbSystemFailureClusteredIndexConsistencyEvaluatorCase,
     TidbSystemFailureClusteredIndexConsistencyRecoveryEvaluatorCase,
@@ -21,13 +15,8 @@ from src.scenarios.tidb.common import (
     require_sql_success,
     validate_sql_identifier,
 )
-from src.scenarios.tidb.runtime import (
-    TIDB_V6_5_0,
-    TIDB_V7_5_0,
-    canonical_tidb_version,
-    tidb_runtime,
-)
-from src.scenarios.workloads import WorkloadProfile
+from src.execution.tidb_runtime import TIDB_V6_5_0, TIDB_V7_5_0, canonical_tidb_version, tidb_runtime
+from src.workloads.specs import WorkloadProfile
 
 
 _DATABASE = "benchops"

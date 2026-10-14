@@ -12,7 +12,7 @@ from src.scenarios.evaluation.outcome import (
 )
 from src.database.postgres import execution_time_seconds
 from src.database.postgres import PostgresIndexSignature
-from src.scenarios.evaluation.protocol import DiagnosisCondition, StructuredReport
+from src.protocols.report import DiagnosisCondition, StructuredReport
 from src.scenarios.evaluation.safety import ProtectedObjectRule, SafetyRuleResult
 
 from .base import (

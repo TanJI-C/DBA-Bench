@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.execution.backup_rpo import RpoPGEnv, RpoTopology
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.postgres.health_check.backup_rpo_certification import (
@@ -918,7 +918,7 @@ def main() -> None:
     parser.add_argument("--case", choices=("throughput_gap", "throughput_gap_simple"), required=True)
     parser.add_argument("--primary-port", type=int, default=15811)
     parser.add_argument("--restore-port", type=int, default=15812)
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--reasoning-effort", default=None)
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=20)

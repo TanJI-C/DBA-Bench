@@ -13,7 +13,7 @@ from datetime import datetime
 import pymysql
 
 from src.database.sql import sql_literal
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.business_change.pitr_checkpoint_recovery import (
     TidbBusinessChangePitrCheckpointRecoveryEvaluatorCase,
     TidbBusinessChangePitrCheckpointRecoverySingleInterruptionEvaluatorCase,
@@ -25,18 +25,12 @@ from src.scenarios.tidb.common import (
     require_sql_success,
     run_sql_batches,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBCaseRuntime,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.specs import TiDBCaseRuntime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

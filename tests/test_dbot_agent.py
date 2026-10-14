@@ -18,7 +18,7 @@ from src.agents.baselines.dbot.knowledge import DbotKnowledge
 from src.agents.baselines.dbot.mcts import TreeSearchConfig
 from src.agents.baselines.dbot.prompts import DBOT_FINAL_TURN_PROMPT
 from src.agents.baselines.dbot.types import DbotReport, ExpertDiagnosis
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 def db_gpt_tool_schemas():

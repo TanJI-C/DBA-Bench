@@ -59,7 +59,7 @@ The following fields are the public state boundary exposed by the current Case c
 - Initial-state fields: `endpoint`, `report`, `status`
 - Expected-target fields: `cartesian_join_removed`, `null_semantics_preserved`, `result_consistent`, `status`
 - Background profiles: qp06_order_risk_report, qp06_rule_point_lookup, qp06_gate_point_lookup, qp06_region_point_lookup
-- Evaluator: `src.scenarios.evaluation.tidb.query_perf.case_when_in_cartesian_semi_join.TidbQueryPerfCaseWhenInCartesianSemiJoinSimplifiedEvaluatorCase`
+- Evaluator: `src.scenarios.evaluation.tidb.query_perf.case_when_in_cartesian_semi_join.TidbQueryPerfCaseWhenInCartesianSemiJoinSimpleEvaluatorCase`
 - Calibration ledger: maintained by the Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md); counting basis is all reference-path key tools with unfiltered results.
 
 ## 4. Agent-visible evidence

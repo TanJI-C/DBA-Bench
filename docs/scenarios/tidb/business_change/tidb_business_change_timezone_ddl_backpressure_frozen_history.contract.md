@@ -5,7 +5,7 @@ status: canonical
 audience: [authoring, reviewer, runtime_agent, maintainer]
 exposure: agent_safe
 scope: [tidb, business_change, frozen_history]
-summary: Frozen-history contract for separating sink backlog from a later timezone-sensitive DDL failure.
+summary: TiDB timezone DDL frozen-history contract for separating sink backlog from a later timezone-sensitive DDL failure.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.evaluation.dp-op-sp]
 language: en

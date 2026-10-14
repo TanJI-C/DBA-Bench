@@ -5,7 +5,7 @@ status: canonical
 audience: [authoring, reviewer, runtime_agent, maintainer]
 exposure: agent_safe
 scope: [tidb, query_perf, frozen_history]
-summary: Code-backed frozen-history contract for the set-autocommit storm history investigation, including causal diagnosis, target-only recovery, safety boundaries, and provisional calibration.
+summary: Code-backed frozen-history contract for the TiDB autocommit storm history investigation, including causal diagnosis, target-only recovery, safety boundaries, and provisional calibration.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
 language: en

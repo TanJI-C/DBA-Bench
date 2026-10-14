@@ -1,11 +1,12 @@
+from types import SimpleNamespace
 import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.tidb_metrics import CASE_ONLY_METRICS, TIDB_METRIC_CATALOG
-from src.scenarios.workloads import SessionSetupBehavior, WorkloadProfile
+from src.workloads.specs import SessionSetupBehavior, WorkloadProfile
 
 
 PUBLIC_TIDB_TOOLS = {
@@ -18,6 +19,22 @@ PUBLIC_TIDB_TOOLS = {
     "submit",
     "exit",
 }
+
+
+def test_trusted_region_health_combines_environment_and_deployment_observations(monkeypatch):
+    deployment = FakeDeployment()
+    deployment.stores = SimpleNamespace(
+        region_health_observation=lambda: {"pending_peers": 0, "down_peers": 0},
+    )
+    env = TiDBEnv(deployment=deployment)
+    monkeypatch.setattr(env, "_region_health_snapshot", lambda: {"region_count": 16})
+
+    assert json.loads(env.observe_metric("region_health")) == {
+        "status": "success",
+        "metric": "region_health",
+        "kind": "snapshot",
+        "snapshot": {"region_count": 16, "pending_peers": 0, "down_peers": 0},
+    }
 
 
 class FakeDeployment:
@@ -40,6 +57,7 @@ class FakeDeployment:
     }
 
     def __init__(self):
+        self.network = SimpleNamespace(allow_pd_network=self.allow_pd_network, inspect_pd_network=self.inspect_pd_network)
         self.actions = []
         self.waits = []
         self.pd_requests = []
@@ -727,7 +745,7 @@ def test_execute_sql_dispatches_registered_surface_and_removes_it_on_unregister(
     monkeypatch.setattr(
         env,
         "_execute_sql_on_connection",
-        lambda current_connection, sql_query: json.dumps({
+        lambda current_connection, sql_query, *, bound_result: json.dumps({
             "status": "success",
             "database": seen[0],
             "sql": sql_query,
@@ -779,7 +797,7 @@ def test_dm_action_write_policy_is_visible_and_blocks_control_plane_bypass(monke
     monkeypatch.setattr(
         env,
         "_execute_sql_on_connection",
-        lambda connection, sql_query: json.dumps({"status": "success", "sql": sql_query}),
+        lambda connection, sql_query, *, bound_result: json.dumps({"status": "success", "sql": sql_query}),
     )
 
     assert json.loads(
@@ -853,7 +871,7 @@ def test_manage_cluster_definition_covers_the_runtime_operation_surface():
         "network": {"get", "update"},
         "router": {"get", "update", "drain"},
         "changefeed": {"get", "update", "pause", "resume", "recreate"},
-        "job": {"get", "check", "update", "wait", "refresh_binding", "start"},
+        "job": {"get", "check", "update", "wait", "refresh_binding", "start", "observe", "release_prefix_quarantine"},
         "release": {"get", "prepare", "snapshot", "verify", "upgrade", "rollback"},
         "monitoring": {"get"},
         "pd_recovery": {"inspect", "execute"},

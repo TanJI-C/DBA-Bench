@@ -2,11 +2,14 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
+pytestmark = pytest.mark.usefixtures("isolated_host_ports")
+
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.execution.deployment import PGDockerDeployment
+from src.execution.deployments.postgres import PGDockerDeployment
 
 
 def test_pg_deployment_adds_custom_network_once():
@@ -63,8 +66,8 @@ def test_pg_init_restarts_after_large_import_shutdown_timeout(monkeypatch, tmp_p
             return SimpleNamespace(stdout="", stderr="", returncode=0)
         return SimpleNamespace(stdout="", stderr="", returncode=0)
 
-    monkeypatch.setattr("src.execution.deployment.subprocess.run", fake_run)
-    monkeypatch.setattr("src.execution.deployment.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("src.execution.deployments.postgres.subprocess.run", fake_run)
+    monkeypatch.setattr("src.execution.deployments.postgres.time.sleep", lambda _seconds: None)
     monkeypatch.setattr(
         deployment,
         "_build_docker_run_command",
@@ -86,7 +89,7 @@ def _record_deploy_commands(monkeypatch, deployment):
             return SimpleNamespace(stdout="", stderr="no such image", returncode=1)
         return SimpleNamespace(stdout="", stderr="", returncode=0)
 
-    monkeypatch.setattr("src.execution.deployment.subprocess.run", fake_run)
+    monkeypatch.setattr("src.execution.deployments.postgres.subprocess.run", fake_run)
     monkeypatch.setattr(deployment, "initialize_dataset_container", lambda: None)
     monkeypatch.setattr(deployment, "_ensure_owned_resources", lambda: None)
     monkeypatch.setattr(deployment, "is_container_running", lambda: False)
@@ -94,7 +97,7 @@ def _record_deploy_commands(monkeypatch, deployment):
     return calls
 
 
-def test_pg_deploy_builds_base_image_without_workload_data(monkeypatch):
+def test_pg_deploy_builds_base_image_without_workload_data(monkeypatch, isolated_host_ports):
     deployment = PGDockerDeployment(container_name="test-base-image")
     calls = _record_deploy_commands(monkeypatch, deployment)
 
@@ -105,7 +108,7 @@ def test_pg_deploy_builds_base_image_without_workload_data(monkeypatch):
     assert ["docker", "run", "main"] in calls
 
 
-def test_pg_deploy_labels_dataset_image_with_workload_data(monkeypatch, tmp_path):
+def test_pg_deploy_labels_dataset_image_with_workload_data(monkeypatch, tmp_path, isolated_host_ports):
     deployment = PGDockerDeployment(container_name="test-dataset-image", workload_data_dir=str(tmp_path / "data"))
     calls = _record_deploy_commands(monkeypatch, deployment)
     monkeypatch.setattr(deployment, "_dataset_ready_label", lambda: "ready-123")

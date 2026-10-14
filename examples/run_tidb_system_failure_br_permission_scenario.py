@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.scenarios.tidb import TidbSystemFailureBrPermissionScenario
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.system_failure.runtime.br_permission import BrPermissionEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -349,7 +349,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run the TiDB SF06 BR permission scenario.")
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=["mock", "llm"], default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -358,7 +358,7 @@ def main():
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
-    env = TiDBEnv(
+    env = BrPermissionEnv(
         run_id=args.container_name.removeprefix("aiopsbench-"),
         port_base=args.port,
         enabled_tools=SF06_ENABLED_TOOLS,

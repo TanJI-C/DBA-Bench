@@ -26,6 +26,7 @@ SCAN_SUFFIXES = {
 # data/workloads/tpcds/tpcds-kit is vendored upstream content outside this
 # repository's authoring surface.
 EXCLUDED_PATHS = (
+    Path("tests/test_agent_facing_text.py"),
     Path("data") / "workloads" / "tpcds" / "tpcds-kit",
 )
 

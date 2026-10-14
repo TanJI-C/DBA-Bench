@@ -6,8 +6,8 @@ import pytest
 from src.scenarios.postgres import (
     PgSystemFailureXidWraparoundScenario,
 )
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.postgres.system_failure.connection_bloat import PgSystemFailureConnectionBloatInjector
 from src.scenarios.postgres.query_perf.stale_stats_lock_contention import PgQueryPerfStaleStatsLockContentionInjector
 from src.scenarios.postgres.business_change.io_saturation import PgBusinessChangeIoSaturationInjector

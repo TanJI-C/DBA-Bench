@@ -324,7 +324,7 @@ document; the corresponding rows are marked with `—`; all other scenarios link
 
 | tag | scenario_id | spec |
 | --- | --- | --- |
-| `PG-PS-01` | `pg_continuous_ops_business_priority_v2` | `src/persistent_scenarios/postgres/pg_continuous_ops_business_priority_v2.yaml` |
+| `PG-PS-01` | `pg_continuous_ops_business_priority` | `src/persistent_scenarios/postgres/pg_continuous_ops_business_priority.yaml` |
 | `PG-PS-02` | `pg_htap_replica_freshness` | `src/persistent_scenarios/postgres/pg_htap_replica_freshness.yaml` |
 | `PG-PS-03` | `pg_htap_shared_resource_isolation` | `src/persistent_scenarios/postgres/pg_htap_shared_resource_isolation.yaml` |
 | `PG-PS-04` | `pg_oltp_online_change` | `src/persistent_scenarios/postgres/pg_oltp_online_change.yaml` |

@@ -149,7 +149,7 @@ class TargetLockClearedVerifier(OutcomeVerifier):
     def verify(self, context) -> OutcomeCheck:
         evidence = _evidence(context)
         try:
-            scan = context.case_run.env.deployment.mvcc_lock_list(
+            scan = context.case_run.env.deployment.mvcc.mvcc_lock_list(
                 int(evidence["region_id"]),
                 list(evidence["store_targets"]),
                 32,

@@ -9,7 +9,8 @@ from examples.run_tidb_system_failure_clustered_index_consistency_scenario impor
 )
 from src.scenarios import SCENARIOS_BY_ID
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.scenarios.evaluation.safety import SafetyContext, TraceEvent

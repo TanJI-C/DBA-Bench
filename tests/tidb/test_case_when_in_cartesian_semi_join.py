@@ -11,7 +11,7 @@ from src.scenarios.evaluation.semantic import (
     SemanticJudgment,
 )
 from src.database.query_results import capture_query_result_truth
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios import SCENARIOS_BY_ID
 from src.scenarios.base import CaseRun
 from src.scenarios.faults import FaultLifecycleContext

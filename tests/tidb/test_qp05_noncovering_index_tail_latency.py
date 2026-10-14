@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.semantic import (
     SemanticConditionJudgment,
     SemanticJudgment,
@@ -1078,7 +1078,7 @@ def test_qp05_formal_entry_has_required_case_and_structured_mock_report():
 def test_qp05_formal_entry_exposes_existing_persistent_storage_options():
     from pathlib import Path
 
-    from src.benchmark.runner import script_options
+    from src.benchmark.commands import script_options
 
     options = script_options(
         Path(__file__).parents[2]

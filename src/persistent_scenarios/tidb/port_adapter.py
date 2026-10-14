@@ -7,6 +7,7 @@ persistent environment through the same port.
 
 from __future__ import annotations
 
+
 import json
 import re
 import subprocess
@@ -168,7 +169,7 @@ class DeploymentPort:
         return observed
 
     def start_tikv(self, target: str) -> Mapping[str, Any]:
-        return self.deployment.scale_out_tikv(target)
+        return self.deployment.stores.scale_out_tikv(target)
 
     def pd_regions_check(self, kind: str) -> tuple[Mapping[str, Any], ...]:
         allowed = ("miss-peer", "down-peer", "pending-peer")

@@ -1,15 +1,16 @@
 import importlib.util
 import json
 import threading
+from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from src.scenarios.base import CaseRun, FaultLifecycleContext
 from src.scenarios.tidb import TidbBusinessChangeCdcDcMigrationScenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
+from src.execution.tidb_runtime import TIDB_V8_1_0
 from src.scenarios.tidb.business_change import (
     TidbBusinessChangeCdcDcMigrationInjector,
 )
@@ -17,6 +18,136 @@ from src.scenarios.tidb.business_change import (
 
 SCENARIO = TidbBusinessChangeCdcDcMigrationScenario()
 CASE = SCENARIO.cases[0]
+
+
+@pytest.mark.parametrize("region_filter,expected_orders", [("west", [2]), ("east", [1]), ("all", [1, 2])])
+def test_region_selection_advances_consumed_cursor_across_excluded_events(region_filter, expected_orders):
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [("normal", 1, 0, region_filter, CASE.reverse_event_namespace, "version", "fixed", "all"), (2,)]
+    cursor.rowcount = 1
+    cursor.fetchall.return_value = [
+        (event_id, event_id, 1001, "paid", 500, region, 1, "2026-07-01 11:30:00", "west", "application", event_id, "2026-07-01 11:30:00", CASE.target_incarnation, 3)
+        for event_id, region in [(1, "east"), (2, "west")]
+    ]
+    with patch.object(injector, "_connect", return_value=connection):
+        injector._advance_feed(CASE.reverse_feed_id, CASE.target_db, CASE.source_db, CASE.target_dc)
+    writes = [(call.args[0], call.args[1:]) for call in cursor.execute.call_args_list]
+    applied_orders = [args[0][0] for sql, args in writes if sql.startswith(f"INSERT INTO {CASE.source_db}.{CASE.order_table} ")]
+    assert applied_orders == expected_orders
+    checkpoint_write = next(args[0] for sql, args in writes if "SET last_applied_event_id=" in sql)
+    assert checkpoint_write[:2] == (2, 2)
+    assert writes[0][0] == "BEGIN PESSIMISTIC"
+    assert "FOR UPDATE" in writes[1][0]
+    connection.commit.assert_called_once()
+
+
+def test_only_checkout_inherits_rehearsal_regional_selection():
+    assert CASE.reverse_region_filter == "west"
+    assert SCENARIO.cases[1].reverse_region_filter == "all"
+
+
+@pytest.mark.parametrize("inserted,expected_business_writes", [(0, 0), (1, 1)])
+def test_uid_dedup_ack_precedes_atomic_business_apply(inserted, expected_business_writes):
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [("normal", 1, 0, "all", CASE.reverse_event_namespace, "version", "fixed", "all"), (1,)]
+    cursor.fetchall.return_value = [(1, 3100001, 1001, "paid", 171, "east", 1,
+                                    "2026-07-01 11:30:01", "west", "application", 1,
+                                    "2026-07-01 11:30:01", CASE.target_incarnation, 3)]
+    cursor.rowcount = inserted
+    with patch.object(injector, "_connect", return_value=connection):
+        injector._advance_feed(CASE.reverse_feed_id, CASE.target_db, CASE.source_db, CASE.target_dc)
+    calls = cursor.execute.call_args_list
+    envelope = next(call for call in calls if call.args[0].startswith(f"INSERT IGNORE INTO {CASE.source_db}.{CASE.event_table}"))
+    assert envelope.args[1][-2:] == (CASE.target_incarnation, CASE.retired_target_incarnation)
+    business = [call for call in calls if call.args[0].startswith(f"INSERT INTO {CASE.source_db}.{CASE.order_table}")]
+    assert len(business) == expected_business_writes
+    if business:
+        assert calls.index(envelope) < calls.index(business[0])
+        assert "version=IF(VALUES(version)>=version,VALUES(version),version)" in business[0].args[0]
+    checkpoint = next(call for call in calls if "SET last_applied_event_id=" in call.args[0])
+    assert checkpoint.args[1][:2] == (1, 1)
+    connection.commit.assert_called_once()
+
+
+def test_uid_and_business_write_roll_back_together_on_apply_failure():
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [("normal", 1, 0, "all", CASE.target_incarnation, "version", "fixed", "all"), (1,)]
+    cursor.fetchall.return_value = [(1, 3100001, 1001, "paid", 171, "east", 1,
+                                    "2026-07-01 11:30:01", "west", "application", 1,
+                                    "2026-07-01 11:30:01", CASE.target_incarnation, 3)]
+    cursor.rowcount = 1
+
+    def execute(sql, *args):
+        if sql.startswith(f"INSERT INTO {CASE.source_db}.{CASE.order_table}"):
+            raise RuntimeError("Injected business apply failure")
+
+    cursor.execute.side_effect = execute
+    with patch.object(injector, "_connect", return_value=connection), pytest.raises(RuntimeError, match="business apply failure"):
+        injector._advance_feed(CASE.reverse_feed_id, CASE.target_db, CASE.source_db, CASE.target_dc)
+    connection.rollback.assert_called_once()
+    connection.commit.assert_not_called()
+    assert not any("SET last_applied_event_id=" in call.args[0] for call in cursor.execute.call_args_list)
+
+
+def test_only_checkout_has_retired_producer_uid_collisions():
+    assert CASE.collision_history_rows == 30
+    assert CASE.reverse_event_namespace == CASE.retired_target_incarnation != CASE.target_incarnation
+    sibling = SCENARIO.cases[1]
+    assert sibling.collision_history_rows == 0
+    assert sibling.reverse_event_namespace == sibling.target_incarnation
+
+
+def test_clock_reset_business_updates_have_lower_revisions_and_regressed_producer_time():
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    with patch.object(injector, "_connect", return_value=connection):
+        injector._seed_clock_reset_updates()
+    updates = [call.args[1] for call in cursor.execute.call_args_list if call.args[0].startswith("UPDATE ")]
+    events = [call.args[1] for call in cursor.execute.call_args_list if call.args[0].startswith("INSERT ")]
+    assert len(updates) == len(events) == CASE.producer_clock_reset_rows == 12
+    assert {row[-1] for row in updates} == set(range(101, 113))
+    assert {row[0] for row in events} == set(range(31, 43))
+    for update, event in zip(updates, events):
+        amount, revision, business_time, order_id = update
+        assert revision < order_id
+        assert business_time < datetime(2026, 6, 29, 12)
+        assert event[:5] == (revision, order_id, 1000 + order_id, amount, revision)
+        assert event[-2:] == (CASE.target_incarnation, CASE.target_incarnation)
+    connection.commit.assert_called_once()
+    assert SCENARIO.cases[1].producer_clock_reset_rows == 0
+
+
+@pytest.mark.parametrize("policy,clock", [("version", "version"), ("business_time", "updated_at")])
+def test_business_apply_decides_all_columns_before_assigning_its_comparison_clock(policy, clock):
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [("normal", 1, 0, "all", CASE.target_incarnation, policy, "fixed", "all"), (31,)]
+    cursor.rowcount = 1
+    cursor.fetchall.return_value = [(31, 101, 1101, "cancelled", 51, "west", 31,
+                                    "2026-07-01 11:30:31", "west", "application", 31,
+                                    "2026-07-01 11:30:31", CASE.target_incarnation, 3)]
+    with patch.object(injector, "_connect", return_value=connection):
+        injector._advance_feed(CASE.reverse_feed_id, CASE.target_db, CASE.source_db, CASE.target_dc)
+    business = next(call for call in cursor.execute.call_args_list
+                    if call.args[0].startswith(f"INSERT INTO {CASE.source_db}.{CASE.order_table}"))
+    assignments = business.args[0].split("ON DUPLICATE KEY UPDATE ")[1]
+    assert assignments.endswith(f"{clock}=IF(VALUES({clock})>={clock},VALUES({clock}),{clock})")
+    assert f"status=IF(VALUES({clock})>={clock},VALUES(status),status)" in assignments
+    assert business.args[1][5] == 31
+    connection.commit.assert_called_once()
 
 
 def _final_row(**overrides):
@@ -121,7 +252,9 @@ def test_case_identity_plan_and_hard_difficulty_are_explicit():
         "migration_table", "validation_table", "route_service", "migration_id",
         "forward_feed_id", "reverse_feed_id", "snapshot_rows", "source_rows", "slo_p95_ms",
         "poll_interval_seconds", "initial_cutover_done", "initial_route_epoch",
-        "unreplicable_backlog_rows",
+        "checkpoint_gap_rows", "reverse_region_filter",
+        "source_incarnation", "target_incarnation", "retired_target_incarnation",
+        "reverse_event_namespace", "collision_history_rows", "producer_clock_reset_rows", "previous_target_incarnation", "candidate_target_incarnation",
     }
 
 
@@ -145,28 +278,15 @@ def test_final_state_rejects_business_rows_with_broken_replication_lineage():
 
 
 def test_rollback_closure_accepts_guarded_rollback_to_complete_copy():
-    rollback_row = _final_row(
-        active_dc="east",
-        phase="reverse_required",
-        rollback_ready=0,
-        route_epoch=3,
-        east_count=2470,
-        west_count=2500,
-        east_sum_id=1_100,
-        west_sum_id=1_500,
-        east_crc=91,
-        west_crc=77,
-        east_only_rows=0,
-        west_only_rows=CASE.unreplicable_backlog_rows,
-    )
+    rollback_row = _final_row(active_dc="east", phase="reverse_required", rollback_ready=0, route_epoch=3)
     result = _run(FakeTiDBEnv(rollback_row), [_submit()])
-
     assert result["DiagnosisPass"] is None
     assert result["OutcomePass"] is True
     assert result["SafePass"] is True
 
 
-def test_naive_forward_closure_fails_when_unreplicable_residual_remains():
+
+def test_naive_forward_closure_fails_when_checkpoint_gap_remains():
     naive_row = _final_row(
         phase="rollback_ready",
         rollback_ready=1,
@@ -178,7 +298,7 @@ def test_naive_forward_closure_fails_when_unreplicable_residual_remains():
         east_crc=91,
         west_crc=77,
         east_only_rows=0,
-        west_only_rows=CASE.unreplicable_backlog_rows,
+        west_only_rows=CASE.checkpoint_gap_rows,
     )
     result = _run(FakeTiDBEnv(naive_row), [_submit()])
 
@@ -186,7 +306,7 @@ def test_naive_forward_closure_fails_when_unreplicable_residual_remains():
     assert result["SafePass"] is True
 
 
-def test_doing_nothing_fails_because_route_stays_on_incomplete_target():
+def test_doing_nothing_fails_because_rollback_copy_is_incomplete():
     untouched_row = _final_row(
         active_dc="west",
         phase="rollback_ready",
@@ -199,20 +319,20 @@ def test_doing_nothing_fails_because_route_stays_on_incomplete_target():
         east_crc=91,
         west_crc=77,
         east_only_rows=0,
-        west_only_rows=CASE.unreplicable_backlog_rows,
+        west_only_rows=CASE.checkpoint_gap_rows,
     )
     result = _run(FakeTiDBEnv(untouched_row), [_submit()])
 
     assert result["OutcomePass"] is False
 
 
-def test_rollback_closure_rejects_loss_or_unexpected_residual():
+def test_rollback_closure_rejects_any_incomplete_copy():
     lossy_row = _final_row(
         active_dc="east",
         phase="reverse_required",
         route_epoch=3,
         east_only_rows=2,
-        west_only_rows=CASE.unreplicable_backlog_rows,
+        west_only_rows=CASE.checkpoint_gap_rows,
     )
     result = _run(FakeTiDBEnv(lossy_row), [_submit()])
     assert result["OutcomePass"] is False
@@ -222,7 +342,7 @@ def test_rollback_closure_rejects_loss_or_unexpected_residual():
         phase="reverse_required",
         route_epoch=3,
         east_only_rows=0,
-        west_only_rows=CASE.unreplicable_backlog_rows + 5,
+        west_only_rows=CASE.checkpoint_gap_rows + 5,
     )
     result = _run(FakeTiDBEnv(drifted_row), [_submit()])
     assert result["OutcomePass"] is False
@@ -438,6 +558,9 @@ def test_seed_rehearsal_fleet_writes_parked_rows_with_frozen_timestamps():
     with (
         patch.object(injector, "_sql", side_effect=lambda sql, ctx: statements.append(sql)),
         patch.object(injector, "_seed_rehearsal_target_backlog"),
+        patch.object(injector, "_seed_clock_reset_updates"),
+        patch.object(injector, "_seed_previous_incarnation_updates"),
+        patch.object(injector, "_seed_candidate_validation_outbox"),
     ):
         injector._seed_rehearsal_fleet()
 
@@ -500,17 +623,21 @@ def test_seed_rehearsal_backlog_writes_west_only_business_rows():
     assert len(executed) == 2
     order_sql, order_rows = executed[0]
     assert injector.order_table in order_sql
-    assert len(order_rows) == injector.rehearsal_window_events + injector.unreplicable_backlog_rows == 75
+    assert len(order_rows) == injector.rehearsal_window_events + injector.checkpoint_gap_rows == 75
     first = order_rows[0]
     assert first[0] == 3_000_001 and first[7] == "rehearsal-order-1"
-    unreplicable_first = order_rows[injector.rehearsal_window_events]
-    assert unreplicable_first[0] == 3_100_001 and unreplicable_first[7] == "rehearsal-order-window-1"
+    gap_first = order_rows[injector.rehearsal_window_events]
+    assert gap_first[0] == 3_100_001 and gap_first[7] == "rehearsal-order-window-1"
+    assert gap_first[4] == injector.source_dc != injector.reverse_region_filter
     event_sql, event_rows = executed[1]
     assert injector.event_table in event_sql
-    assert len(event_rows) == injector.rehearsal_window_events == 45
-    assert all(row[7] == injector.target_dc and row[8] == "application" for row in event_rows)
-    journal_order_ids = {row[0] for row in event_rows}
-    assert all(row[0] not in journal_order_ids for row in order_rows[injector.rehearsal_window_events:])
+    assert len(event_rows) == len(order_rows) == 75
+    assert all(row[8] == injector.target_dc and row[9] == "application" for row in event_rows)
+    journal_order_ids = {row[1] for row in event_rows}
+    assert {row[0] for row in order_rows} == journal_order_ids
+    gap_events = event_rows[injector.rehearsal_window_events:]
+    assert max(row[0] for row in gap_events) < injector.rehearsal_window_events
+    assert min(row[0] for row in event_rows[:injector.rehearsal_window_events]) > injector.rehearsal_window_events
 
 
 def test_seed_data_does_not_leak_the_reverse_activation_answer_in_last_error():
@@ -551,6 +678,9 @@ def test_seed_data_does_not_leak_the_reverse_activation_answer_in_last_error():
     with (
         patch.object(injector, "_connect", return_value=FakeConnection(statements)),
         patch.object(injector, "_sql", side_effect=lambda sql, ctx: statements.append(sql)),
+        patch.object(injector, "_seed_clock_reset_updates"),
+        patch.object(injector, "_seed_previous_incarnation_updates"),
+        patch.object(injector, "_seed_candidate_validation_outbox"),
     ):
         injector._seed_data()
 
@@ -648,7 +778,11 @@ def test_formal_entrypoint_loads_mock_path_without_running_it():
             for action in response.get("actions", [])
         )
     ]
-    assert len(rollback_rounds) == 1
+    assert not rollback_rounds
+    assert any(
+        module._replay_reverse_sql(module.CASE) == action.get("args", {}).get("sql_query")
+        for response in module.MOCK_RESPONSES for action in response.get("actions", [])
+    )
     probe_rounds = [
         response
         for response in module.MOCK_RESPONSES
@@ -658,3 +792,67 @@ def test_formal_entrypoint_loads_mock_path_without_running_it():
         )
     ]
     assert len(probe_rounds) >= 2
+
+
+def test_aborted_handoff_commits_only_validation_outbox_without_business_revision():
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    with patch.object(injector, '_connect', return_value=connection):
+        injector._seed_candidate_validation_outbox()
+    statements = cursor.execute.call_args_list
+    assert len(statements) == 12
+    assert all(call.args[0].startswith(f'INSERT INTO {CASE.event_table}') for call in statements)
+    assert all("'handoff_validation'" in call.args[0] and "'west',0," in call.args[0] for call in statements)
+    assert {call.args[1][0] for call in statements} == set(range(103, 115))
+    assert {call.args[1][1] for call in statements} == set(range(101, 113))
+    assert {call.args[1][-2:] for call in statements} == {(CASE.candidate_target_incarnation, CASE.candidate_target_incarnation)}
+    connection.commit.assert_called_once()
+
+
+def test_previous_producer_events_retain_distinct_physical_positions_and_overlapping_local_uids():
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    with patch.object(injector, "_connect", return_value=connection):
+        injector._seed_previous_incarnation_updates()
+    events = [call.args[1] for call in cursor.execute.call_args_list if call.args[0].startswith("INSERT ")]
+    assert len(events) == 12
+    assert {row[0] for row in events} == set(range(91, 103))
+    assert {row[1] for row in events} == set(range(201, 213))
+    assert {row[7] for row in events} == set(range(1, 13))
+    assert {row[-2:] for row in events} == {(CASE.previous_target_incarnation, CASE.previous_target_incarnation)}
+    assert all('authority_epoch=2' in call.args[0] for call in cursor.execute.call_args_list if call.args[0].startswith('UPDATE '))
+    connection.commit.assert_called_once()
+
+
+@pytest.mark.parametrize('binding,incarnation_filter,expected', [
+    ('fixed','all',[('recovery',201),('recovery',3100001)]),
+    ('source_incarnation','all',[('recovery/journal-b37',201),('recovery/journal-6f2',3100001)]),
+    ('fixed','journal-b37',[('recovery',201)]),
+])
+def test_multi_incarnation_delivery_identity_and_scoped_consumption(binding,incarnation_filter,expected):
+    injector = TidbBusinessChangeCdcDcMigrationInjector()
+    injector._configure(SCENARIO.build_fault_plan(CASE)[0].config, Mock(sql_timeout_seconds=180))
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [('normal',1,0,'all','recovery','authority_epoch',binding,incarnation_filter),(91,)]
+    cursor.rowcount=1
+    cursor.fetchall.return_value=[
+        (1,3100001,1001,'paid',171,'east',1,'2026-06-28 11:30:01','west','application',1,'2026-06-28 11:30:01',CASE.target_incarnation,3),
+        (91,201,1201,'refunded',71,'west',1,'2026-06-30 11:00:01','west','application',1,'2026-06-30 11:00:01',CASE.previous_target_incarnation,2),
+    ]
+    with patch.object(injector,'_connect',return_value=connection):
+        injector._advance_feed(CASE.reverse_feed_id,CASE.target_db,CASE.source_db,CASE.target_dc)
+    envelopes=[call.args[1] for call in cursor.execute.call_args_list if call.args[0].startswith('INSERT IGNORE')]
+    assert sorted((row[-1],row[0]) for row in envelopes)==sorted(expected)
+    business=[call for call in cursor.execute.call_args_list if call.args[0].startswith(f'INSERT INTO {CASE.source_db}.{CASE.order_table}')]
+    for call in business:
+        updates=call.args[0].split('ON DUPLICATE KEY UPDATE ')[1]
+        assert updates.index('status=')<updates.index('version=')<updates.index('authority_epoch=')
+        assert 'VALUES(authority_epoch)>authority_epoch' in updates
+        assert call.args[1][-1] in (2,3)
+    checkpoint=next(call for call in cursor.execute.call_args_list if 'SET last_applied_event_id=' in call.args[0])
+    assert checkpoint.args[1][:2]==(91,91)

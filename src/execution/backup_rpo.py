@@ -18,6 +18,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
+from src.agent_language import agent_text
 from src.execution.history.metrics import MetricDefinition, MetricService
 from src.execution.history.records import (
     CapturedRecords,
@@ -25,9 +26,8 @@ from src.execution.history.records import (
     HistoricalPointRecord,
     HistoricalRecordSource,
 )
-from src.execution.deployment import PGDockerDeployment
-from src.agent_language import agent_text
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.execution.postgres_metrics import (
     LivePostgresSamplerMetricProvider,
     PostgresMetricCatalog,
@@ -1110,6 +1110,7 @@ class RpoPGEnv(PGEnv):
 
     def configure_runtime(self, runtime) -> None:
         super().configure_runtime(runtime)
+        self.deployment.host_port_offsets = (0, self.rpo_topology.restore_port - self.rpo_topology.primary_port)
         spec = getattr(runtime, "parameters", None)
         if spec is not None:
             self.rpo_standard_archive_command = spec.parameter("archive_command")

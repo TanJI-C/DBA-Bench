@@ -200,7 +200,7 @@ hardware resource conflict may be observed and does not by itself stop developme
 - Evaluator: `src/scenarios/evaluation/tidb/system_failure/clustered_index_consistency.py`
 - Unified runtime: `src/project_paths.py`, `src/knowledge/embedding_model_runtime.py`,
   `src/knowledge/markdown_knowledge_base.py`, `src/knowledge/tidb_knowledge_base.py`, and the
-  existing projection in `src/execution/environment.py`
+  existing projection in `src/execution/environments/tidb.py`
 - Build/query/smoke: `scripts/merge_tidb_curated_knowledge.py`,
   `scripts/build_tidb_knowledge_base.py`, `scripts/query_tidb_unified_knowledge.py`,
   `scripts/smoke_tidb_unified_knowledge.py`, `scripts/start_embedding_model.py`

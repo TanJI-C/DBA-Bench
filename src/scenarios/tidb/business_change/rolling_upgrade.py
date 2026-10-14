@@ -4,17 +4,12 @@ from src.scenarios.evaluation.tidb.business_change.rolling_upgrade import (
     TidbBusinessChangeRollingUpgradeForRollingUpgrade6_5To7_5EvaluatorCase,
     TidbBusinessChangeRollingUpgradeForRollingUpgrade7_5To8_1EvaluatorCase,
 )
-from src.scenarios.evaluation.protocol import structured_reference_report
-from src.scenarios.workloads import WorkloadProfile
+from src.protocols.report import structured_reference_report
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V6_5_0, TIDB_V7_5_0, TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V6_5_0, TIDB_V7_5_0, TIDB_V8_1_0, tidb_runtime
 
 
 def _business_workload(
@@ -617,7 +612,7 @@ class TidbBusinessChangeRollingUpgradeScenario(TiDBScenario):
 
 import json
 
-from src.scenarios.tidb.runtime import canonical_tidb_version
+from src.execution.tidb_runtime import canonical_tidb_version
 from src.scenarios.tidb.common import (
     BaseFaultInjector,
     FaultLifecycleContext,

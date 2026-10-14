@@ -5,13 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.scenarios.base import (
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    InjectionState,
 )
+from src.scenarios.base import FaultPlan, InjectionState
 from src.scenarios.runtime import orchestrator as orchestrator_module
 from src.scenarios.faults import (
     BaseFaultInjector,

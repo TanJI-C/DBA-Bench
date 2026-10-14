@@ -11,7 +11,7 @@ from src.scenarios.evaluation.semantic import SemanticConditionJudgment, Semanti
 from src.database.query_results import capture_query_result_truth
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbQueryPerfIndexMergeSelectionFailureScenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
+from src.execution.tidb_runtime import TIDB_V8_1_0
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.query_perf.index_merge_selection_failure import (
     TidbQueryPerfIndexMergeSelectionFailureInjector,
@@ -398,7 +398,7 @@ def test_formal_entry_has_required_case_and_structured_mock_submission():
 
 def test_reduced_case_keeps_dp_and_compresses_reference_path_to_two_hops():
     from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     original, reduced = SCENARIO.cases
     assert (original.case_no, reduced.case_no) == (0, 1)

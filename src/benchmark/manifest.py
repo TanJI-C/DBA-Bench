@@ -10,7 +10,7 @@ import yaml
 from src.agents.context_compaction import ContextCompactionConfig
 from src.agents.loop_guard import LoopGuardConfig
 from src.agents.baselines.v_expel.config import VExpeLConfig
-from src.scenarios.base import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.scenarios.registry import ScenarioCategory
 
 from src.agent_language import DEFAULT_AGENT_LANGUAGE, validate_agent_language

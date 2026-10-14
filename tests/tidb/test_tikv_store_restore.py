@@ -1,6 +1,8 @@
+from src.execution.deployments.tidb_components.snapshots import TiDBSnapshots
+from src.execution.deployments.tidb_components.stores import TiDBStores
 import json
 
-from src.execution.deployment import TiDBDockerDeployment
+from src.execution.deployments.tidb import TiDBDockerDeployment
 
 
 def _deployment_with_deleted_container(calls, monkeypatch):
@@ -8,9 +10,11 @@ def _deployment_with_deleted_container(calls, monkeypatch):
         TiDBDockerDeployment, "_compose", property(lambda self: ["docker", "compose"])
     )
     monkeypatch.setattr(
-        TiDBDockerDeployment, "persistent_storage_enabled", property(lambda self: False)
+        TiDBSnapshots, "persistent_storage_enabled", property(lambda self: False)
     )
-    deployment = TiDBDockerDeployment.__new__(TiDBDockerDeployment)
+    deployment = TiDBDockerDeployment(run_id="component-fixture")
+    deployment.snapshots = TiDBSnapshots(deployment, None, None, None)
+    deployment.stores = TiDBStores(deployment)
     deployment.NODES = {
         "pd/pd-0": "pd-0",
         "tidb/tidb-0": "tidb-0",
@@ -18,8 +22,8 @@ def _deployment_with_deleted_container(calls, monkeypatch):
     }
     deployment._container_ids = {"pd-0": "live-pd", "tidb-0": "live-tidb", "tikv-0": "dead-tikv"}
     deployment.active_tikv_services = {"tikv-0"}
-    deployment._persistent_run_dir = None
-    deployment.bootstrap_data_paths = {("tikv", "tikv-0"): "/tmp/aiops-test-tikv-0"}
+    deployment.snapshots._persistent_run_dir = None
+    deployment.snapshots.bootstrap_data_paths = {("tikv", "tikv-0"): "/tmp/aiops-test-tikv-0"}
 
     def run(cmd, component="cluster"):
         calls.append(tuple(cmd))
@@ -71,9 +75,9 @@ def test_restore_rebuilds_deleted_case_container_without_wipe(monkeypatch):
     deployment._control = lambda action, target: calls.append((action, target))
     deployment.start_component = lambda target: calls.append(("start", target))
     deployment.restart_component = lambda target: calls.append(("restart", target))
-    deployment._wait_store_state = lambda target, state, timeout: None
+    deployment.stores._wait_store_state = lambda target, state, timeout: None
 
-    TiDBDockerDeployment.restore_tikv_stores(deployment, ("tikv/tikv-0",))
+    TiDBStores.restore_tikv_stores(deployment.stores, ("tikv/tikv-0",))
 
     commands = [call for call in calls if isinstance(call, tuple) and call[0] == "docker"]
     assert ("docker", "compose", "create", "tikv-0") in commands

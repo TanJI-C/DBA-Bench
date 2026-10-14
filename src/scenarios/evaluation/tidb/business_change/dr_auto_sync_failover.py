@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from src.database.sql import parse_json_object
-from src.execution.tidb_dr_auto_sync import K09FinalStateUnavailable
+from src.scenarios.evaluation.tidb.business_change.dr_auto_sync_errors import K09FinalStateUnavailable
 from src.scenarios.evaluation.diagnosis import ExpectedCondition
 from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, execute_sql_rows
 from src.scenarios.evaluation.protocol import EvaluationContext

@@ -26,20 +26,11 @@ from src.scenarios.tidb.common import (
     require_sql_success,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ...base import (
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBReplicationRuntime,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.specs import TiDBReplicationRuntime
+from src.execution.tidb_runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
 
 
 SCENARIO_ID = "tidb_business_change_timezone_ddl_backpressure_frozen_history"

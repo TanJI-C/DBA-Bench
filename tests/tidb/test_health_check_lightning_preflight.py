@@ -24,7 +24,7 @@ from src.scenarios.evaluation.tidb.health_check.lightning_preflight import (
     _review_passes,
     _target_passes,
 )
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.health_check.lightning_preflight import (
     HC06_KNOWLEDGE_CONTRACT,
@@ -303,6 +303,7 @@ def test_hc06_uses_the_rebuilt_unified_kb_contract_without_agent_provenance():
     assert contract["corpus_id"] == "tidb81-unified-kb"
     assert contract["target_version"] == "8.1"
     assert contract["serving"]["record_count"] == 3571
+    assert contract["source_counts"] == {"official": 3515, "curated": 56}
     assert contract["allowed_source_scope"] == "self_managed"
     assert contract["component"] == "lightning"
     assert {hop["id"] for hop in contract["hops"]} == {

@@ -27,13 +27,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from src.execution.deployment import BaseDeployment
-from src.execution.environment import PGEnv, Tool, lazy_agent_text
-from src.execution.history.metrics import MetricFrame, MetricQuery, MetricService, bound_metric_result, format_utc_timestamp, parse_utc_timestamp, render_metric_frame
-from src.execution.history.records import CapturedRecords, HistoricalCoverage, HistoricalPointRecord, HistoricalRecordSource
+from src.execution.deployments.base import BaseDeployment
+from src.execution.environments.postgres import PGEnv
+from src.execution.tools import Tool, lazy_agent_text
+from src.execution.history.metrics import (
+    MetricFrame,
+    MetricQuery,
+    MetricService,
+    bound_metric_result,
+    format_utc_timestamp,
+    parse_utc_timestamp,
+    render_metric_frame,
+)
+from src.execution.history.records import (
+    CapturedRecords,
+    HistoricalCoverage,
+    HistoricalPointRecord,
+    HistoricalRecordSource,
+)
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider
 from src.execution.postgres_replica_metrics import FLEET_METRIC_NAMES, REPLICA_FLEET_METRIC_CATALOG
-from src.scenarios.base import PostgresCaseRuntime
+from src.execution.specs import HostPortLayout, PostgresCaseRuntime
+from src.execution.host_ports import claim_host_ports
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -68,6 +83,7 @@ class ReplicaFleetPorts:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PgReplicaFleetRuntime(PostgresCaseRuntime):
+    host_ports: HostPortLayout = HostPortLayout(offsets=tuple(range(9)))
     ports: ReplicaFleetPorts = ReplicaFleetPorts()
     identity: str = "pg-composite-fault-lwlock-pgbouncer-cascade"
 
@@ -97,6 +113,7 @@ class PgReplicaFleetDeployment(BaseDeployment):
         self.identity = self._safe_name(identity)
         self.ports = ports
         self._ports_are_explicit = ports != ReplicaFleetPorts()
+        self._port_lease = None
         self.image_name = image_name
         self.fault_image_name = fault_image_name
         self.postgres_user = postgres_user
@@ -670,6 +687,8 @@ class PgReplicaFleetDeployment(BaseDeployment):
             raise RuntimeError(f"PgBouncer failed to start: {pool.stderr.strip()}")
 
     def deploy(self) -> None:
+        if self._port_lease is None:
+            self._port_lease = claim_host_ports(self.all_ports, owner=self.identity)
         self._assert_ports_available()
         self._ensure_image()
         self._ensure_network()
@@ -817,6 +836,9 @@ class PgReplicaFleetDeployment(BaseDeployment):
             self._run(["docker", "volume", "rm", "--force", volume], check=False, timeout=60)
         self._run(["docker", "network", "rm", self.network_name], check=False, timeout=60)
         shutil.rmtree(self._runtime_dir, ignore_errors=True)
+        if self._port_lease is not None:
+            self._port_lease.close()
+            self._port_lease = None
 
 
 class PgReplicaFleetEnv(PGEnv):

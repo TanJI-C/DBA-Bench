@@ -9,7 +9,8 @@ import pymysql
 import pytest
 
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
-from src.scenarios.base import BackgroundWorkloadStartPhase, CaseRun
+from src.workloads.specs import BackgroundWorkloadStartPhase
+from src.scenarios.base import CaseRun
 from src.scenarios.tidb import (
     SCENARIO_REGISTRY,
     TidbBusinessChangeBatchedDmlDdlScenario,

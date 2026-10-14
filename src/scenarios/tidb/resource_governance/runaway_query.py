@@ -12,21 +12,15 @@ from src.scenarios.tidb.common import (
 
 from dataclasses import dataclass, replace
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 from src.scenarios.evaluation.tidb.resource_governance import (
     TidbResourceGovernanceRunawayQueryEvaluatorCase,
     TidbResourceGovernanceRunawayQueryProtectedExportEvaluatorCase,
 )
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

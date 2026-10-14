@@ -9,18 +9,11 @@ from src.scenarios.evaluation.postgres.business_change import (
     PgBusinessChangeInvalidIndexForStoreSalesInvalidIndexSimpleEvaluatorCase,
 )
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
-)
+from src.execution.specs import PostgresCaseRuntime, PostgresRuntimeSpec, CaseResourceSpec
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, PostgresScenario, FaultPlan, PostgresScenarioCase
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

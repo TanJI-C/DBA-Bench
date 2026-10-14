@@ -13,17 +13,11 @@ from src.scenarios.evaluation.tidb.health_check.lightning_preflight import (
     TidbHealthCheckLightningPreflightForProtectionReviewEvaluatorCase,
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 LIGHTNING_IMAGE = (
@@ -66,17 +60,18 @@ HC06_KNOWLEDGE_CONTRACT = {
     "processed": {
         "path": "knowledge/tidb_unified/mappings/tidb81_chunks.jsonl",
         "record_count": 3571,
-        "sha256": "f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5",
+        "sha256": "2f61d000e69c92362b065c03aa6d0748f020c0348ccd940c92ed1be3f9fdfcf8",
     },
     "serving": {
         "path": "knowledge/tidb_unified/mappings/tidb81_serving_chunks.jsonl",
         "record_count": 3571,
-        "sha256": "e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a",
+        "sha256": "333aea6d7db87432bf55dd18da79068baf68f4f861b6f5f4be268193388955c3",
     },
     "provenance": {
         "path": "knowledge/tidb_unified/provenance/tidb81_provenance.jsonl",
-        "sha256": "420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866",
+        "sha256": "c5518183ed235cbc8d6884a546f43707617618f55789930622a8c1e14dac148d",
     },
+    "source_counts": {"official": 3515, "curated": 56},
     "allowed_source_scope": "self_managed",
     "component": "lightning",
     "allowed_kb_types": (

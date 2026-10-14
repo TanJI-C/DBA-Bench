@@ -20,8 +20,13 @@ from datetime import datetime, timezone
 
 from pathlib import Path
 
-from src.scenarios.tidb.common import BaseFaultInjector, FaultLifecycleContext, json_object, require_sql_success
-from src.execution.deployment import lightning_decoy_job_id, lightning_job_id, lightning_network_alias
+from src.scenarios.tidb.common import (
+    BaseFaultInjector,
+    FaultLifecycleContext,
+    json_object,
+    require_sql_success,
+)
+from src.execution.deployments.tidb_support import lightning_decoy_job_id, lightning_job_id, lightning_network_alias
 
 """RG05: govern a real Lightning import while frontend SQL remains online."""
 
@@ -31,17 +36,11 @@ from src.scenarios.evaluation.tidb.resource_governance import (
     TidbResourceGovernanceLightningBudgetEvaluatorCase,
     TidbResourceGovernanceLightningBudgetConservativeEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 LIGHTNING_RESTORE_CHUNK_COMPLETED_RE = re.compile(

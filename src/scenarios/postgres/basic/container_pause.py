@@ -7,12 +7,8 @@ from src.scenarios.evaluation.postgres.basic import (
 )
 
 from src.scenarios.faults import NoopFaultInjector
-from ...base import (
-    PostgresScenario,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    PostgresScenarioCase,
-)
+from src.scenarios.base import PostgresScenario, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import EMPTY_BACKGROUND_WORKLOAD
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

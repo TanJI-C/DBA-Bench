@@ -1,20 +1,16 @@
 from dataclasses import dataclass, replace
+from datetime import datetime
 
-from src.scenarios.workloads import WorkloadProfile
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.workloads.specs import WorkloadProfile
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.business_change.table_recovery import (
     TidbBusinessChangeTableRecoveryEvaluatorCase,
     TidbBusinessChangeTableRecoveryForPaymentEventsEvaluatorCase,
 )
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _BC07_TIDB_RELEASE = replace(
@@ -182,7 +178,7 @@ def _background_workload(
             WorkloadProfile(
                 name="release_transition_timeline",
                 sql=(
-                    f"SELECT release_id, transition, occurred_at, traffic_percent, control_epoch "
+                    f"SELECT control_key, transition, occurred_at, traffic_percent, control_epoch, recorded_at, resulting_state, event_key, event_revision, revision_state "
                     f"FROM {database}.{release_transition_table} ORDER BY occurred_at, transition_id LIMIT 64"
                 ),
                 qps=0.3,
@@ -208,8 +204,8 @@ def _background_workload(
             WorkloadProfile(
                 name="release_binding_snapshot",
                 sql=(
-                    f"SELECT control_key, release_id, binding_state, bound_at, change_ticket "
-                    f"FROM {database}.{release_binding_table} ORDER BY bound_at, binding_id"
+                    f"SELECT control_key, release_id, binding_state, binding_revision, valid_from, valid_until, recorded_at, change_ticket "
+                    f"FROM {database}.{release_binding_table} ORDER BY recorded_at, binding_id"
                 ),
                 qps=0.24,
                 tier="MONITOR",
@@ -218,9 +214,9 @@ def _background_workload(
             WorkloadProfile(
                 name="release_transition_lineage_join",
                 sql=(
-                    f"SELECT t.release_id, t.transition, t.occurred_at, r.table_id, r.lifecycle_state "
+                    f"SELECT t.control_key, t.transition, t.occurred_at, b.release_id, b.binding_revision "
                     f"FROM {database}.{release_transition_table} t "
-                    f"JOIN {database}.{release_registry_table} r ON r.release_id=t.release_id "
+                    f"JOIN {database}.{release_binding_table} b ON b.control_key=t.control_key "
                     "ORDER BY t.occurred_at DESC, t.transition_id DESC LIMIT 64"
                 ),
                 qps=0.22,
@@ -307,10 +303,8 @@ _CASE = TidbBusinessChangeTableRecoveryForDroppedTableGcRecoveryScenarioCase(
     title="Recover the original order-event table from an exact DROP DDL job before GC removes its data.",
     alert=(
         "[CRITICAL] [Order Platform] 查询 benchops.order_events 的订单检索、对账和发布审计接口同时出现 "
-        "'table doesn't exist'；数据库节点仍然 Up，其他归档查询正常。最近一次 release cleanup 可能误删了 "
-        "order_events，但同一逻辑表曾被发布流程重复创建和清理。请在 GC 可恢复窗口内恢复原始业务表，"
-        "事故边界为 2026-08-03 11:30:00；请从 incident context 和 release transition history 重建该时刻 "
-        "order-api/prod 实际 serving 的 release，而不是直接采用当前 desired release。保留当前在线查询负载，"
+        "'table doesn't exist'；数据库节点仍然 Up，其他归档查询正常。请在 GC 可恢复窗口内恢复 "
+        "order-api/prod 在事故发生时使用的原始业务表。保留当前在线查询负载，"
         "不要从应用导出重建数据；恢复前必须核对 DDL 历史、GC safe point 和恢复对象，"
         "恢复后必须证明业务真值、主键/索引一致性和 TiDB 表检查均通过，并撤销本次临时保留窗口。"
     ),
@@ -326,7 +320,7 @@ _CASE = TidbBusinessChangeTableRecoveryForDroppedTableGcRecoveryScenarioCase(
         "table_rows": 2000,
         "drop_job_id": "the DROP job for the last-known-good release at the incident boundary from this run",
         "last_known_good_release": "the fully serving release at the incident boundary",
-        "crc": 2846650938,
+        "crc": 2393356967,
         "admin_check": "empty_success_result",
         "gc_life_time": "restored_to_baseline",
     },
@@ -347,10 +341,10 @@ _CASE = TidbBusinessChangeTableRecoveryForDroppedTableGcRecoveryScenarioCase(
         "release_binding",
     ),
     difficulty=DifficultyCalibration(
-        diagnostic_depth=7,
-        environmental_complexity=0.910072,
+        diagnostic_depth=11,
+        environmental_complexity=144 / 195,
         reference_run_ids=(
-            "reference-156__"
+            "table-recovery-r7-mock-20261012__"
             "tidb_business_change_table_recovery__dropped_table_gc_recovery__mock__r001",
         ),
     ),
@@ -380,23 +374,30 @@ _CASE = TidbBusinessChangeTableRecoveryForDroppedTableGcRecoveryScenarioCase(
     ddl_history_noise_jobs=24,
     source_row_count=2000,
     expected_event_id_sum=2_001_000,
-    expected_crc=2_846_650_938,
+    expected_crc=2_393_356_967,
     candidate_row_count=2000,
     decoy_row_count=17,
     recovery_gc_lifetime="72h",
-    pre_release_id="orders_blue_20260730",
-    target_release_id="orders_green_20260731",
-    canary_release_id="orders_canary_20260801",
-    smoke_release_id="orders_smoke_20260802",
-    hotfix_release_id="orders_hotfix_20260803",
-    rehearsal_release_id="orders_rehearsal_20260803",
-    shadow_release_id="orders_shadow_20260803",
-    rollback_release_id="orders_rollback_20260803",
+    pre_release_id="orders_r4d9",
+    target_release_id="orders_r7a2",
+    canary_release_id="orders_r1f6",
+    smoke_release_id="orders_r8c3",
+    hotfix_release_id="orders_r2b5",
+    rehearsal_release_id="orders_r6e1",
+    shadow_release_id="orders_r9a4",
+    rollback_release_id="orders_r3f8",
     reference_evidence_counts=(
-        ("execute_sql", 27, 56),
-        ("query_metrics", 17, 425),
-        ("read_log", 1, 25),
-        ("search_knowledge", 5, 0),
+        ('schema catalog', 0, 11),
+        ('incident context', 1, 0),
+        ('controller snapshots', 3, 3),
+        ('historical bindings', 4, 6),
+        ('controller commands', 17, 19),
+        ('publisher leases', 2, 3),
+        ('receiver application receipts', 19, 22),
+        ('artifact registry', 1, 7),
+        ('business ledger', 1, 7),
+        ('native DDL history', 1, 66),
+        ('native GC boundary', 2, 0),
     ),
 )
 
@@ -471,10 +472,10 @@ _PAYMENT_CASE = TidbBusinessChangeTableRecoveryForDroppedPaymentEventsGcRecovery
         "payment_release_binding",
     ),
     difficulty=DifficultyCalibration(
-        diagnostic_depth=7,
-        environmental_complexity=0.910072,
+        diagnostic_depth=8,
+        environmental_complexity=112 / 135,
         reference_run_ids=(
-            "reference-242__"
+            "table-recovery-r2-mock-20261012__"
             "tidb_business_change_table_recovery__dropped_payment_events_gc_recovery__"
             "mock__r001",
         ),
@@ -509,19 +510,24 @@ _PAYMENT_CASE = TidbBusinessChangeTableRecoveryForDroppedPaymentEventsGcRecovery
     candidate_row_count=2000,
     decoy_row_count=17,
     recovery_gc_lifetime="72h",
-    pre_release_id="payments_blue_20260807",
-    target_release_id="payments_green_20260808",
-    canary_release_id="payments_canary_20260809",
-    smoke_release_id="payments_smoke_20260810",
-    hotfix_release_id="payments_hotfix_20260810",
-    rehearsal_release_id="payments_rehearsal_20260810",
-    shadow_release_id="payments_shadow_20260810",
-    rollback_release_id="payments_rollback_20260810",
+    pre_release_id="payments_r4d9",
+    target_release_id="payments_r7a2",
+    canary_release_id="payments_r1f6",
+    smoke_release_id="payments_r8c3",
+    hotfix_release_id="payments_r2b5",
+    rehearsal_release_id="payments_r6e1",
+    shadow_release_id="payments_r9a4",
+    rollback_release_id="payments_r3f8",
     reference_evidence_counts=(
-        ("execute_sql", 27, 56),
-        ("query_metrics", 17, 425),
-        ("read_log", 1, 25),
-        ("search_knowledge", 5, 0),
+        ('schema catalog', 0, 9),
+        ('incident context', 1, 0),
+        ('controller snapshots', 3, 7),
+        ('historical bindings', 4, 6),
+        ('controller transitions', 10, 17),
+        ('artifact registry', 1, 7),
+        ('business ledger', 1, 7),
+        ('native DDL history', 1, 59),
+        ('native GC boundary', 2, 0),
     ),
 )
 
@@ -583,7 +589,7 @@ from src.scenarios.tidb.common import BaseFaultInjector, require_sql_success, va
 
 
 class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
-    """Create four real same-name release generations inside the TiDB GC window."""
+    """Create eight real same-name release generations inside the TiDB GC window."""
 
     def __init__(self):
         self.database = None
@@ -619,6 +625,7 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
         self.rollback_release_id = None
         self.gc_lifetime_before = None
         self.release_drop_jobs = {}
+        self.production_payload_evidence = {}
         self.target_drop_job_id = None
         self.latest_same_name_drop_job_id = None
         self.env = None
@@ -675,11 +682,6 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 "BC07 requires positive DDL history noise: "
                 f"ddl_history_noise_jobs={self.ddl_history_noise_jobs}"
             )
-        if self.source_row_count != 2000 or self.expected_crc != 2_846_650_938:
-            raise ValueError(
-                "BC07 active release fixture is fixed at 2,000 rows and CRC 2846650938: "
-                f"rows={self.source_row_count}, crc={self.expected_crc}"
-            )
         if self.candidate_row_count != self.source_row_count:
             raise ValueError(
                 "BC07 requires full-sized candidate releases: "
@@ -712,7 +714,7 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 env.execute_sql(
                     f"INSERT INTO {self.database}.{self.audit_table} "
                     "(audit_id,action,created_at,config_key,previous_value,requested_value) "
-                    f"VALUES (129,'gc-lifetime-override','2026-07-29 12:00:00',"
+                    f"VALUES (129,'gc-lifetime-override','{self._history_time('2026-07-29 12:00:00')}',"
                     f"'tidb_gc_life_time','{self.gc_lifetime_before}',"
                     f"'{self.recovery_gc_lifetime}')"
                 ),
@@ -725,9 +727,9 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             require_sql_success(
                 env.execute_sql(
                     f"INSERT INTO {self.database}.{self.audit_table} "
-                    "(audit_id,action,created_at,config_key,previous_value,requested_value) VALUES "
-                    "(130,'gc-window-plan','2026-08-03 11:20:00','tidb_gc_life_time','24h','72h'),"
-                    "(131,'gc-window-rehearsal','2026-08-03 12:00:00','tidb_gc_life_time','72h','72h')"
+                    "(audit_id,action,created_at,config_key,previous_value,requested_value,event_kind) VALUES "
+                    f"(130,'gc-window-plan','{self._history_time('2026-08-03 11:20:00')}','tidb_gc_life_time','24h','72h','planned'),"
+                    f"(131,'gc-window-rehearsal','{self._history_time('2026-08-03 12:00:00')}','tidb_gc_life_time','72h','72h','rehearsal')"
                 ),
                 "record BC07 planned and rehearsal GC audit noise",
             )
@@ -735,74 +737,58 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             self._create_release_version(
                 env,
                 self.pre_release_id,
-                "rolled_back",
                 "blue",
                 self.candidate_row_count,
                 "2026-07-30 09:00:00",
-                "REL-BLUE-0730",
             )
             self._create_release_version(
                 env,
                 self.target_release_id,
-                "validated",
                 "active",
                 self.source_row_count,
                 "2026-07-31 09:00:00",
-                "REL-GREEN-0731",
             )
             self._create_release_version(
                 env,
                 self.canary_release_id,
-                "cancelled_canary",
                 "canary",
                 self.candidate_row_count,
                 "2026-08-01 09:00:00",
-                "REL-CANARY-0801",
             )
             self._create_release_version(
                 env,
                 self.smoke_release_id,
-                "cleanup_smoke",
                 "smoke",
                 self.decoy_row_count,
                 "2026-08-02 09:00:00",
-                "REL-SMOKE-0802",
             )
             self._create_release_version(
                 env,
                 self.hotfix_release_id,
-                "validated",
                 "hotfix",
                 self.candidate_row_count,
                 "2026-08-03 11:45:00",
-                "REL-HOTFIX-0803",
             )
             self._create_release_version(
                 env,
                 self.rehearsal_release_id,
                 "rehearsal",
-                "rehearsal",
                 self.candidate_row_count,
-                "2026-08-03 12:00:00",
-                "REL-REHEARSAL-0803",
+                "2026-08-03 11:15:00" if self.logical_table == "order_events" else "2026-08-03 12:00:00",
             )
             self._create_release_version(
                 env,
                 self.shadow_release_id,
                 "shadow",
-                "shadow",
                 self.candidate_row_count,
                 "2026-08-03 12:15:00",
-                "REL-SHADOW-0803",
             )
             self._create_release_version(
                 env,
                 self.rollback_release_id,
-                "rolled_back",
                 "rollback",
                 self.candidate_row_count,
                 "2026-08-03 12:30:00",
-                "REL-ROLLBACK-0803",
             )
             self._insert_incident_and_transition_history(env)
             self._create_ddl_noise(env)
@@ -834,20 +820,25 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             f"AND logical_table='{self.logical_table}' "
             f"AND incident_at='{self.incident_at}'",
         )
-        target_serving = self._scalar(
+        snapshot_boundary = (
+            "" if self.logical_table == "order_events" else
+            "AND c.status='serving' AND c.traffic_percent=100 "
+            f"AND c.effective_at <= '{self.incident_at}' "
+        )
+        target_candidate = self._scalar(
             context.env,
             f"SELECT COUNT(*) FROM {self.database}.{self.release_control_table} c "
             f"JOIN {self.database}.{self.release_binding_table} b ON b.control_key=c.control_key "
             f"WHERE c.service_name='{self.service_name}' AND c.environment='{self.environment}' "
             f"AND c.logical_table='{self.logical_table}' "
             f"AND c.region='global' AND c.control_role='observed' AND b.release_id='{self.target_release_id}' "
-            "AND c.status='serving' AND c.traffic_percent=100 "
-            f"AND c.control_epoch={int(incident_epoch)} AND c.effective_at <= '{self.incident_at}'",
+            f"AND c.control_epoch={int(incident_epoch)} {snapshot_boundary}"
+            f"AND b.valid_from <= '{self.incident_at}' AND b.valid_until > '{self.incident_at}'",
         )
-        if target_serving != 1:
+        if target_candidate != 1:
             raise RuntimeError(
-                "BC07 activation lost the incident-boundary serving release: "
-                f"target_release={self.target_release_id!r}, incident_epoch={incident_epoch!r}, rows={target_serving!r}"
+                "BC07 activation lost the original incident-scope historical candidate: "
+                f"target_release={self.target_release_id!r}, incident_epoch={incident_epoch!r}, rows={target_candidate!r}"
             )
 
     def prepare_observability(self, context: FaultLifecycleContext) -> Mapping[str, object]:
@@ -926,6 +917,32 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             "bc07_incident_context": incident_context,
             "bc07_release_transitions": release_transitions,
             "bc07_ddl_history": history,
+            **({
+                "bc07_production_payload_profiles": self.production_payload_evidence,
+                "bc07_public_checksum_schemas": {
+                    name: execute_result_rows(
+                        context.env.execute_sql,
+                        f"SHOW CREATE TABLE {self.database}.{name}",
+                        f"capture public Orders checksum schema {name}",
+                    )
+                    for name in (self.release_registry_table, self.release_ledger_table)
+                },
+                "bc07_current_observer_schema": execute_result_rows(
+                    context.env.execute_sql,
+                    f"SHOW CREATE TABLE {self.database}.{self.release_control_table}",
+                    "capture public Orders current observer schema",
+                ),
+                "bc07_controller_leases": execute_result_rows(
+                    context.env.execute_sql,
+                    f"SELECT * FROM {self.database}.controller_lease_history ORDER BY lease_id",
+                    "capture BC07 order publisher leases",
+                ),
+                "bc07_apply_receipts": execute_result_rows(
+                    context.env.execute_sql,
+                    f"SELECT * FROM {self.database}.controller_apply_receipts ORDER BY receipt_id",
+                    "capture BC07 order raw receiver/application facts",
+                ),
+            } if self.logical_table == "order_events" else {}),
             "bc07_gc_window": {
                 "before": self.gc_lifetime_before,
                 "during": self.recovery_gc_lifetime,
@@ -958,6 +975,25 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
         )
 
     def _create_schema_and_fixture(self, env) -> None:
+        inventory_comment = (
+            " COMMENT 'Artifact inventory registration time; serving membership comes from scoped route application receipts'"
+            if self.logical_table == "order_events" else ""
+        )
+        ledger_crc_comment = (
+            " COMMENT 'BIT_XOR(CRC32(CONCAT_WS(0x23,event_id,tenant_id,event_type,amount_cents,payload))); payload is raw bytes, not HEX; 0x23 is the field separator'"
+            if self.logical_table == "order_events" else ""
+        )
+        control_schema = (
+            "control_role ENUM('observed','desired') NOT NULL, "
+            "control_key VARCHAR(64) NOT NULL, effective_at DATETIME NOT NULL "
+            "COMMENT 'Observed rows: latest actual route application time; desired rows: planned activation time', "
+            "status ENUM('inactive','serving','pending') NOT NULL, traffic_percent INT NOT NULL, "
+            "observed_at DATETIME NOT NULL COMMENT 'Current snapshot collection time; reconstruct incident membership from scoped application history', "
+            if self.logical_table == "order_events" else
+            "control_role VARCHAR(24) NOT NULL, "
+            "control_key VARCHAR(64) NOT NULL, effective_at DATETIME NOT NULL, "
+            "status VARCHAR(24) NOT NULL, traffic_percent INT NOT NULL, "
+        )
         require_sql_success(
             env.execute_sql(f"CREATE DATABASE {self.database}"),
             f"create BC07 database {self.database}",
@@ -971,7 +1007,7 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
         require_sql_success(
             env.execute_sql(
                 f"CREATE TABLE {self.database}.{self.audit_table} ("
-                "audit_id BIGINT PRIMARY KEY, action VARCHAR(32) NOT NULL, "
+                "audit_id BIGINT PRIMARY KEY, action VARCHAR(32) NOT NULL, event_kind ENUM('applied','planned','rehearsal') NOT NULL DEFAULT 'applied' COMMENT 'Only applied rows changed cluster configuration', "
                 "created_at DATETIME NOT NULL, config_key VARCHAR(64), "
                 "previous_value VARCHAR(64), requested_value VARCHAR(64))"
             ),
@@ -991,7 +1027,8 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 "logical_table VARCHAR(64) NOT NULL, table_id BIGINT NOT NULL, "
                 "lifecycle_state VARCHAR(32) NOT NULL, generation VARCHAR(32) NOT NULL, "
                 "expected_rows BIGINT NOT NULL, expected_event_id_sum BIGINT NOT NULL, "
-                "expected_crc BIGINT NOT NULL, effective_at DATETIME NOT NULL, "
+                "expected_crc BIGINT NOT NULL COMMENT 'BIT_XOR(CRC32(CONCAT_WS(0x23,event_id,tenant_id,event_type,amount_cents,payload)))', "
+                f"effective_at DATETIME NOT NULL{inventory_comment}, "
                 "change_ticket VARCHAR(64) NOT NULL)"
             ),
             "create BC07 release registry",
@@ -1001,9 +1038,7 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 f"CREATE TABLE {self.database}.{self.release_control_table} ("
                 "control_id BIGINT PRIMARY KEY, service_name VARCHAR(64) NOT NULL, "
                 "environment VARCHAR(32) NOT NULL, logical_table VARCHAR(64) NOT NULL, "
-                "region VARCHAR(32) NOT NULL, control_role VARCHAR(24) NOT NULL, "
-                "control_key VARCHAR(64) NOT NULL, effective_at DATETIME NOT NULL, "
-                "status VARCHAR(24) NOT NULL, traffic_percent INT NOT NULL, "
+                f"region VARCHAR(32) NOT NULL, {control_schema}"
                 "control_epoch BIGINT NOT NULL, change_ticket VARCHAR(64) NOT NULL)"
             ),
             "create BC07 release control table",
@@ -1012,7 +1047,7 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             env.execute_sql(
                 f"CREATE TABLE {self.database}.{self.release_ledger_table} ("
                 "release_id VARCHAR(64) PRIMARY KEY, order_count BIGINT NOT NULL, "
-                "event_id_sum BIGINT NOT NULL, crc BIGINT NOT NULL, "
+                f"event_id_sum BIGINT NOT NULL, crc BIGINT NOT NULL{ledger_crc_comment}, "
                 "source_system VARCHAR(64) NOT NULL, reconciliation_state VARCHAR(24) NOT NULL, "
                 "recorded_at DATETIME NOT NULL)"
             ),
@@ -1032,12 +1067,16 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
         require_sql_success(
             env.execute_sql(
                 f"CREATE TABLE {self.database}.{self.release_transition_table} ("
-                "transition_id BIGINT PRIMARY KEY, release_id VARCHAR(64) NOT NULL, "
+                "transition_id BIGINT PRIMARY KEY, control_key VARCHAR(64) NOT NULL, "
                 "service_name VARCHAR(64) NOT NULL, environment VARCHAR(32) NOT NULL, "
                 "logical_table VARCHAR(64) NOT NULL, transition VARCHAR(32) NOT NULL, "
                 "occurred_at DATETIME NOT NULL, traffic_percent INT NOT NULL, "
                 "control_epoch BIGINT NOT NULL, change_ticket VARCHAR(64) NOT NULL, "
-                "actor VARCHAR(64) NOT NULL)"
+                "event_key VARCHAR(64) NOT NULL COMMENT 'Logical event identity within service/environment/logical_table/control_key/epoch', "
+                "event_revision BIGINT NOT NULL COMMENT 'Highest revision replaces prior versions of the same logical event before applying the occurred_at boundary; recorded_at is audit arrival', "
+                "revision_state ENUM('applied','retracted') NOT NULL COMMENT 'Choose highest revision, remove retracted events, then fold surviving occurred_at', "
+                "actor VARCHAR(64) NOT NULL, recorded_at DATETIME NOT NULL COMMENT 'Audit ingestion time; occurred_at is business event time', "
+                "resulting_state ENUM('inactive','serving') NOT NULL COMMENT 'State after this event; fold occurred_at within control_key and epoch')"
             ),
             "create BC07 release transition history",
         )
@@ -1045,8 +1084,12 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             env.execute_sql(
                 f"CREATE TABLE {self.database}.{self.release_binding_table} ("
                 "binding_id BIGINT PRIMARY KEY, control_key VARCHAR(64) NOT NULL, "
-                "release_id VARCHAR(64) NOT NULL, binding_state VARCHAR(24) NOT NULL, "
-                "bound_at DATETIME NOT NULL, change_ticket VARCHAR(64) NOT NULL)"
+                "release_id VARCHAR(64) NOT NULL, binding_state ENUM('bound','revoked') NOT NULL, "
+                "binding_revision BIGINT NOT NULL COMMENT 'Highest applicable revision within each control_key corrects prior binding facts', "
+                "valid_from DATETIME NOT NULL COMMENT 'Inclusive business-time interval start', "
+                "valid_until DATETIME COMMENT 'Exclusive business-time interval end; NULL means open', "
+                "recorded_at DATETIME NOT NULL COMMENT 'Ingestion time, including late corrections; not deployment effective time', "
+                "change_ticket VARCHAR(64) NOT NULL)"
             ),
             "create BC07 release binding map",
         )
@@ -1062,49 +1105,76 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
             ),
             "insert BC07 release audit rows",
         )
+        self._insert_control_and_binding_history(env)
+
+    def _history_time(self, value: str) -> str:
+        offset = datetime.fromisoformat(self.incident_at) - datetime(2026, 8, 3, 11, 30)
+        return (datetime.fromisoformat(value) + offset).isoformat(sep=" ")
+
+    def _insert_control_and_binding_history(self, env) -> None:
+        controls = (
+            (1, self.service_name, self.environment, "global", "observed", "slot-a17", "2026-08-03 11:30:01", "inactive", 0, 41),
+            (2, self.service_name, self.environment, "us-east", "observed", "slot-g53", "2026-08-03 11:29:59", "serving", 100, 41),
+            (4, self.service_name, self.environment, "global", "desired", "slot-c39", "2026-08-03 11:45:00", "pending", 0, 42),
+            (6, self.service_name, "staging", "global", "observed", "slot-g53", "2026-08-03 11:29:59", "serving", 100, 7),
+            (9, self.service_name, self.environment, "global", "observed", "slot-g53", "2026-08-03 11:30:02", "serving", 100, 41),
+            (10, self.service_name, self.environment, "global", "observed", "slot-h28", "2026-08-03 11:25:00", "inactive", 0, 41),
+        ) if self.logical_table == "order_events" else (
+            (1, self.service_name, self.environment, "global", "observed", "slot-a17", "2026-07-31 09:20:00", "serving", 100, 41),
+            (2, self.service_name, self.environment, "us-east", "observed", "slot-a17", "2026-07-31 09:20:00", "serving", 100, 41),
+            (3, self.service_name, self.environment, "eu-west", "observed", "slot-b04", "2026-08-01 09:10:00", "shadow", 0, 41),
+            (4, self.service_name, self.environment, "global", "desired", "slot-c39", "2026-08-03 11:45:00", "pending", 0, 42),
+            (5, self.service_name, self.environment, "global", "observed", "slot-a17", "2026-08-03 11:45:00", "serving", 100, 42),
+            (6, self.service_name, "staging", "global", "observed", "slot-d82", "2026-08-01 09:10:00", "serving", 100, 7),
+            (7, "release-dashboard", self.environment, "global", "observed", "slot-e11", "2026-08-03 11:50:00", "cleanup", 0, 43),
+            (8, "reconciliation-worker", self.environment, "global", "observed", "slot-f62", "2026-07-30 09:00:00", "retired", 0, 40),
+            (9, self.service_name, self.environment, "global", "observed", "slot-g53", "2026-08-03 11:15:00", "serving", 100, 41),
+            (10, self.service_name, self.environment, "global", "observed", "slot-h28", "2026-07-31 09:31:00", "serving", 100, 41),
+        )
+        observation_column = ",observed_at" if self.logical_table == "order_events" else ""
+        observation_value = (
+            f",'{self._history_time('2026-08-03 11:44:30')}'"
+            if self.logical_table == "order_events" else ""
+        )
         require_sql_success(
             env.execute_sql(
                 f"INSERT INTO {self.database}.{self.release_control_table} "
                 "(control_id,service_name,environment,logical_table,region,control_role,control_key,"
-                "effective_at,status,traffic_percent,control_epoch,change_ticket) VALUES "
-                f"(1,'{self.service_name}','{self.environment}','{self.logical_table}','global','observed','deploy-20260731-epoch-41',"
-                "'2026-07-31 09:20:00','serving',100,41,'REL-GREEN-0731'),"
-                f"(2,'{self.service_name}','{self.environment}','{self.logical_table}','us-east','observed','deploy-20260731-epoch-41',"
-                "'2026-07-31 09:20:00','serving',100,41,'REL-GREEN-0731'),"
-                f"(3,'{self.service_name}','{self.environment}','{self.logical_table}','eu-west','observed','deploy-20260801-canary-shadow',"
-                "'2026-08-01 09:10:00','shadow',0,41,'REL-CANARY-0801'),"
-                f"(4,'{self.service_name}','{self.environment}','{self.logical_table}','global','desired','deploy-20260803-epoch-42',"
-                "'2026-08-03 11:45:00','pending',0,42,'REL-HOTFIX-0803'),"
-                f"(5,'{self.service_name}','{self.environment}','{self.logical_table}','global','observed','deploy-20260731-epoch-41',"
-                "'2026-08-03 11:45:00','serving',100,42,'REL-HOTFIX-0803'),"
-                f"(6,'{self.service_name}','staging','{self.logical_table}','global','observed','deploy-20260801-canary-serving',"
-                "'2026-08-01 09:10:00','serving',100,7,'REL-CANARY-0801'),"
-                f"(7,'release-dashboard','prod','{self.table}','global','observed','deploy-20260802-cleanup',"
-                "'2026-08-03 11:50:00','cleanup',0,43,'REL-SMOKE-0802'),"
-                f"(8,'reconciliation-worker','{self.environment}','{self.logical_table}','global','observed','deploy-20260730-rollback',"
-                "'2026-07-30 09:00:00','retired',0,40,'REL-BLUE-0730'),"
-                f"(9,'{self.service_name}','{self.environment}','{self.logical_table}','global','observed','deploy-20260803-rehearsal-epoch-41',"
-                "'2026-08-03 11:15:00','serving',100,41,'REL-REHEARSAL-ADMISSION'),"
-                f"(10,'{self.service_name}','{self.environment}','{self.logical_table}','global','observed','deploy-20260731-rollback-replay',"
-                "'2026-07-31 09:31:00','serving',100,41,'REL-BLUE-ROLLBACK-REPLAY')"
+                f"effective_at,status,traffic_percent,control_epoch,change_ticket{observation_column}) VALUES "
+                + ",".join(
+                    f"({i},'{service}','{environment}','{self.logical_table}','{region}','{role}','{key}',"
+                    f"'{self._history_time(at)}','{status}',{traffic},{epoch},'CHG-{i:04d}'{observation_value})"
+                    for i, service, environment, region, role, key, at, status, traffic, epoch in controls
+                )
             ),
-            "insert BC07 release control rows",
+            "record BC07 controller snapshots",
         )
+        bindings = (
+            (1, "slot-a17", self.pre_release_id, 1, "2026-07-31 09:20:00", "2026-08-03 11:45:00", "2026-07-31 09:20:01"),
+            (2, "slot-b04", self.canary_release_id, 1, "2026-08-01 09:00:00", None, "2026-08-01 09:10:00"),
+            (3, "slot-a17", self.hotfix_release_id, 3, "2026-08-03 11:45:00", None, "2026-08-03 11:46:00"),
+            (4, "slot-d82", self.canary_release_id, 1, "2026-08-01 09:00:00", None, "2026-08-01 09:10:00"),
+            (5, "slot-e11", self.smoke_release_id, 1, "2026-08-02 09:00:00", None, "2026-08-03 11:50:00"),
+            (6, "slot-f62", self.pre_release_id, 1, "2026-07-30 08:00:00", None, "2026-07-30 09:00:00"),
+            (7, "slot-a17-legacy", self.rollback_release_id, 1, "2026-07-31 09:21:00", None, "2026-07-31 09:21:00"),
+            (8, "slot-g53", self.rehearsal_release_id, 1, "2026-08-03 11:15:00", None, "2026-08-03 11:15:00"),
+            (9, "slot-h28", self.pre_release_id, 1, "2026-07-31 09:31:00", None, "2026-07-31 09:31:00"),
+            (10, "slot-a17", self.target_release_id, 2, "2026-07-31 09:20:00", "2026-08-03 11:45:00", "2026-08-03 11:35:00"),
+        )
+        values = []
+        for i, key, release, revision, start, end, recorded in bindings:
+            end_sql = "NULL" if end is None else f"'{self._history_time(end)}'"
+            values.append(
+                f"({i},'{key}','{release}','bound',{revision},'{self._history_time(start)}',"
+                f"{end_sql},'{self._history_time(recorded)}','CHG-{i:04d}')"
+            )
         require_sql_success(
             env.execute_sql(
                 f"INSERT INTO {self.database}.{self.release_binding_table} "
-                "(binding_id,control_key,release_id,binding_state,bound_at,change_ticket) VALUES "
-                f"(1,'deploy-20260731-epoch-41','{self.target_release_id}','superseded','2026-07-31 09:20:00','REL-GREEN-0731'),"
-                f"(2,'deploy-20260801-canary-shadow','{self.canary_release_id}','bound','2026-08-01 09:10:00','REL-CANARY-0801'),"
-                f"(3,'deploy-20260731-epoch-41','{self.hotfix_release_id}','bound','2026-08-03 11:45:00','REL-HOTFIX-0803'),"
-                f"(4,'deploy-20260801-canary-serving','{self.canary_release_id}','bound','2026-08-01 09:10:00','REL-CANARY-0801'),"
-                f"(5,'deploy-20260802-cleanup','{self.smoke_release_id}','bound','2026-08-03 11:50:00','REL-SMOKE-0802'),"
-                f"(6,'deploy-20260730-rollback','{self.pre_release_id}','bound','2026-07-30 09:00:00','REL-BLUE-0730'),"
-                f"(7,'deploy-20260731-epoch-41-legacy','{self.rollback_release_id}','stale','2026-07-31 09:21:00','REL-LEGACY-0731'),"
-                f"(8,'deploy-20260803-rehearsal-epoch-41','{self.rehearsal_release_id}','bound','2026-08-03 11:15:00','REL-REHEARSAL-ADMISSION'),"
-                f"(9,'deploy-20260731-rollback-replay','{self.pre_release_id}','bound','2026-07-31 09:31:00','REL-BLUE-ROLLBACK-REPLAY')"
+                "(binding_id,control_key,release_id,binding_state,binding_revision,valid_from,valid_until,recorded_at,change_ticket) VALUES "
+                + ",".join(values)
             ),
-            "insert BC07 release binding map",
+            "record BC07 business-time bindings and late registry correction",
         )
 
     def _insert_incident_and_transition_history(self, env) -> None:
@@ -1114,46 +1184,225 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 "(incident_id,service_name,environment,logical_table,incident_at,last_known_good_at,"
                 "expected_control_epoch,evidence_source,scope_note) VALUES "
                 f"(9001,'{self.service_name}','{self.environment}','{self.logical_table}','{self.incident_at}',"
-                "'2026-08-03 11:29:59',41,'incident-coordinator','global serving release before cleanup')"
+                f"'{self._history_time('2026-08-03 11:29:59')}',41,'incident-coordinator','global serving release before cleanup')"
             ),
-            "insert BC07 incident boundary",
+            "record BC07 incident boundary",
         )
         transitions = (
-            (1, self.pre_release_id, "retired", "2026-07-30 08:55:00", 0, 40, "REL-BLUE-0730", "release-bot"),
-            (2, self.pre_release_id, "rollback_completed", "2026-07-30 09:30:00", 0, 40, "REL-BLUE-0730", "release-bot"),
-            (3, self.target_release_id, "deploy_started", "2026-07-31 08:55:00", 0, 41, "REL-GREEN-0731", "release-bot"),
-            (4, self.target_release_id, "traffic_shift", "2026-07-31 09:05:00", 10, 41, "REL-GREEN-0731", "release-bot"),
-            (5, self.target_release_id, "traffic_shift", "2026-07-31 09:20:00", 100, 41, "REL-GREEN-0731", "release-bot"),
-            (6, self.target_release_id, "promoted", "2026-07-31 09:25:00", 100, 41, "REL-GREEN-0731", "release-controller"),
-            (7, self.target_release_id, "reconciled", "2026-07-31 09:30:00", 100, 41, "REL-GREEN-0731", "ledger-reconciler"),
-            (8, self.canary_release_id, "shadow_started", "2026-08-01 09:00:00", 0, 41, "REL-CANARY-0801", "release-bot"),
-            (9, self.canary_release_id, "shadow_aborted", "2026-08-01 09:10:00", 0, 41, "REL-CANARY-0801", "release-controller"),
-            (10, self.smoke_release_id, "cleanup_started", "2026-08-02 09:00:00", 0, 41, "REL-SMOKE-0802", "release-cleaner"),
-            (11, self.smoke_release_id, "cleanup_completed", "2026-08-02 09:02:00", 0, 41, "REL-SMOKE-0802", "release-cleaner"),
-            (12, self.hotfix_release_id, "deploy_started", "2026-08-03 11:45:00", 0, 42, "REL-HOTFIX-0803", "release-bot"),
-            (13, self.hotfix_release_id, "traffic_shift", "2026-08-03 11:50:00", 100, 42, "REL-HOTFIX-0803", "release-bot"),
-            (14, self.hotfix_release_id, "promoted", "2026-08-03 11:55:00", 100, 42, "REL-HOTFIX-0803", "release-controller"),
-            (15, self.rehearsal_release_id, "rehearsal_started", "2026-08-03 12:00:00", 0, 43, "REL-REHEARSAL-0803", "release-bot"),
-            (16, self.rehearsal_release_id, "rehearsal_completed", "2026-08-03 12:04:00", 0, 43, "REL-REHEARSAL-0803", "release-bot"),
-            (17, self.shadow_release_id, "shadow_started", "2026-08-03 12:15:00", 0, 44, "REL-SHADOW-0803", "release-bot"),
-            (18, self.shadow_release_id, "shadow_completed", "2026-08-03 12:20:00", 0, 44, "REL-SHADOW-0803", "release-bot"),
-            (19, self.rollback_release_id, "rollback_candidate", "2026-08-03 12:30:00", 0, 45, "REL-ROLLBACK-0803", "release-bot"),
-            (20, self.rollback_release_id, "rollback_completed", "2026-08-03 12:35:00", 0, 45, "REL-ROLLBACK-0803", "release-controller"),
+            (1, "slot-f62", "retired", "2026-07-30 08:55:00", 0, 40, "inactive"),
+            (2, "slot-f62", "rollback_completed", "2026-07-30 09:30:00", 0, 40, "inactive"),
+            (3, "slot-a17", "deploy_started", "2026-07-31 08:55:00", 0, 41, "inactive"),
+            (4, "slot-a17", "traffic_shift", "2026-07-31 09:05:00", 10, 41, "inactive"),
+            (5, "slot-a17", "traffic_shift", "2026-07-31 09:20:00", 100, 41, "serving"),
+            (6, "slot-a17", "promoted", "2026-07-31 09:25:00", 100, 41, "serving"),
+            (7, "slot-a17", "reconciled", "2026-07-31 09:30:00", 100, 41, "serving"),
+            (8, "slot-b04", "shadow_started", "2026-08-01 09:00:00", 0, 41, "inactive"),
+            (9, "slot-b04", "shadow_aborted", "2026-08-01 09:10:00", 0, 41, "inactive"),
+            (10, "slot-e11", "cleanup_started", "2026-08-02 09:00:00", 0, 41, "inactive"),
+            (11, "slot-e11", "cleanup_completed", "2026-08-02 09:02:00", 0, 41, "inactive"),
+            (12, "slot-a17", "deploy_started", "2026-08-03 11:45:00", 0, 42, "inactive"),
+            (13, "slot-a17", "traffic_shift", "2026-08-03 11:50:00", 100, 42, "serving"),
+            (14, "slot-a17", "promoted", "2026-08-03 11:55:00", 100, 42, "serving"),
+            (15, "slot-g53", "rollout_preflight" if self.logical_table == "order_events" else "rehearsal_started", "2026-08-03 12:00:00", 0, 43, "inactive"),
+            (16, "slot-g53", "rollout_completed" if self.logical_table == "order_events" else "rehearsal_completed", "2026-08-03 12:04:00", 0, 43, "inactive"),
+            (17, "slot-i66", "shadow_started", "2026-08-03 12:15:00", 0, 44, "inactive"),
+            (18, "slot-i66", "shadow_completed", "2026-08-03 12:20:00", 0, 44, "inactive"),
+            (19, "slot-j91", "rollback_candidate", "2026-08-03 12:30:00", 0, 45, "inactive"),
+            (20, "slot-j91", "rollback_completed", "2026-08-03 12:35:00", 0, 45, "inactive"),
+            (21, "slot-h28", "promoted", "2026-07-31 09:32:00", 100, 41, "serving"),
+            (22, "slot-h28", "reconciled", "2026-07-31 09:33:00", 100, 41, "serving"),
+            (23, "slot-h28", "traffic_withdrawn", "2026-08-03 11:25:00", 0, 41, "inactive"),
+        )
+        revisions = [
+            (*event, f"event-{event[0]:04d}", 1, "applied", "2026-08-03 11:40:00" if event[0] == 23 else event[3])
+            for event in transitions
+        ]
+        revisions.extend((
+            (24, "slot-a17", "traffic_withdrawn", "2026-08-03 11:28:00", 0, 41, "inactive", "event-0024", 1, "applied", "2026-08-03 11:29:00"),
+            (25, "slot-a17", "traffic_withdrawn", "2026-08-03 11:28:00", 0, 41, "inactive", "event-0024", 2, "retracted", "2026-08-03 11:42:00"),
+            (26, "slot-h28", "traffic_withdrawn", "2026-08-03 11:25:00", 100, 41, "serving", "event-0023", 2, "applied", "2026-08-03 11:29:30"),
+            (27, "slot-h28", "traffic_withdrawn", "2026-08-03 11:25:00", 0, 41, "inactive", "event-0023", 3, "applied", "2026-08-03 11:43:00"),
+        ))
+        revisions.extend({
+            "order_events": (
+                (28, "slot-a17", "traffic_withdrawn", "2026-08-03 11:29:00", 0, 41, "inactive", "event-0028", 1, "applied", "2026-08-03 11:29:30"),
+                (29, "slot-a17", "traffic_withdrawn", "2026-08-03 11:31:00", 0, 41, "inactive", "event-0028", 2, "applied", "2026-08-03 11:44:00"),
+            ),
+            "payment_events": (),
+        }[self.logical_table])
+        require_sql_success(
+            env.execute_sql(
+                f"INSERT INTO {self.database}.{self.release_transition_table} "
+                "(transition_id,control_key,service_name,environment,logical_table,transition,occurred_at,"
+                "traffic_percent,control_epoch,change_ticket,actor,recorded_at,resulting_state,event_key,event_revision,revision_state) VALUES "
+                + ",".join(
+                    f"({i},'{key}','{self.service_name}','{self.environment}','{self.logical_table}',"
+                    f"'{transition}','{self._history_time(at)}',{traffic},{epoch},'CHG-{i:04d}','release-controller',"
+                    f"'{self._history_time(recorded)}','{state}','{event_key}',{revision},'{revision_state}')"
+                    for i, key, transition, at, traffic, epoch, state, event_key, revision, revision_state, recorded in revisions
+                )
+            ),
+            "record BC07 revised and retracted controller events",
+        )
+        if self.logical_table == "order_events":
+            self._insert_controller_authority_history(env)
+            self._insert_application_history(env)
+
+    def _insert_controller_authority_history(self, env) -> None:
+        require_sql_success(
+            env.execute_sql(
+                f"CREATE TABLE {self.database}.controller_lease_history ("
+                "lease_id BIGINT PRIMARY KEY, controller_id VARCHAR(64) NOT NULL, "
+                "service_name VARCHAR(64) NOT NULL, environment VARCHAR(32) NOT NULL, "
+                "logical_table VARCHAR(64) NOT NULL, region VARCHAR(32) NOT NULL, "
+                "control_epoch BIGINT NOT NULL, "
+                "valid_from DATETIME NOT NULL COMMENT 'Inclusive business time from which publisher owns this scoped controller lease', "
+                "valid_until DATETIME COMMENT 'Exclusive business time of lease loss; NULL means open')"
+            ),
+            "create BC07 order controller lease history",
+        )
+        leases = (
+            (1, "release-controller", self.environment, "global", 41, "2026-07-30 00:00:00", "2026-08-03 11:29:45"),
+            (2, "release-controller-b", self.environment, "global", 41, "2026-08-03 11:29:45", "2026-08-03 11:45:00"),
+            (3, "release-controller", self.environment, "us-east", 41, "2026-07-30 00:00:00", None),
+            (4, "release-controller", "staging", "global", 7, "2026-07-30 00:00:00", None),
+            (5, "release-controller-b", self.environment, "global", 42, "2026-08-03 11:45:00", None),
+        )
+        values = []
+        for i, controller, environment, region, epoch, start, end in leases:
+            end_sql = "NULL" if end is None else f"'{end}'"
+            values.append(
+                f"({i},'{controller}','{self.service_name}','{environment}','{self.logical_table}',"
+                f"'{region}',{epoch},'{start}',{end_sql})"
+            )
+        require_sql_success(
+            env.execute_sql(f"INSERT INTO {self.database}.controller_lease_history VALUES " + ",".join(values)),
+            "record BC07 business-time controller authority",
+        )
+        require_sql_success(
+            env.execute_sql(
+                f"ALTER TABLE {self.database}.{self.release_transition_table} MODIFY actor VARCHAR(64) NOT NULL "
+                "COMMENT 'Publishing controller identity; global control events require its matching scoped lease at occurred_at, not audit arrival'"
+            ),
+            "describe BC07 publishing identity",
+        )
+        events = (
+            (30, "slot-a17", "reconciled", "2026-08-03 11:29:50", 100, "serving", "release-controller-b"),
+            (31, "slot-a17", "traffic_withdrawn", "2026-08-03 11:29:55", 0, "inactive", "release-controller"),
+            (32, "slot-h28", "promoted", "2026-08-03 11:29:56", 100, "serving", "release-controller"),
         )
         require_sql_success(
             env.execute_sql(
                 f"INSERT INTO {self.database}.{self.release_transition_table} "
-                "(transition_id,release_id,service_name,environment,logical_table,transition,occurred_at,"
-                "traffic_percent,control_epoch,change_ticket,actor) VALUES "
+                "(transition_id,control_key,service_name,environment,logical_table,transition,occurred_at,"
+                "traffic_percent,control_epoch,change_ticket,actor,recorded_at,resulting_state,event_key,event_revision,revision_state) VALUES "
                 + ",".join(
-                    f"({transition_id},'{release_id}','{self.service_name}','{self.environment}',"
-                    f"'{self.logical_table}','{transition}',"
-                    f"'{occurred_at}',{traffic_percent},{control_epoch},'{ticket}','{actor}')"
-                    for transition_id, release_id, transition, occurred_at, traffic_percent, control_epoch, ticket, actor
-                    in transitions
+                    f"({i},'{key}','{self.service_name}','{self.environment}','{self.logical_table}',"
+                    f"'{transition}','{at}',{traffic},41,'CHG-{i:04d}','{actor}',"
+                    f"'{at}','{state}','event-{i:04d}',1,'applied')"
+                    for i, key, transition, at, traffic, state, actor in events
                 )
             ),
-            "insert BC07 release transition history",
+            "record BC07 controller handoff publications",
+        )
+
+    def _insert_application_history(self, env) -> None:
+        require_sql_success(
+            env.execute_sql(
+                f"ALTER TABLE {self.database}.{self.release_transition_table} "
+                "ADD COLUMN region VARCHAR(32) NOT NULL DEFAULT 'global' "
+                "COMMENT 'Command route scope; match the exact receipt scope', "
+                "MODIFY resulting_state ENUM('inactive','serving') NOT NULL "
+                "COMMENT 'Command intent; actual route changes only at matching receipt applied_at', "
+                "MODIFY revision_state ENUM('applied','retracted') NOT NULL "
+                "COMMENT 'Accepted historical audit revision, not receiver application; resolve revisions before joining receipts'"
+            ),
+            "expose BC07 command scope and receiver application semantics",
+        )
+        require_sql_success(
+            env.execute_sql(
+                f"CREATE TABLE {self.database}.controller_apply_receipts ("
+                "receipt_id BIGINT PRIMARY KEY, service_name VARCHAR(64) NOT NULL, "
+                "environment VARCHAR(32) NOT NULL, logical_table VARCHAR(64) NOT NULL, "
+                "control_key VARCHAR(64) NOT NULL, region VARCHAR(32) NOT NULL, "
+                "control_epoch BIGINT NOT NULL, event_key VARCHAR(64) NOT NULL, "
+                "event_revision BIGINT NOT NULL COMMENT 'Audited application fact for the same scoped command revision; historical corrections supersede both command and associated receipt facts', "
+                "receiver_id VARCHAR(64) NOT NULL, receiver_epoch BIGINT NOT NULL "
+                "COMMENT 'Only the matching control epoch can change that route', "
+                "phase ENUM('accepted','applied','rejected','cancelled') NOT NULL "
+                "COMMENT 'Accepted means queued, applied means route changed; rejected/cancelled never changed it', "
+                "accepted_at DATETIME, applied_at DATETIME "
+                "COMMENT 'Actual route effective time; apply the incident boundary here, not to accepted_at or command occurrence', "
+                "recorded_at DATETIME NOT NULL COMMENT 'Audit arrival only, including late historical corrections', "
+                "resulting_state ENUM('inactive','serving') NOT NULL, traffic_percent INT NOT NULL, "
+                "rejection_reason ENUM('none','publisher_fenced','stale_epoch','cancelled_command') NOT NULL)"
+            ),
+            "create BC07 raw controller receiver/application receipts",
+        )
+        authority = (
+            f"EXISTS (SELECT 1 FROM {self.database}.controller_lease_history l "
+            "WHERE l.controller_id=t.actor AND l.service_name=t.service_name "
+            "AND l.environment=t.environment AND l.logical_table=t.logical_table "
+            "AND l.region=t.region AND l.control_epoch=t.control_epoch "
+            "AND l.valid_from <= t.occurred_at "
+            "AND (l.valid_until IS NULL OR t.occurred_at < l.valid_until))"
+        )
+        require_sql_success(
+            env.execute_sql(
+                f"INSERT INTO {self.database}.controller_apply_receipts "
+                "SELECT t.transition_id,t.service_name,t.environment,t.logical_table,t.control_key,t.region,"
+                "t.control_epoch,t.event_key,t.event_revision,'global-route-applier',t.control_epoch,"
+                "CASE WHEN t.revision_state='retracted' THEN 'cancelled' "
+                f"WHEN {authority} THEN 'applied' ELSE 'rejected' END,"
+                "t.occurred_at,CASE WHEN t.revision_state='applied' "
+                f"AND {authority} THEN t.occurred_at ELSE NULL END,"
+                "t.recorded_at,t.resulting_state,t.traffic_percent,"
+                "CASE WHEN t.revision_state='retracted' THEN 'cancelled_command' "
+                f"WHEN {authority} THEN 'none' ELSE 'publisher_fenced' END "
+                f"FROM {self.database}.{self.release_transition_table} t"
+            ),
+            "record scoped application or cancellation for every historical command revision",
+        )
+        events = (
+            (33, "slot-a17", self.environment, "global", "traffic_withdrawn", 41, "release-controller-b", "inactive", 0),
+            (34, "slot-g53", self.environment, "global", "promoted", 41, "release-controller-b", "serving", 100),
+            (35, "slot-g53", self.environment, "us-east", "promoted", 41, "release-controller", "serving", 100),
+            (36, "slot-g53", "staging", "global", "promoted", 7, "release-controller", "serving", 100),
+        )
+        require_sql_success(
+            env.execute_sql(
+                f"INSERT INTO {self.database}.{self.release_transition_table} "
+                "(transition_id,control_key,service_name,environment,logical_table,transition,occurred_at,"
+                "traffic_percent,control_epoch,change_ticket,actor,recorded_at,resulting_state,event_key,event_revision,revision_state,region) VALUES "
+                + ",".join(
+                    f"({i},'{key}','{self.service_name}','{environment}','{self.logical_table}',"
+                    f"'{transition}','2026-08-03 11:29:57',{traffic},{epoch},'CHG-{i:04d}',"
+                    f"'{actor}','2026-08-03 11:29:57','{state}','event-{i:04d}',1,'applied','{region}')"
+                    for i, key, environment, region, transition, epoch, actor, state, traffic in events
+                )
+            ),
+            "record global queued commands and independent regional/staging commands",
+        )
+        receipts = []
+        for i, key, environment, region, transition, epoch, actor, state, traffic in events:
+            apply_time = {33: "11:30:01", 34: "11:30:02", 35: "11:29:59", 36: "11:29:59"}[i]
+            for phase_index, phase in enumerate(("accepted", "applied")):
+                applied_sql = "NULL" if phase == "accepted" else f"'2026-08-03 {apply_time}'"
+                recorded = "11:29:58" if phase == "accepted" else apply_time
+                receipts.append(
+                    f"({i * 10 + phase_index},'{self.service_name}','{environment}','{self.logical_table}',"
+                    f"'{key}','{region}',{epoch},'event-{i:04d}',1,'{region}-route-applier',{epoch},"
+                    f"'{phase}','2026-08-03 11:29:58',{applied_sql},'2026-08-03 {recorded}',"
+                    f"'{state}',{traffic},'none')"
+                )
+        receipts.append(
+            f"(399,'{self.service_name}','{self.environment}','{self.logical_table}',"
+            "'slot-g53','global',41,'event-0034',1,'retiring-global-applier',40,"
+            "'rejected','2026-08-03 11:29:58',NULL,'2026-08-03 11:29:59','serving',100,'stale_epoch')"
+        )
+        require_sql_success(
+            env.execute_sql(f"INSERT INTO {self.database}.controller_apply_receipts VALUES " + ",".join(receipts)),
+            "record acceptance, delayed global application and scoped healthy application",
         )
 
     @staticmethod
@@ -1188,15 +1437,14 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 tenant_id = event_id % 31 + 1
                 event_type = event_types[(event_id + generation_shift) % len(event_types)]
                 amount_cents = 1000 + event_id * 13 + generation_shift * 101
-                payload = (
-                    bytes.fromhex("3a3ef539")
-                    if generation == "active" and event_id == self.source_row_count
-                    else (
-                        f"order-{event_id:04d}".encode()
-                        if generation in {"active", "archive"}
-                        else f"{generation}-order-{event_id:04d}".encode()
-                    )
-                )
+                if self.logical_table == "order_events":
+                    payload = f"order-{event_id:04d}".encode()
+                elif generation == "active" and event_id == self.source_row_count:
+                    payload = bytes.fromhex("3a3ef539")
+                elif generation in {"active", "archive"}:
+                    payload = f"order-{event_id:04d}".encode()
+                else:
+                    payload = f"{generation}-order-{event_id:04d}".encode()
                 values.append(
                     f"({event_id},{tenant_id},'{event_type}',{amount_cents},0x{payload.hex()})"
                 )
@@ -1233,18 +1481,24 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
         self,
         env,
         release_id: str,
-        lifecycle_state: str,
         generation: str,
         row_count: int,
         effective_at: str,
-        change_ticket: str,
     ) -> None:
+        effective_at = self._history_time(effective_at)
         require_sql_success(
             env.execute_sql(f"CREATE TABLE {self._qualified_table} ({self._event_schema()})"),
             f"create BC07 {release_id} same-name release table",
         )
         self._insert_event_rows(env, self.table, row_count, generation)
         truth = self._truth(env)
+        if self.logical_table == "order_events":
+            self.production_payload_evidence[release_id] = execute_result_rows(
+                env.execute_sql,
+                f"SELECT COUNT(*), SUM(payload=CONCAT('order-',LPAD(event_id,4,'0'))), "
+                f"MIN(LENGTH(payload)), MAX(LENGTH(payload)) FROM {self._qualified_table}",
+                f"capture native production payload profile for {release_id}",
+            )
         if release_id == self.target_release_id:
             expected = (self.source_row_count, self.expected_event_id_sum, self.expected_crc)
             if truth != expected:
@@ -1265,8 +1519,8 @@ class TidbBusinessChangeTableRecoveryInjector(BaseFaultInjector):
                 "(registry_id,release_id,logical_table,table_id,lifecycle_state,generation,"
                 "expected_rows,expected_event_id_sum,expected_crc,effective_at,change_ticket) VALUES "
                 f"({len(self.release_drop_jobs) + 1},'{release_id}','{self.table}',{table_id},"
-                f"'{lifecycle_state}','{generation}',{truth[0]},{truth[1]},{truth[2]},"
-                f"'{effective_at}','{change_ticket}')"
+                f"'retained','artifact-{len(self.release_drop_jobs) + 1:02d}',{truth[0]},{truth[1]},{truth[2]},"
+                f"'{effective_at}','CHG-{len(self.release_drop_jobs) + 1:04d}')"
             ),
             f"record BC07 release registry row for {release_id}",
         )

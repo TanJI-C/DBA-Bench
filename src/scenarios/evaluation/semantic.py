@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from src.scenarios.evaluation.protocol import DiagnosisCondition
+from src.protocols.report import DiagnosisCondition
 
 if TYPE_CHECKING:
     from src.scenarios.evaluation.diagnosis import ExpectedCondition

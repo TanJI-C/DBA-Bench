@@ -7,7 +7,7 @@ from src.execution.history.records import CapturedRecords, HistoricalCoverage, H
 from src.scenarios.runtime import orchestrator as orchestrator_module
 from src.scenarios.runtime.orchestrator import InjectionState, Orchestrator, OrchestratorRunConfig
 from src.scenarios.frozen_history import FrozenHistorySpec
-from src.scenarios.workloads import BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadStartPhase, WorkloadProfile
 
 
 BASE_MS = 1_700_000_000_000

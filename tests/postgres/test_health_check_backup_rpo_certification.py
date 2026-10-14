@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.execution.backup_rpo import (
     RPO_ARCHIVE_COMMAND,
     RPO_HISTORY_MAX_POINTS,
@@ -20,7 +20,8 @@ from src.execution.history.records import (
     HistoricalRecordSource,
 )
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider
-from src.scenarios.base import CaseRun, FaultLifecycleContext, PostgresRuntimeSpec
+from src.scenarios.base import CaseRun, FaultLifecycleContext
+from src.execution.specs import PostgresRuntimeSpec
 from src.scenarios.postgres import SCENARIO_REGISTRY
 from src.scenarios.postgres.health_check.backup_rpo_certification import (
     PgHealthCheckBackupRpoCertificationInjector,
@@ -1665,7 +1666,7 @@ def test_rpo_overview_default_limit_covers_the_full_frozen_grid(monkeypatch):
         captured["limit"] = limit
         return '{"status": "success"}'
 
-    monkeypatch.setattr("src.execution.environment.PGEnv.query_metrics", fake_base_query)
+    monkeypatch.setattr("src.execution.environments.postgres.PGEnv.query_metrics", fake_base_query)
     env.query_metrics("archive_backlog")
     assert captured["metric"] == "archive_backlog"
     # 43200s / 480s = 90 coarse grid points; the overview must expose the

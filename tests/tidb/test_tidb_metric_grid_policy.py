@@ -1,7 +1,7 @@
 """Grid tolerance policy shared by PG and TiDB samplers, and the TiDB
 metric-capture grid alignment built on it."""
 
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.metrics import MetricFrame
 from src.execution.sampler_grid import (
     SAMPLER_LAG_STRIKES_LIMIT,

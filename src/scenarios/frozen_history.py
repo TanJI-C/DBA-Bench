@@ -10,10 +10,10 @@ from typing import Mapping
 from typing import TYPE_CHECKING
 
 from src.execution.history.records import HistoricalRecordSource
-from src.scenarios.workloads import BackgroundWorkloadStartPhase
+from src.workloads.specs import BackgroundWorkloadStartPhase
 
 if TYPE_CHECKING:
-    from src.scenarios.workloads import BackgroundWorkloadSpec
+    from src.workloads.specs import BackgroundWorkloadSpec
 
 
 class DecoyKind(str, Enum):
@@ -436,6 +436,11 @@ class FrozenHistorySpec:
                 f"decoy={decoy!r}, normal_capture_seconds={self.normal_capture_seconds}"
             )
         if decoy.kind is DecoyKind.CAPTURED_BENIGN:
+            if decoy.count * decoy.duration_seconds > self.normal_capture_seconds:
+                raise ValueError(
+                    "captured_benign count times duration cannot exceed normal_capture_seconds: "
+                    f"decoy={decoy!r}, normal_capture_seconds={self.normal_capture_seconds}"
+                )
             if decoy.amplitude_mad is not None or decoy.minimum_deviation_mad is None or decoy.minimum_deviation_mad <= 0:
                 raise ValueError(
                     "captured_benign requires amplitude_mad=None and positive minimum_deviation_mad: "

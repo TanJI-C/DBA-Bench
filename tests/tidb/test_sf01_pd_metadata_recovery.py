@@ -7,9 +7,9 @@ import pytest
 
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from examples.run_tidb_system_failure_sf01_scenario import Sf01FullPassMockAgent
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.system_failure.pd_metadata_recovery import (
     TidbSystemFailureSf01PdMixedDiskEvictionInjector,

@@ -243,9 +243,9 @@ run-failure semantics.
 
 - Runtime knowledge ownership: `src/knowledge/tidb_knowledge_base.py`,
   `src/knowledge/markdown_knowledge_base.py`, `src/knowledge/embedding_model_runtime.py`.
-- Agent projection: `src/execution/environment.py`; tool schema:
+- Agent projection: `src/execution/environments/tidb.py`; tool schema:
   `src/execution/tidb_tool_definitions.py`.
-- Deployment and recovery lifecycle: `src/execution/deployment.py`,
+- Deployment and recovery lifecycle: `src/execution/deployments/tidb.py`,
   `src/scenarios/tidb/system_failure/pending_offline.py`,
   `src/scenarios/runtime/orchestrator.py`, and `src/visualization/exporter.py`.
 - Unified construction: `scripts/merge_tidb_curated_knowledge.py` and

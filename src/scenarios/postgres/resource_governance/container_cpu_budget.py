@@ -16,7 +16,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Mapping
 
-from src.execution.environment import PGEnv, Tool, lazy_agent_text
+from src.execution.environments.postgres import PGEnv
+from src.execution.tools import Tool, lazy_agent_text
 from src.execution.history.metrics import MetricService
 from src.execution.postgres_metrics import LivePostgresSamplerMetricProvider
 from src.execution.history.metrics import (
@@ -47,20 +48,10 @@ from src.scenarios.frozen_history import (
     HistoryDecoySpec,
     FrozenHistorySpec,
 )
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import HostPortLayout, CaseResourceSpec, PostgresCaseRuntime
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 
 
 SCENARIO_ID = "pg_resource_governance_container_cpu_budget"
@@ -3120,7 +3111,7 @@ _HARD_CASE = PgResourceGovernanceContainerCpuBudgetForDbQuotaThrottleScenarioCas
             "run_pg_resource_governance_container_cpu_budget_db_quota_throttle_MockLLMAgent",
         ),
     ),
-    runtime=PostgresCaseRuntime(resources=RESOURCE_GOVERNANCE_CPU_RESOURCES),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1)), resources=RESOURCE_GOVERNANCE_CPU_RESOURCES),
     base_image_name=BASE_IMAGE_NAME,
     workload_tag="initialized",
     sibling_image=SIBLING_IMAGE_NAME,
@@ -3437,7 +3428,7 @@ _EASY_CASE = PgResourceGovernanceContainerCpuBudgetForDbQuotaThrottleSimpleScena
             "reference-249__pg_resource_governance_container_cpu_budget__db_quota_throttle_simple__mock__r001",
         ),
     ),
-    runtime=PostgresCaseRuntime(resources=RESOURCE_GOVERNANCE_CPU_RESOURCES),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1)), resources=RESOURCE_GOVERNANCE_CPU_RESOURCES),
     base_image_name=BASE_IMAGE_NAME,
     workload_tag="initialized",
     sibling_image=SIBLING_IMAGE_NAME,

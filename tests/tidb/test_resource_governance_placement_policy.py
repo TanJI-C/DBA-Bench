@@ -11,7 +11,7 @@ from src.scenarios.evaluation.tidb.resource_governance.placement_policy import (
 )
 from src.scenarios.base import CaseRun, InjectionRecord, InjectionState
 from src.scenarios.faults import FaultLifecycleContext
-from src.execution.deployment import TiDBDockerDeployment
+from src.execution.deployments.tidb import TiDBDockerDeployment
 from src.benchmark.commands import script_options
 
 

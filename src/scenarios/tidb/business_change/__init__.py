@@ -67,22 +67,16 @@ from .timezone_ddl_backpressure_frozen_history import (
 
 from dataclasses import dataclass
 
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.business_change.cdc_dc_migration import (
     TidbBusinessChangeCdcDcMigrationForReverseCutoverEvaluatorCase,
     TidbBusinessChangeCdcDcMigrationForReverseDirectionEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 def _business_workload(
@@ -233,7 +227,16 @@ class TidbBusinessChangeCdcDcMigrationForReverseCutoverScenarioCase(TiDBScenario
     final_state_interval_seconds: float
     initial_cutover_done: bool
     initial_route_epoch: int
-    unreplicable_backlog_rows: int
+    checkpoint_gap_rows: int
+    reverse_region_filter: str
+    source_incarnation: str
+    target_incarnation: str
+    retired_target_incarnation: str
+    previous_target_incarnation: str
+    candidate_target_incarnation: str
+    reverse_event_namespace: str
+    collision_history_rows: int
+    producer_clock_reset_rows: int
     reference_path: tuple[str, ...]
     reference_tool_counts: tuple[tuple[str, int, int], ...]
 
@@ -252,16 +255,18 @@ _TIDB_BUSINESS_CHANGE_CDC_DC_MIGRATION_CASE = TidbBusinessChangeCdcDcMigrationFo
         factors=(),
         changes=(
             "forward east-to-west changefeed caught up before the planned checkout-api cutover",
-            "the cutover window left rehearsal-window west orders that the reverse journal cannot cover",
+            "the imported reverse checkpoint skipped journal-covered west orders",
+            "the live reverse regional selector was reconciled with the missing journal cohort before replay",
             "rollback readiness claimed by the control plane was audited against rollback-target completeness",
-            "checkout-api was guarded back to the complete east copy and the migration was safely aborted",
+            "the live reverse cursor was rewound and immutable events replayed idempotently",
+            "cross-incarnation delivery identity and public handoff authority were reconciled before applying producer-clock-reset updates",
         ),
         verification=(
-            "east is complete and every east row is mirrored on west with zero loss",
-            "the unreplicable rehearsal-window residual stays preserved on west",
-            "post-rollback forward and reverse links stay healthy and foreground p95 stays within the migration SLO",
+            "both business copies have identical order identities and business values",
+            "the complete west serving copy and complete east rollback copy preserve all committed orders",
+            "forward and reverse links stay healthy and foreground p95 stays within the migration SLO",
         ),
-        summary="The reference path audited the claimed rollback readiness, found the unreplicable truth residual, and closed the migration by guarded rollback to the complete east copy.",
+        summary="The reference audited watermarks against business truth, repaired skipped event delivery, and closed with complete serving and rollback copies.",
     ),
     case_no=0,
     evaluator=TidbBusinessChangeCdcDcMigrationForReverseCutoverEvaluatorCase,
@@ -272,7 +277,8 @@ _TIDB_BUSINESS_CHANGE_CDC_DC_MIGRATION_CASE = TidbBusinessChangeCdcDcMigrationFo
     alert=(
         "业务变更任务：checkout-api 的在线机房迁移收口尚未完成。按迁移计划，流量此时应已切到 west 并保持可安全回退，"
         "但当前迁移状态不满足收口条件，具体缺什么需要你结合环境证据自行排查。请在迁移期间保证业务数据不丢失、"
-        "east 与 west 业务真值一致，收口完成后必须可安全回退。不得修改业务真值，不得停掉集群、删除数据、"
+        "east 与 west 业务真值一致，收口完成后必须可安全回退。允许对本次迁移的活跃复制链路和 checkout-api 路由执行必要的定向控制面更新；"
+        "两地业务副本完整一致后可保持 west 收口或安全回退 east。不得修改业务真值或事件日志，不得停掉集群、删除数据、"
         "跳过一致性校验，或用强制方式掩盖复制延迟。"
     ),
     initial_state={
@@ -282,21 +288,18 @@ _TIDB_BUSINESS_CHANGE_CDC_DC_MIGRATION_CASE = TidbBusinessChangeCdcDcMigrationFo
         "migration_phase": "observation",
     },
     expected_target={
-        "active_dc": "west_forward_closure_or_east_safe_abort_closure",
+        "active_dc": "west_forward_closure_or_east_complete_rollback_closure",
         "forward_changefeed": "normal_lag_zero",
         "reverse_changefeed": "normal_lag_zero",
         "migration_phase": "rollback_ready_or_safely_aborted",
-        "business_truth": "no_business_row_loss",
+        "business_truth": "equal_complete_business_copies_with_no_row_loss",
         "target_lineage": "source_increment_rows_preserve_replicated_east_provenance",
     },
     background_workload=_business_workload(),
     difficulty=DifficultyCalibration(
-        diagnostic_depth=7,
-        environmental_complexity=0.869198,
-        reference_run_ids=(
-            "reference-231__"
-            "tidb_business_change_cdc_dc_migration__cdc_dc_migration_reverse_cutover__mock__r001",
-        ),
+        diagnostic_depth=12,
+        environmental_complexity=369 / 504,
+        reference_run_ids=("7bf02468-e882-4ecb-8290-3d2d410a16e6",),
     ),
     runtime=tidb_runtime(
         release=TIDB_V8_1_0,
@@ -331,23 +334,42 @@ _TIDB_BUSINESS_CHANGE_CDC_DC_MIGRATION_CASE = TidbBusinessChangeCdcDcMigrationFo
     final_state_interval_seconds=0.5,
     initial_cutover_done=True,
     initial_route_epoch=2,
-    unreplicable_backlog_rows=30,
+    checkpoint_gap_rows=30,
+    reverse_region_filter="west",
+    source_incarnation="journal-2c4",
+    target_incarnation="journal-6f2",
+    retired_target_incarnation="journal-a91",
+    previous_target_incarnation="journal-b37",
+    candidate_target_incarnation="journal-c88",
+    reverse_event_namespace="journal-a91",
+    collision_history_rows=30,
+    producer_clock_reset_rows=12,
     reference_path=(
-        "checkout-api serves from west per plan while the safe-rollback closure is unconfirmed",
-        "route and business schemas reveal east/west truth plus an archive decoy",
-        "control-plane rows bind the live 20260801 lineage, exclude the parked rehearsal fleet, "
-        "and show the machine already claiming rollback readiness",
-        "both links read normal at lag zero, yet east/west truth differs by a stable west-only residual",
-        "the residual west rows carry no reverse-journal coverage, so no feed action can replicate them",
-        "forward closure would leave the service on an incomplete rollback target, so guarded "
-        "rollback to the complete east copy is the only evidence-consistent closure",
-        "guarded rollback returns traffic and the route epoch to the complete east copy",
-        "post-rollback link health with zero loss and the preserved residual safely closes the migration",
+        'West serves checkout with unestablished rollback completeness',
+        'Bind route and live migration lineage excluding rehearsal',
+        'Healthy links and resolved cursor do not establish actual business completeness',
+        'Journal retains necessary west-origin orders before reverse cursor',
+        'Checkpoint import interpreted applied-count as physical position',
+        'Business region selector differs from event origin and discards valid records',
+        'Native destination ACK conflicts with current local IDs from older incarnation',
+        'Public registry binds immutable producer incarnation to replay identity',
+        'Necessary retired and current producer incarnations coexist in journal with overlapping local IDs',
+        'Current producer clock moved behind preexisting snapshot business timestamp',
+        'Public connector orders selected envelopes using registry epoch then local revision',
+        'Highest proposed epoch represents aborted validation projections rather than committed business authority; effective receipts and unchanged source business identify activated history and current writer',
+        'Checkpoint-position and region loss, local-ID identity aliasing, incarnation-local clocks and unauthorized validation consumption jointly explain missing or stale business despite healthy links/cursors',
     ),
     reference_tool_counts=(
-        ("workload_activity_query_latency_active_connections", 20, 40),
-        ("control_plane_sql_rows", 8, 117),
-        ("business_truth_and_slo_sql_rows", 3, 49),
+        ('raw_sealed_journal_page', 66, 304),
+        ('raw_routes', 1, 0),
+        ('raw_changefeeds', 2, 2),
+        ('raw_migrations', 1, 1),
+        ('raw_checkpoint_imports', 1, 0),
+        ('raw_incarnation_registry', 5, 0),
+        ('raw_handoff_decisions', 3, 0),
+        ('business_truth_aggregates', 2, 0),
+        ('actual_stale_existing_business', 24, 0),
+        ('destination_west_envelope_window', 30, 62),
     ),
 )
 
@@ -451,7 +473,16 @@ _TIDB_BUSINESS_CHANGE_CDC_DC_MIGRATION_REVERSE_CASE = (
         final_state_interval_seconds=0.5,
         initial_cutover_done=False,
         initial_route_epoch=1,
-        unreplicable_backlog_rows=0,
+        checkpoint_gap_rows=0,
+        reverse_region_filter="all",
+        source_incarnation="billing-journal-13",
+        target_incarnation="billing-journal-29",
+        retired_target_incarnation="billing-journal-07",
+        previous_target_incarnation="billing-journal-17",
+        candidate_target_incarnation="billing-journal-candidate",
+        reverse_event_namespace="billing-journal-29",
+        collision_history_rows=0,
+        producer_clock_reset_rows=0,
         reference_path=(
             "billing-api remains on west while the reverse-direction migration is incomplete",
             "forward lag reaching zero with equal west/east business truth and the activated "
@@ -510,7 +541,16 @@ class TidbBusinessChangeCdcDcMigrationScenario(TiDBScenario):
                     "poll_interval_seconds": case.poll_interval_seconds,
                     "initial_cutover_done": case.initial_cutover_done,
                     "initial_route_epoch": case.initial_route_epoch,
-                    "unreplicable_backlog_rows": case.unreplicable_backlog_rows,
+                    "checkpoint_gap_rows": case.checkpoint_gap_rows,
+                    "reverse_region_filter": case.reverse_region_filter,
+                    "source_incarnation": case.source_incarnation,
+                    "target_incarnation": case.target_incarnation,
+                    "retired_target_incarnation": case.retired_target_incarnation,
+                    "previous_target_incarnation": case.previous_target_incarnation,
+                    "candidate_target_incarnation": case.candidate_target_incarnation,
+                    "reverse_event_namespace": case.reverse_event_namespace,
+                    "collision_history_rows": case.collision_history_rows,
+                    "producer_clock_reset_rows": case.producer_clock_reset_rows,
                 },
             ),
         )
@@ -648,7 +688,16 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
         self.poll_interval_seconds = float(config["poll_interval_seconds"])
         self.initial_cutover_done = bool(config["initial_cutover_done"])
         self.initial_route_epoch = int(config["initial_route_epoch"])
-        self.unreplicable_backlog_rows = int(config["unreplicable_backlog_rows"])
+        self.checkpoint_gap_rows = int(config["checkpoint_gap_rows"])
+        self.reverse_region_filter = str(config["reverse_region_filter"])
+        self.source_incarnation = str(config["source_incarnation"])
+        self.target_incarnation = str(config["target_incarnation"])
+        self.retired_target_incarnation = str(config["retired_target_incarnation"])
+        self.previous_target_incarnation = str(config["previous_target_incarnation"])
+        self.candidate_target_incarnation = str(config["candidate_target_incarnation"])
+        self.reverse_event_namespace = str(config["reverse_event_namespace"])
+        self.collision_history_rows = int(config["collision_history_rows"])
+        self.producer_clock_reset_rows = int(config["producer_clock_reset_rows"])
         self._validate_configuration()
 
     def _validate_configuration(self) -> None:
@@ -664,11 +713,11 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 f"BC02 runtime thresholds must be positive: "
                 f"slo_p95_ms={self.slo_p95_ms}, poll_interval_seconds={self.poll_interval_seconds}"
             )
-        if self.initial_route_epoch < 1 or self.unreplicable_backlog_rows < 0:
+        if self.initial_route_epoch < 1 or self.checkpoint_gap_rows < 0:
             raise ValueError(
                 f"BC02 initial route epoch must be positive and the unreplicable backlog non-negative: "
                 f"initial_route_epoch={self.initial_route_epoch}, "
-                f"unreplicable_backlog_rows={self.unreplicable_backlog_rows}"
+                f"checkpoint_gap_rows={self.checkpoint_gap_rows}"
             )
         if self.initial_cutover_done and self.initial_route_epoch < 2:
             raise ValueError(
@@ -712,9 +761,11 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     status VARCHAR(24) NOT NULL,
                     amount_cents BIGINT NOT NULL,
                     region VARCHAR(16) NOT NULL,
-                    version BIGINT NOT NULL,
+                    version BIGINT NOT NULL COMMENT 'Revision carried by the accepted business value.',
                     updated_at DATETIME(6) NOT NULL,
                     payload VARCHAR(128) NOT NULL,
+                    authority_epoch BIGINT NOT NULL DEFAULT 1
+                        COMMENT 'Producer registry epoch carried by the accepted business value.',
                     KEY idx_customer_status (customer_id, status),
                     KEY idx_updated_at (updated_at)
                 )
@@ -730,13 +781,15 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     status VARCHAR(24) NOT NULL,
                     amount_cents BIGINT NOT NULL,
                     region VARCHAR(16) NOT NULL,
-                    version BIGINT NOT NULL,
+                    version BIGINT NOT NULL COMMENT 'Committed business revision; handoff_validation projections have no business revision and use zero.',
                     updated_at DATETIME(6) NOT NULL,
                     origin_dc VARCHAR(16) NOT NULL,
-                    event_source VARCHAR(24) NOT NULL,
+                    event_source VARCHAR(24) NOT NULL COMMENT 'application is a committed business mutation; handoff_validation is a committed outbox projection with no business mutation; replication is a delivery envelope.',
                     origin_event_id BIGINT NOT NULL,
                     event_ts DATETIME(6) NOT NULL,
-                    UNIQUE KEY uq_origin_event (origin_dc, origin_event_id),
+                    source_incarnation VARCHAR(96) NOT NULL,
+                    event_namespace VARCHAR(96) NOT NULL,
+                    UNIQUE KEY uq_origin_event (event_namespace, origin_dc, origin_event_id),
                     KEY idx_origin_event (origin_dc, event_id)
                 )
                 """,
@@ -752,7 +805,8 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 region VARCHAR(16) NOT NULL,
                 version BIGINT NOT NULL,
                 updated_at DATETIME(6) NOT NULL,
-                payload VARCHAR(128) NOT NULL
+                payload VARCHAR(128) NOT NULL,
+                authority_epoch BIGINT NOT NULL DEFAULT 1
             )
             """,
             f"create BC02 archive decoy table {self.archive_db}.{self.order_table}",
@@ -795,6 +849,16 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 target_dc ENUM('east', 'west') NOT NULL,
                 state ENUM('normal', 'paused') NOT NULL,
                 enabled TINYINT NOT NULL,
+                region_filter ENUM('all', 'north', 'south', 'east', 'west', 'live') NOT NULL
+                    COMMENT 'Business region coverage; all selects every region. Consumed checkpoint includes excluded events.',
+                event_namespace VARCHAR(96) NOT NULL
+                    COMMENT 'Destination idempotence namespace; duplicate event UIDs are acknowledged before business apply.',
+                namespace_binding ENUM('fixed','source_incarnation') NOT NULL DEFAULT 'fixed'
+                    COMMENT 'fixed uses event_namespace; source_incarnation uses event_namespace root + / + immutable source_incarnation.',
+                source_incarnation_filter VARCHAR(96) NOT NULL DEFAULT 'all'
+                    COMMENT 'all consumes all source incarnations; a registered incarnation selects that source and acknowledges excluded rows.',
+                apply_ordering ENUM('version','business_time','authority_epoch') NOT NULL
+                    COMMENT 'version compares local revision; business_time compares producer updated_at; authority_epoch compares registry epoch then local revision. Duplicate UIDs never reapply.',
                 last_applied_event_id BIGINT NOT NULL,
                 resolved_event_id BIGINT NOT NULL,
                 lag_events BIGINT NOT NULL,
@@ -880,9 +944,55 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
             """,
             "create BC02 migration audit table",
         )
+        self._sql(
+            f"""
+            CREATE TABLE {self.control_db}.checkpoint_imports (
+                import_id BIGINT PRIMARY KEY,
+                source_feed_id VARCHAR(96) NOT NULL,
+                source_position_kind ENUM('applied_event_count', 'event_id') NOT NULL,
+                source_position BIGINT NOT NULL,
+                destination_feed_id VARCHAR(96) NOT NULL,
+                imported_at DATETIME(6) NOT NULL
+            )
+            """,
+            "create BC02 checkpoint import provenance",
+        )
+        self._sql(
+            f"""
+            CREATE TABLE {self.control_db}.stream_incarnations (
+                incarnation_id VARCHAR(96) PRIMARY KEY,
+                source_dc VARCHAR(16) NOT NULL,
+                service_name VARCHAR(64) NOT NULL,
+                lifecycle ENUM('current', 'retired', 'candidate') NOT NULL,
+                opened_at DATETIME(6) NOT NULL,
+                closed_at DATETIME(6),
+                version_scope ENUM('global_order_revision','incarnation_local') NOT NULL,
+                authority_epoch BIGINT NOT NULL COMMENT 'Proposed handoff epoch; activation decisions establish effective business authority.',
+                clock_scope ENUM('global_business_time','producer_local') NOT NULL
+                    COMMENT 'Scope of producer updated_at and event_ts wall clocks.',
+                outbox_mode ENUM('business_commit','handoff_validation') NOT NULL
+                    COMMENT 'business_commit emits committed business revisions; handoff_validation emits projected values without committing business mutations.'
+            )
+            """,
+            "create BC02 producer incarnation registry",
+        )
+        self._sql(
+            f"""
+            CREATE TABLE {self.control_db}.handoff_decisions (
+                decision_id BIGINT PRIMARY KEY,
+                service_name VARCHAR(64) NOT NULL,
+                source_dc VARCHAR(16) NOT NULL,
+                incarnation_id VARCHAR(96) NOT NULL,
+                proposed_epoch BIGINT NOT NULL,
+                decision ENUM('activate','abort') NOT NULL,
+                effective_at DATETIME(6) NOT NULL
+            )
+            """,
+            "create BC02 raw handoff decision receipt ledger",
+        )
 
     def _seed_data(self) -> None:
-        now = datetime.utcnow()
+        now = datetime(2026, 6, 29, 12, 0, 0) if self.producer_clock_reset_rows else datetime.utcnow()
         connection = self._connect(self.source_db, autocommit=False)
         try:
             with connection.cursor() as cursor:
@@ -896,7 +1006,7 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     region = ("north", "south", "east", "west")[order_id % 4]
                     payload = f"seed-order-{order_id}"
                     orders.append((order_id, customer_id, status, amount, region, order_id, updated_at, payload))
-                    events.append((order_id, order_id, customer_id, status, amount, region, order_id, updated_at, self.source_dc, "snapshot_seed", order_id, updated_at))
+                    events.append((order_id, order_id, customer_id, status, amount, region, order_id, updated_at, self.source_dc, "snapshot_seed", order_id, updated_at, self.source_incarnation, self.source_incarnation))
                 cursor.executemany(
                     f"INSERT INTO {self.order_table} "
                     "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload) "
@@ -906,8 +1016,8 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 cursor.executemany(
                     f"INSERT INTO {self.event_table} "
                     "(event_id, order_id, customer_id, status, amount_cents, region, version, updated_at, "
-                    "origin_dc, event_source, origin_event_id, event_ts) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     events,
                 )
             connection.commit()
@@ -937,17 +1047,18 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
         )
         reverse_seed_state = "normal" if self.initial_cutover_done else "paused"
         reverse_seed_enabled = 1 if self.initial_cutover_done else 0
+        reverse_checkpoint = self.rehearsal_window_events if self.checkpoint_gap_rows else 0
         self._sql(
             f"""
             INSERT INTO {self.control_db}.{self.changefeed_table}
-                (feed_id, direction, source_dc, target_dc, state, enabled,
+                (feed_id, direction, source_dc, target_dc, state, enabled, region_filter, event_namespace, apply_ordering,
                  last_applied_event_id, resolved_event_id, lag_events, last_error, updated_at)
             VALUES
                 ('{self.forward_feed_id}', '{self.source_dc}_to_{self.target_dc}', '{self.source_dc}', '{self.target_dc}',
-                 'normal', 1, {self.snapshot_rows}, {self.source_rows},
+                 'normal', 1, 'all', '{self.source_incarnation}', 'version', {self.snapshot_rows}, {self.source_rows},
                  {self.source_rows - self.snapshot_rows}, NULL, CURRENT_TIMESTAMP(6)),
                 ('{self.reverse_feed_id}', '{self.target_dc}_to_{self.source_dc}', '{self.target_dc}', '{self.source_dc}',
-                 '{reverse_seed_state}', {reverse_seed_enabled}, 0, 0, 0, NULL,
+                 '{reverse_seed_state}', {reverse_seed_enabled}, '{self.reverse_region_filter}', '{self.reverse_event_namespace}', 'version', {reverse_checkpoint}, {reverse_checkpoint}, 0, NULL,
                  CURRENT_TIMESTAMP(6))
             """,
             "seed BC02 changefeeds",
@@ -981,6 +1092,51 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
             "seed BC02 validation decoy",
         )
         self._seed_rehearsal_fleet()
+        if self.checkpoint_gap_rows:
+            self._sql(
+                f"INSERT INTO {self.control_db}.checkpoint_imports VALUES "
+                f"(1, '{self.rehearsal_reverse_feed_id}', 'applied_event_count', "
+                f"{self.rehearsal_window_events}, '{self.reverse_feed_id}', CURRENT_TIMESTAMP(6))",
+                "record BC02 imported rehearsal checkpoint position",
+            )
+        self._sql(
+            f"INSERT INTO {self.control_db}.stream_incarnations VALUES "
+            f"('{self.source_incarnation}', '{self.source_dc}', '{self.route_service}', "
+            "'current', '2026-01-01 00:00:00', NULL, 'global_order_revision', 1, 'global_business_time', 'business_commit'), "
+            f"('{self.target_incarnation}', '{self.target_dc}', '{self.route_service}', "
+            f"'current', '2026-07-01 00:00:00', NULL, '{'incarnation_local' if self.producer_clock_reset_rows else 'global_order_revision'}', {3 if self.producer_clock_reset_rows else 1}, '{'producer_local' if self.producer_clock_reset_rows else 'global_business_time'}', 'business_commit'), "
+            f"('{self.retired_target_incarnation}', '{self.target_dc}', '{self.route_service}', "
+            f"'retired', '2026-01-01 00:00:00', '2026-06-29 00:00:00', '{'incarnation_local' if self.producer_clock_reset_rows else 'global_order_revision'}', 0, '{'producer_local' if self.producer_clock_reset_rows else 'global_business_time'}', 'business_commit')",
+            "register actual current and retired source incarnations",
+        )
+        if self.producer_clock_reset_rows:
+            self._sql(
+                f"INSERT INTO {self.control_db}.stream_incarnations VALUES "
+                f"('{self.previous_target_incarnation}', '{self.target_dc}', '{self.route_service}', "
+                "'retired', '2026-06-30 00:00:00', '2026-07-01 00:00:00', 'incarnation_local', 2, 'producer_local', 'business_commit'), "
+                f"('{self.candidate_target_incarnation}', '{self.target_dc}', '{self.route_service}', "
+                "'candidate', '2026-07-02 00:00:00', '2026-07-02 00:05:00', 'incarnation_local', 4, 'producer_local', 'handoff_validation')",
+                "register committed previous producer handoff authority",
+            )
+            self._sql(
+                f"INSERT INTO {self.control_db}.handoff_decisions VALUES "
+                f"(1,'{self.route_service}','{self.target_dc}','{self.previous_target_incarnation}',2,'activate','2026-06-30 00:00:00'), "
+                f"(2,'{self.route_service}','{self.target_dc}','{self.target_incarnation}',3,'activate','2026-07-01 00:00:00'), "
+                f"(3,'{self.route_service}','{self.target_dc}','{self.candidate_target_incarnation}',4,'abort','2026-07-02 00:05:00')",
+                "seed actual producer activation and aborted candidate decision receipts",
+            )
+        if self.collision_history_rows:
+            self._sql(
+                f"INSERT INTO {self.source_db}.{self.event_table} "
+                "(order_id, customer_id, status, amount_cents, region, version, updated_at, "
+                "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                "SELECT order_id, customer_id, status, amount_cents, region, 0, "
+                f"'2026-06-29 12:00:00', '{self.target_dc}', 'replication', order_id, "
+                f"'2026-06-29 12:00:00', '{self.retired_target_incarnation}', "
+                f"'{self.retired_target_incarnation}' FROM {self.source_db}.{self.order_table} "
+                f"WHERE order_id <= {self.collision_history_rows}",
+                "retain genuine old producer events for earlier snapshot-order versions",
+            )
 
     def _seed_rehearsal_fleet(self) -> None:
         """Park the previous rehearsal migration fleet next to the live migration.
@@ -998,16 +1154,16 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
         self._sql(
             f"""
             INSERT INTO {self.control_db}.{self.changefeed_table}
-                (feed_id, direction, source_dc, target_dc, state, enabled,
+                (feed_id, direction, source_dc, target_dc, state, enabled, region_filter, event_namespace, apply_ordering,
                  last_applied_event_id, resolved_event_id, lag_events, last_error,
                  activated_at, updated_at)
             VALUES
                 ('{self.rehearsal_forward_feed_id}', '{self.source_dc}_to_{self.target_dc}',
-                 '{self.source_dc}', '{self.target_dc}', 'paused', 0,
+                 '{self.source_dc}', '{self.target_dc}', 'paused', 0, 'all', '{self.source_incarnation}', 'version',
                  {self.source_rows}, {self.source_rows}, 0, '{rehearsal_window_note}',
                  '2026-07-01 10:00:00', '2026-07-02 09:00:00'),
                 ('{self.rehearsal_reverse_feed_id}', '{self.target_dc}_to_{self.source_dc}',
-                 '{self.target_dc}', '{self.source_dc}', 'normal', 1,
+                 '{self.target_dc}', '{self.source_dc}', 'normal', 1, '{self.reverse_region_filter}', '{self.retired_target_incarnation}', 'version',
                  {self.rehearsal_window_events}, {self.rehearsal_window_events}, 0, NULL,
                  '2026-07-01 10:45:00', '2026-07-02 09:00:00')
             """,
@@ -1046,6 +1202,14 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
             "seed BC02 rehearsal audit history",
         )
         self._seed_rehearsal_target_backlog()
+        if self.producer_clock_reset_rows:
+            self._sql(
+                f"UPDATE {self.target_db}.{self.order_table} SET authority_epoch=3 WHERE order_id>=3000000",
+                "bind committed current-producer backlog authority",
+            )
+            self._seed_clock_reset_updates()
+            self._seed_previous_incarnation_updates()
+            self._seed_candidate_validation_outbox()
 
     def _seed_rehearsal_target_backlog(self) -> None:
         """Write the rehearsal-window orders that exist only in the target DC.
@@ -1053,13 +1217,12 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
         These rows are real business truth (protected: agents must not mutate them).
         The journal-covered cohort rides the target event table as west-origin
         application events, so the live reverse feed drains it as soon as it runs.
-        The unreplicable cohort is written without any event-journal row (committed
-        inside the export window whose journal entries were lost), so no feed action
-        can ever replicate it: the two DCs' truth aggregates keep differing by
-        exactly that cohort until it is reconciled out-of-band.
+        The checkpoint-gap cohort has complete immutable journal coverage below the
+        imported reverse cursor. Normal catchup skips it, while rewinding the live
+        cursor replays the missing deliveries without changing business truth.
         """
         base_order_id = 3_000_000
-        unreplicable_base_order_id = 3_100_000
+        checkpoint_gap_base_order_id = 3_100_000
         connection = self._connect(self.target_db, autocommit=False)
         try:
             with connection.cursor() as cursor:
@@ -1074,16 +1237,18 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     region = "west"
                     payload = f"rehearsal-order-{index}"
                     orders.append((order_id, customer_id, status, amount, region, index, updated_at, payload))
-                    events.append((order_id, customer_id, status, amount, region, index, updated_at, self.target_dc, "application", index, updated_at))
-                for index in range(1, self.unreplicable_backlog_rows + 1):
-                    order_id = unreplicable_base_order_id + index
+                    event_id = self.rehearsal_window_events + index if self.checkpoint_gap_rows else index
+                    events.append((event_id, order_id, customer_id, status, amount, region, index, updated_at, self.target_dc, "application", event_id, updated_at, self.target_incarnation, self.target_incarnation))
+                for index in range(1, self.checkpoint_gap_rows + 1):
+                    order_id = checkpoint_gap_base_order_id + index
                     updated_at = datetime(2026, 7, 1, 11, 30, 0) + timedelta(seconds=index)
                     customer_id = 1000 + (index % 9000)
                     status = "paid"
                     amount = 100 + (index * 71) % 9900
-                    region = "west"
+                    region = self.source_dc
                     payload = f"rehearsal-order-window-{index}"
                     orders.append((order_id, customer_id, status, amount, region, index, updated_at, payload))
+                    events.append((index, order_id, customer_id, status, amount, region, index, updated_at, self.target_dc, "application", index, updated_at, self.target_incarnation, self.target_incarnation))
                 cursor.executemany(
                     f"INSERT INTO {self.order_table} "
                     "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload) "
@@ -1092,11 +1257,93 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 )
                 cursor.executemany(
                     f"INSERT INTO {self.event_table} "
-                    "(order_id, customer_id, status, amount_cents, region, version, updated_at, "
-                    "origin_dc, event_source, origin_event_id, event_ts) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "(event_id, order_id, customer_id, status, amount_cents, region, version, updated_at, "
+                    "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     events,
                 )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _seed_clock_reset_updates(self) -> None:
+        connection = self._connect(self.target_db, autocommit=False)
+        try:
+            with connection.cursor() as cursor:
+                for index in range(1, self.producer_clock_reset_rows + 1):
+                    order_id = 100 + index
+                    event_id = self.checkpoint_gap_rows + index
+                    updated_at = datetime(2026, 6, 28, 11, 30, 0) + timedelta(seconds=event_id)
+                    customer_id = 1000 + order_id
+                    amount = 50 + index
+                    cursor.execute(
+                        f"UPDATE {self.order_table} SET status='cancelled', amount_cents=%s, "
+                        "region='west', version=%s, updated_at=%s, authority_epoch=3 WHERE order_id=%s",
+                        (amount, event_id, updated_at, order_id),
+                    )
+                    cursor.execute(
+                        f"INSERT INTO {self.event_table} "
+                        "(event_id, order_id, customer_id, status, amount_cents, region, version, updated_at, "
+                        "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                        "VALUES (%s,%s,%s,'cancelled',%s,'west',%s,%s,%s,'application',%s,%s,%s,%s)",
+                        (event_id, order_id, customer_id, amount, event_id, updated_at,
+                         self.target_dc, event_id, updated_at, self.target_incarnation, self.target_incarnation),
+                    )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _seed_previous_incarnation_updates(self) -> None:
+        connection = self._connect(self.target_db, autocommit=False)
+        try:
+            with connection.cursor() as cursor:
+                for index in range(1, self.producer_clock_reset_rows + 1):
+                    order_id = 200 + index
+                    updated_at = datetime(2026, 6, 30, 11, 0, 0) + timedelta(seconds=index)
+                    amount = 70 + index
+                    cursor.execute(
+                        f"UPDATE {self.order_table} SET status='refunded', amount_cents=%s, "
+                        "region='west', version=%s, updated_at=%s, authority_epoch=2 WHERE order_id=%s",
+                        (amount, index, updated_at, order_id),
+                    )
+                    cursor.execute(
+                        f"INSERT INTO {self.event_table} "
+                        "(event_id, order_id, customer_id, status, amount_cents, region, version, updated_at, "
+                        "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                        "VALUES (%s,%s,%s,'refunded',%s,'west',%s,%s,%s,'application',%s,%s,%s,%s)",
+                        (2 * self.rehearsal_window_events + index, order_id, 1000 + order_id,
+                         amount, index, updated_at, self.target_dc, index, updated_at,
+                         self.previous_target_incarnation, self.previous_target_incarnation),
+                    )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _seed_candidate_validation_outbox(self) -> None:
+        """Commit dry-run outbox projections, without allocating a business revision."""
+        connection = self._connect(self.target_db, autocommit=False)
+        try:
+            with connection.cursor() as cursor:
+                for index in range(1, self.producer_clock_reset_rows + 1):
+                    observed_at = datetime(2026, 7, 2, 0, 1, 0) + timedelta(seconds=index)
+                    cursor.execute(
+                        f"INSERT INTO {self.event_table} "
+                        "(event_id,order_id,customer_id,status,amount_cents,region,version,updated_at,"
+                        "origin_dc,event_source,origin_event_id,event_ts,source_incarnation,event_namespace) "
+                        "VALUES (%s,%s,%s,'refunded',%s,'west',0,%s,%s,'handoff_validation',%s,%s,%s,%s)",
+                        (2 * self.rehearsal_window_events + self.producer_clock_reset_rows + index,
+                         100 + index, 1100 + index, 7000 + index, observed_at, self.target_dc,
+                         index, observed_at, self.candidate_target_incarnation, self.candidate_target_incarnation),
+                    )
             connection.commit()
         except Exception:
             connection.rollback()
@@ -1154,7 +1401,7 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
             f"SELECT COUNT(*) FROM {self.target_db}.{self.order_table}",
             "verify BC02 target snapshot rows",
         )
-        expected_target_rows = self.snapshot_rows + self.rehearsal_window_events + self.unreplicable_backlog_rows
+        expected_target_rows = self.snapshot_rows + self.rehearsal_window_events + self.checkpoint_gap_rows
         if source_count != [[self.source_rows]] or target_count != [[expected_target_rows]]:
             raise RuntimeError(
                 f"BC02 initial snapshot mismatch: source={source_count!r}, target={target_count!r}, "
@@ -1207,7 +1454,7 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
             f"SELECT COUNT(*) FROM {self.target_db}.{self.order_table}",
             "verify BC02 persistent target rows",
         )[0][0])
-        if source_count < self.source_rows or not self.snapshot_rows <= target_count <= source_count:
+        if source_count < self.source_rows or not self.snapshot_rows <= target_count <= source_count + self.checkpoint_gap_rows:
             raise RuntimeError(
                 f"BC02 persistent snapshot bounds are invalid: source_count={source_count}, "
                 f"target_count={target_count}, snapshot_rows={self.snapshot_rows}, source_rows={self.source_rows}"
@@ -1286,8 +1533,10 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     active_dc = route[0]
                     if active_dc == self.source_dc:
                         database = self.source_db
+                        incarnation = self.source_incarnation
                     elif active_dc == self.target_dc:
                         database = self.target_db
+                        incarnation = self.target_incarnation
                     else:
                         raise RuntimeError(
                             f"BC02 route contains unknown data center: service={self.route_service!r}, "
@@ -1295,24 +1544,25 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                         )
                     order_id = 1_000_000 + int(intent_seq)
                     status = "paid"
-                    region = "live"
+                    region = active_dc if self.checkpoint_gap_rows else "live"
                     version = int(intent_seq)
                     payload = f"live-intent-{intent_id}"
                     cursor.execute(
                         f"INSERT INTO {database}.{self.order_table} "
-                        "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+                        "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload, authority_epoch) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
                         "ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id), status=VALUES(status), "
                         "amount_cents=VALUES(amount_cents), region=VALUES(region), version=VALUES(version), "
-                        "updated_at=VALUES(updated_at), payload=VALUES(payload)",
-                        (order_id, customer_id, status, amount_cents, region, version, requested_at, payload),
+                        "updated_at=VALUES(updated_at), payload=VALUES(payload), authority_epoch=VALUES(authority_epoch)",
+                        (order_id, customer_id, status, amount_cents, region, version, requested_at, payload,
+                         3 if active_dc == self.target_dc and self.producer_clock_reset_rows else 1),
                     )
                     cursor.execute(
                         f"INSERT INTO {database}.{self.event_table} "
                         "(order_id, customer_id, status, amount_cents, region, version, updated_at, "
-                        "origin_dc, event_source, origin_event_id, event_ts) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'application',-1,%s)",
-                        (order_id, customer_id, status, amount_cents, region, version, requested_at, active_dc, requested_at),
+                        "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'application',-1,%s,%s,%s)",
+                        (order_id, customer_id, status, amount_cents, region, version, requested_at, active_dc, requested_at, incarnation, incarnation),
                     )
                     event_id = cursor.lastrowid
                     cursor.execute(
@@ -1335,15 +1585,16 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
         connection = self._connect(self.control_db, autocommit=False)
         try:
             with connection.cursor() as cursor:
+                cursor.execute("BEGIN PESSIMISTIC")
                 cursor.execute(
-                    f"SELECT state, enabled, last_applied_event_id "
-                    f"FROM {self.changefeed_table} WHERE feed_id = %s",
+                    f"SELECT state, enabled, last_applied_event_id, region_filter, event_namespace, apply_ordering, namespace_binding, source_incarnation_filter "
+                    f"FROM {self.changefeed_table} WHERE feed_id = %s FOR UPDATE",
                     (feed_id,),
                 )
                 state = cursor.fetchone()
                 if state is None:
                     raise RuntimeError(f"BC02 changefeed disappeared: feed_id={feed_id!r}")
-                feed_state, enabled, last_applied = state
+                feed_state, enabled, last_applied, region_filter, event_namespace, apply_ordering, namespace_binding, incarnation_filter = state
                 cursor.execute(
                     f"SELECT COALESCE(MAX(event_id), 0) FROM {source_db}.{self.event_table} WHERE origin_dc = %s",
                     (origin_dc,),
@@ -1357,10 +1608,11 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     )
                 else:
                     cursor.execute(
-                        f"SELECT event_id, order_id, customer_id, status, amount_cents, region, version, updated_at, "
-                        f"origin_dc, event_source, origin_event_id, event_ts "
-                        f"FROM {source_db}.{self.event_table} WHERE event_id > %s AND origin_dc = %s "
-                        "ORDER BY event_id LIMIT 64",
+                        f"SELECT ev.event_id, ev.order_id, ev.customer_id, ev.status, ev.amount_cents, ev.region, ev.version, ev.updated_at, "
+                        "ev.origin_dc, ev.event_source, ev.origin_event_id, ev.event_ts, ev.source_incarnation, inc.authority_epoch "
+                        f"FROM {source_db}.{self.event_table} ev "
+                        f"JOIN {self.control_db}.stream_incarnations inc ON inc.incarnation_id=ev.source_incarnation "
+                        "WHERE ev.event_id > %s AND ev.origin_dc = %s ORDER BY ev.event_id LIMIT 64",
                         (last_applied, origin_dc),
                     )
                     events = cursor.fetchall()
@@ -1368,25 +1620,47 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                     for event in events:
                         (
                             event_id, order_id, customer_id, status, amount_cents, region,
-                            version, updated_at, event_origin_dc, event_source, origin_event_id, event_ts,
+                            version, updated_at, event_origin_dc, event_source, origin_event_id, event_ts, source_incarnation, authority_epoch,
                         ) = event
-                        cursor.execute(
-                            f"INSERT INTO {target_db}.{self.order_table} "
-                            "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload) "
-                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
-                            "ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id), status=VALUES(status), "
-                            "amount_cents=VALUES(amount_cents), region=VALUES(region), version=VALUES(version), "
-                            "updated_at=VALUES(updated_at), payload=VALUES(payload)",
-                            (order_id, customer_id, status, amount_cents, region, version, updated_at, f"replicated-{event_origin_dc}-{origin_event_id}"),
-                        )
+                        applied = int(event_id)
+                        if region_filter != "all" and region != region_filter:
+                            continue
+                        if incarnation_filter != "all" and source_incarnation != incarnation_filter:
+                            continue
+                        bound_namespace = {
+                            "fixed": event_namespace,
+                            "source_incarnation": f"{event_namespace}/{source_incarnation}",
+                        }[namespace_binding]
                         cursor.execute(
                             f"INSERT IGNORE INTO {target_db}.{self.event_table} "
                             "(order_id, customer_id, status, amount_cents, region, version, updated_at, "
-                            "origin_dc, event_source, origin_event_id, event_ts) "
-                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'replication',%s,%s)",
-                            (order_id, customer_id, status, amount_cents, region, version, updated_at, event_origin_dc, origin_event_id, event_ts),
+                            "origin_dc, event_source, origin_event_id, event_ts, source_incarnation, event_namespace) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'replication',%s,%s,%s,%s)",
+                            (order_id, customer_id, status, amount_cents, region, version, updated_at,
+                             event_origin_dc, origin_event_id, event_ts, source_incarnation, bound_namespace),
                         )
-                        applied = int(event_id)
+                        if cursor.rowcount == 0:
+                            continue
+                        columns = ("customer_id", "status", "amount_cents", "region", "payload", "version", "updated_at", "authority_epoch")
+                        if apply_ordering == "authority_epoch":
+                            decision = "(VALUES(authority_epoch)>authority_epoch OR (VALUES(authority_epoch)=authority_epoch AND VALUES(version)>=version))"
+                            ordered_columns = tuple(column for column in columns if column not in {"version", "authority_epoch"}) + ("version", "authority_epoch")
+                        else:
+                            comparison = {"version": "version", "business_time": "updated_at"}[apply_ordering]
+                            decision = f"VALUES({comparison})>={comparison}"
+                            ordered_columns = tuple(column for column in columns if column != comparison) + (comparison,)
+                        business_updates = ", ".join(
+                            f"{column}=IF({decision},VALUES({column}),{column})"
+                            for column in ordered_columns
+                        )
+                        cursor.execute(
+                            f"INSERT INTO {target_db}.{self.order_table} "
+                            "(order_id, customer_id, status, amount_cents, region, version, updated_at, payload, authority_epoch) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                            f"ON DUPLICATE KEY UPDATE {business_updates}",
+                            (order_id, customer_id, status, amount_cents, region, version, updated_at,
+                             f"replicated-{event_origin_dc}-{origin_event_id}", authority_epoch),
+                        )
                     cursor.execute(
                         f"UPDATE {self.changefeed_table} SET last_applied_event_id=%s, resolved_event_id=%s, "
                         "lag_events=GREATEST(%s-%s, 0), updated_at=CURRENT_TIMESTAMP(6) WHERE feed_id=%s",
@@ -1433,8 +1707,14 @@ class TidbBusinessChangeCdcDcMigrationInjector(BaseFaultInjector):
                 )
                 target_app_events = int(cursor.fetchone()[0])
                 cursor.execute(
-                    f"SELECT COUNT(*) FROM {self.source_db}.{self.event_table} "
-                    "WHERE origin_dc=%s AND event_source='replication'",
+                    f"SELECT COUNT(*) FROM {self.target_db}.{self.event_table} s "
+                    "WHERE s.origin_dc=%s AND s.event_source='application' AND EXISTS ("
+                    f"SELECT 1 FROM {self.source_db}.{self.event_table} d "
+                    "WHERE d.event_source='replication' AND "
+                    + " AND ".join(f"d.{column}=s.{column}" for column in (
+                        "source_incarnation", "origin_dc", "origin_event_id", "order_id", "customer_id",
+                        "status", "amount_cents", "region", "version", "updated_at", "event_ts",
+                    )) + ")",
                     (self.target_dc,),
                 )
                 reverse_applied_events = int(cursor.fetchone()[0])

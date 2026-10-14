@@ -51,7 +51,7 @@ existing Cases affected by it must be regression-tested.
   category-specific Scenarios, Cases, and real fault configurations;
 - `src/scenarios/faults.py`: the five-phase `BaseFaultInjector` protocol;
 - `src/scenarios/evaluation/base.py`, `protocol.py`, `diagnosis.py`, `outcome.py`, `safety.py`: the
-  unified evaluator, structured submissions, DP/OP/SP, and shared verifiers/rules; system- and
+  unified evaluator, Case evaluation contexts, DP/OP/SP, and shared verifiers/rules; system- and
   category-specific evaluators go in `src/scenarios/evaluation/postgres/<category>/` or
   `src/scenarios/evaluation/tidb/<category>/`;
 - `src/scenarios/runtime/orchestrator.py`, `workload_runner.py`, `env_gateway.py`: post-deployment
@@ -62,6 +62,61 @@ existing Cases affected by it must be regression-tested.
 Entry-point scripts only select the environment, workload, Agent, Scenario, and Case, and hand the
 complete lifecycle to `Orchestrator.run()`. Entry points must not spin up a parallel deploy,
 inject, evaluate, recover, or teardown path of their own.
+
+Shared infrastructure must not import `src/scenarios/`, `src/persistent_scenarios/`, or
+`src/benchmark/`. Benchmark execution reaches Case mechanics, history admission, and snapshot
+checks through target adapters. Import shared types from their defining modules; no forwarding
+modules for the former environment, deployment, or workload paths remain. These boundaries are
+checked by `tests/contracts/test_import_boundaries.py`.
+
+`src/protocols/report.py` owns the shared report model, schema, and parser;
+`src/database/system.py` owns database identities; `src/execution/specs.py` owns environment,
+topology, release, and `HostPortLayout` specifications; `src/workloads/specs.py` owns workload
+profiles, start phases, session settings, and timeout contracts. Environment and deployment
+implementations live under `src/execution/environments/` and `src/execution/deployments/`.
+
+Case runtimes and Persistent Scenario providers declare the complete port layout. Auxiliary
+services enter the same atomic admission as the database. `src/execution/host_ports.py` owns only
+selection, locking, inheritance, and release. Deployments retain leases through restart and
+replacement until teardown. See the benchmark execution guide for evidence and external-program
+boundaries.
+
+### Case-specific environment capabilities
+
+Case tools, recovery guards, controllers, and mutable state belong in the owning scenario's
+`<category>/runtime/<scenario>.py`. Entrypoints select that environment directly, reusing
+PGEnv/TiDBEnv deployment, connections, tool metadata, and the five-phase lifecycle. Shared
+environments must not contain Case-number branches, fixture state, or forwarding layers.
+
+TiDB extensions select `cluster_control_type`; `resource_handlers()` adds or overrides handlers.
+`agent_sql_observers` observes Agent SQL, excluding trusted evaluator SQL. `additional_log_sources`
+and `read_additional_log()` integrate logs with shared pagination and truncation. Scenarios
+configure their controllers, callbacks, and state in install/activate and release them in
+quiesce/recover.
+
+BR permissions, backup recovery, MVCC recovery, PITR, rolling upgrades, and DR Auto-Sync use
+`BrPermissionEnv`, `BackupRecoverabilityEnv`, `GcMvccRecoveryEnv`, `PitrCheckpointRecoveryEnv`,
+`RollingUpgradeEnv`, and `DrAutoSyncEnv`. Business checksums, canaries, backup acceptance, site
+state, fences, and routing remain owned by their scenarios. Common database operations remain
+in shared infrastructure; scenarios do not copy the environment or lifecycle.
+
+### TiDB deployment components
+
+`TiDBDockerDeployment` owns topology, Compose rendering, readiness, and lifecycle. Operations
+and their state belong to explicit components under `src/execution/deployments/tidb_components/`:
+
+| Component | Responsibility |
+|---|---|
+| `snapshots` | Image groups, bootstrap cache, persistent baselines, and file locks |
+| `pd_recovery` | PD identity evidence, metadata recovery, and online unsafe recovery |
+| `mvcc` | TiKV offline tools, lock records, inspection credentials, and exact recovery |
+| `stores` | TiKV scaling, disk replacement, and maintenance audit |
+| `rollout` | Version sequencing, leader movement, upgrades/rollback, and version audit |
+| `network` | Container network fault rules and their restoration after restart |
+
+Callers access components directly, such as `deployment.mvcc.mvcc_lock_list(...)`. Components
+own their state and use their deployment's generic execution and lifecycle. No forwarding APIs,
+dynamic proxies, or Case branches are introduced. Business semantics remain in scenarios.
 
 ## 3. From Requirements to Delivery
 

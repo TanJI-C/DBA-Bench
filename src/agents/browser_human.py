@@ -6,7 +6,7 @@ import os
 from urllib.request import Request, ProxyHandler, build_opener
 
 from src.agents.agent import BaseAgent
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 
 
 class BrowserHumanAgent(BaseAgent):

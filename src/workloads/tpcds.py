@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import List
 
 from .base import BaseWorkload
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
 
 LIGHT_IDS = [

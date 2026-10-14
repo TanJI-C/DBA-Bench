@@ -35,7 +35,7 @@ main outcome to pass.
 | ---: | --- | --- | --- |
 | 0 | `ticdc_oom_leftover_lock_and_service_safepoint` | Compound fault of a leftover Region lock after TiCDC OOM and an abandoned service GC safepoint | `hard` |
 
-The calibrated live reference is `tidb-k02-kb06-mock-kb-r31`; the measurement method is part of
+The calibrated live reference is `reference-282__tidb_system_failure_ticdc_gc_safepoint`; the measurement method is part of
 this contract.
 
 ## 3. User symptom, mechanism, and public state
@@ -240,7 +240,7 @@ trace, evaluator invocation, and teardown; the entrypoint only composes those pi
 - Entrypoint and reference Mock: `examples/run_tidb_system_failure_ticdc_gc_safepoint_scenario.py`
 - Focused tests: `tests/tidb/test_system_failure_ticdc_gc_safepoint.py`
 - KB runtime: `src/knowledge/tidb_knowledge_base.py`, `src/knowledge/markdown_knowledge_base.py`,
-  `src/knowledge/embedding_model_runtime.py`, and `src/execution/environment.py`
+  `src/knowledge/embedding_model_runtime.py`, and `src/execution/environments/tidb.py`
 
 Current code validation includes static compilation and focused unit coverage for identity, five
 Injector signatures, complete/partial/wrong/dangerous repairs, explicit A-only/B-only/A+B behavior,

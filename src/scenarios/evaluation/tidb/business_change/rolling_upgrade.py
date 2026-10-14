@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from src.scenarios.tidb.runtime import canonical_tidb_version
+from src.execution.tidb_runtime import canonical_tidb_version
 from src.scenarios.evaluation.protocol import EvaluationContext
 from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, execute_sql_rows
 from src.scenarios.evaluation.safety import (
@@ -17,7 +17,7 @@ from ..base import TidbEvaluator
 
 
 def _audit(context: EvaluationContext) -> list[dict[str, object]]:
-    observation = context.case_run.env.get_deployment().upgrade_evaluation_state()
+    observation = context.case_run.env.get_deployment().rollout.upgrade_evaluation_state()
     audit = observation["audit"]
     if not isinstance(audit, list) or any(not isinstance(item, dict) for item in audit):
         raise TypeError(f"BC01 upgrade audit must be a list of objects: observation={observation!r}")

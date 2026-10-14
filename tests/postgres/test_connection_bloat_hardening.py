@@ -13,7 +13,8 @@ import pytest
 
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 
 SCENARIO_ID = "pg_system_failure_connection_bloat"
 
