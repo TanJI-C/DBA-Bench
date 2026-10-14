@@ -25,6 +25,10 @@ Start from `experiments/pg_smoke.example.yaml`. A bounded Scenario must specify 
 - repetitions with one-to-one corresponding seeds;
 - concurrency, timeout, ports, container prefixes, and the fault snapshot policy.
 
+For an external Agent service, use `mode: remote` and follow the
+[remote agent guide](connect-remote-agent.guide.md) for the endpoint, protocol,
+turn accounting, and usage reporting. This mode supports bounded Scenarios only.
+
 The manifest only accepts fields defined in the documentation and errors directly on unknown fields. To skip cells that are already completed or explicitly not to be run from the full matrix, use the top-level `exclude_cells` to precisely specify scenario, case, and agent:
 
 ```yaml

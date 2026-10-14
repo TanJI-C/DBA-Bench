@@ -33,6 +33,7 @@ summary: 中文文档索引；docs/zh/ 是 docs/ 英文文档树的中文镜像�
 - `docs/zh/catalogs/tidb-scenarios.catalog.zh-CN.md`
 
 ## guides/benchmark
+- `docs/zh/guides/benchmark/connect-remote-agent.guide.zh-CN.md`
 - `docs/zh/guides/benchmark/run-experiment.guide.zh-CN.md`
 - `docs/zh/guides/benchmark/run-human-browser-console.guide.zh-CN.md`
 

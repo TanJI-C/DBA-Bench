@@ -27,6 +27,9 @@ Scenario 按 `scenario × case × agent × repetition` 展开，Persistent Scena
 - repetitions 与一一对应的 seeds；
 - concurrency、timeout、端口、容器前缀和 fault snapshot 策略。
 
+接入外部 Agent 服务时使用 `mode: remote`。endpoint、协议、轮数计算和 usage 上报
+见[远程 Agent 接入指南](connect-remote-agent.guide.zh-CN.md)；该模式仅支持 bounded Scenario。
+
 manifest 只接受文档定义的字段，未知字段直接报错。需要从完整矩阵中跳过已经完成或明确
 不运行的单元时，使用顶层 `exclude_cells` 精确指定 scenario、case 和 agent：
 

@@ -145,11 +145,14 @@ def build_scenario_command(
     script_path = project_root / "examples" / spec.script
     options = script_options(script_path)
     command = [sys.executable, str(script_path)]
-    execution_mode = "llm" if spec.agent.mode in {"human", "dbot", "dbaiops"} else spec.agent.mode
+    relayed = spec.agent.mode in {"human", "remote"}
+    execution_mode = (
+        "llm" if relayed or spec.agent.mode in {"dbot", "dbaiops"} else spec.agent.mode
+    )
     if "--mode" in options:
         command.extend(["--mode", execution_mode])
     elif "--agent" in options:
-        command.extend(["--agent", execution_mode if spec.agent.mode == "human" else spec.agent.mode])
+        command.extend(["--agent", execution_mode if relayed else spec.agent.mode])
     else:
         raise ValueError(
             f"Scenario script {spec.script} must expose --mode or --agent for benchmark execution"
@@ -199,9 +202,14 @@ def build_scenario_command(
                 f"Frozen history scenario script {spec.script} must expose explicit --seed"
             )
         command.extend(["--seed", str(spec.seed)])
-    if spec.agent.mode in {"human", "llm", "dbot", "dbaiops"}:
-        if spec.agent.mode == "human" or spec.agent.model:
-            command.extend(["--model", "human" if spec.agent.mode == "human" else spec.agent.model])
+    if spec.agent.mode in {"human", "remote", "llm", "dbot", "dbaiops"}:
+        # Relayed agents never resolve an LLM config; --model only labels the run.
+        if spec.agent.mode == "human":
+            command.extend(["--model", "human"])
+        elif spec.agent.mode == "remote":
+            command.extend(["--model", spec.agent.model or "remote"])
+        elif spec.agent.model:
+            command.extend(["--model", spec.agent.model])
         config_option = next(
             (option for option in ("--llm-config", "--config-path", "--config") if option in options),
             None,
@@ -210,7 +218,7 @@ def build_scenario_command(
             command.extend([config_option, manifest.runtime.llm_config])
         if "--max-turns" in options and spec.agent.mode != "human":
             command.extend(["--max-turns", str(spec.agent.max_turns)])
-        if "--reasoning-effort" in options and spec.agent.mode != "human":
+        if "--reasoning-effort" in options and not relayed:
             command.extend(["--reasoning-effort", spec.agent.reasoning_effort or "xhigh"])
         if spec.agent.max_output_tokens is not None:
             if "--max-output-tokens" not in options:
