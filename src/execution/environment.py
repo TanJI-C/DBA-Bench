@@ -105,6 +105,8 @@ from src.scenarios.base import (
 # Agent-facing SQL responses must stay bounded even when a model forgets to
 # add a LIMIT to a large diagnostic query. The database query itself is still
 # executed normally; the response tells the Agent to refine or aggregate it.
+HOST_PROC_ROOT = "/proc"
+HOST_CGROUP_ROOT = "/sys/fs/cgroup"
 PG_SQL_RESULT_MAX_ROWS = 200
 PG_AGENT_SQL_STATEMENT_TIMEOUT = '60s'
 PG_AGENT_SQL_LOCK_TIMEOUT = '10s'
@@ -2693,22 +2695,26 @@ class PGEnv(BaseEnv):
 
         if self._host_cgroup_base is None:
             inspect = subprocess.run(
-                ["docker", "inspect", "--format", "{{.State.Pid}}", self.deployment.container_name],
+                ["docker", "inspect", "--format", "{{.Id}} {{.State.Pid}}", self.deployment.container_name],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            if inspect.returncode == 0 and inspect.stdout.strip().isdigit():
-                pid = inspect.stdout.strip()
+            fields = inspect.stdout.split()
+            if inspect.returncode == 0 and len(fields) == 2 and fields[1].isdigit():
+                container_id, pid = fields
                 try:
-                    with open(f"/proc/{pid}/cgroup", encoding="utf-8") as cgroup_file:
+                    with open(os.path.join(HOST_PROC_ROOT, pid, "cgroup"), encoding="utf-8") as cgroup_file:
                         cgroup_lines = cgroup_file.read().splitlines()
                     unified = next(
                         (line.split(":", 2)[2] for line in cgroup_lines if line.startswith("0::")),
                         None,
                     )
-                    if unified:
-                        candidate = os.path.join("/sys/fs/cgroup", unified.lstrip("/"))
+                    # With Docker Desktop or a rootless daemon the PID belongs to another PID namespace,
+                    # and a host process may carry the same number. Only a cgroup path that names the
+                    # container (cgroupfs and systemd drivers both put its id there) is the container's.
+                    if unified and container_id in unified:
+                        candidate = os.path.join(HOST_CGROUP_ROOT, unified.lstrip("/"))
                         if os.path.isdir(candidate):
                             self._host_cgroup_base = candidate
                 except (OSError, IndexError):
