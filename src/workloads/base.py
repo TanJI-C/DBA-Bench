@@ -45,6 +45,7 @@ class BaseWorkload(ABC):
 
     def save_manifest(self, manifest: Dict[str, Any]):
         """保存 manifest 配置"""
-        self.ensure_dir(self.workload_dir)
+        self.ensure_dir(os.path.dirname(self.manifest_path))
         with open(self.manifest_path, 'w') as f:
             json.dump(manifest, f, indent=2)
+            f.write("\n")

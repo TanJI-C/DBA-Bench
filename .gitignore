@@ -46,6 +46,7 @@ data/results/
 data/knowledge_bases/
 data/knowledge_processing/
 data/workloads/*/postgres_data/
+data/workloads/*/runtime/
 data/workloads/tpcds/data/
 data/workloads/tpcds/tpcds-kit/
 
