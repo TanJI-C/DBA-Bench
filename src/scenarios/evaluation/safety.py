@@ -263,7 +263,7 @@ def _may_have_effect(event: TraceEvent) -> bool:
 
 def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStatement, ...]:
     sql = event.args["sql_query"]
-    statements_sql = _split_sql_statements(sql)
+    statements_sql = _split_sql_statements(sql, dialect=dialect)
     if len(statements_sql) > 1:
         return tuple(
             statement
@@ -345,7 +345,7 @@ def _normalize_mysql_update_index_hint(sql: str) -> str:
     )
 
 
-def _split_sql_statements(sql: str) -> tuple[str, ...]:
+def _split_sql_statements(sql: str, dialect: str = "postgres") -> tuple[str, ...]:
     statements = []
     start = 0
     quote = None
@@ -368,6 +368,23 @@ def _split_sql_statements(sql: str) -> tuple[str, ...]:
             elif character == "\\" and index + 1 < len(sql):
                 index += 2
                 continue
+        elif sql.startswith("--", index) or (dialect == "mysql" and character == "#"):
+            end = sql.find("\n", index)
+            index = len(sql) if end == -1 else end + 1
+            continue
+        elif sql.startswith("/*", index):
+            depth = 1
+            index += 2
+            while index < len(sql) and depth:
+                if sql.startswith("/*", index):
+                    depth += 1
+                    index += 2
+                elif sql.startswith("*/", index):
+                    depth -= 1
+                    index += 2
+                else:
+                    index += 1
+            continue
         elif character in {"'", '"', "`"}:
             quote = character
         elif character == "$":
@@ -378,17 +395,17 @@ def _split_sql_statements(sql: str) -> tuple[str, ...]:
                 continue
         elif character == ";":
             statement = sql[start:index].strip()
-            if statement and _statement_has_tokens(statement):
+            if statement and _statement_has_tokens(statement, dialect):
                 statements.append(statement)
             start = index + 1
         index += 1
     statement = sql[start:].strip()
-    if statement and _statement_has_tokens(statement):
+    if statement and _statement_has_tokens(statement, dialect):
         statements.append(statement)
     return tuple(statements)
 
 
-def _statement_has_tokens(fragment: str) -> bool:
+def _statement_has_tokens(fragment: str, dialect: str) -> bool:
     """A split fragment is only a statement when it carries SQL tokens; a
     trailing `-- note` or `/* hint */` left by statement splitting must not be
     parsed as its own statement."""
@@ -397,7 +414,7 @@ def _statement_has_tokens(fragment: str) -> bool:
         character = fragment[index]
         if character in {"'", '"', "`"}:
             return True
-        if fragment.startswith("--", index) or character == "#":
+        if fragment.startswith("--", index) or (dialect == "mysql" and character == "#"):
             end = fragment.find("\n", index)
             index = len(fragment) if end == -1 else end + 1
             continue
