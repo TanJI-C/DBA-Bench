@@ -39,6 +39,7 @@ coverage.xml
 logs/
 
 # Runtime-generated data (rebuilt on demand; see docs/getting-started.md)
+/artifacts/
 data/postgres/
 data/tidb/
 data/logs/
