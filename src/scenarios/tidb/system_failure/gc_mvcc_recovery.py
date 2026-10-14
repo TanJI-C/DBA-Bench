@@ -11,7 +11,7 @@ from pymysql import err as pymysql_err
 from src.database.sql import sql_literal
 from src.scenarios.evaluation.tidb.system_failure.gc_mvcc_recovery import (
     TidbSystemFailureGcMvccRecoveryEvaluatorCase,
-    TidbSystemFailureGcMvccRecoveryCaseEvaluator,
+    TidbSystemFailureGcMvccRecoveryForGcMvccRecoveryEvaluatorCase,
 )
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.common import (
@@ -1172,7 +1172,7 @@ class TidbSystemFailureGcMvccRecoveryScenario(TiDBScenario):
     scenario_id = "tidb_system_failure_gc_mvcc_recovery"
     description = "A version-bound TiKV MVCC recovery scenario with a real malformed async-commit lock."
     cases = (_CASE, replace(_CASE, case_id="gc_mvcc_recovery", case_no=1,
-                            evaluator=TidbSystemFailureGcMvccRecoveryCaseEvaluator,
+                            evaluator=TidbSystemFailureGcMvccRecoveryForGcMvccRecoveryEvaluatorCase,
                             difficulty=DifficultyCalibration(
                                 diagnostic_depth=6,
                                 environmental_complexity=0.473684,

@@ -435,9 +435,9 @@ class TidbSystemFailureGcMvccRecoveryEvaluatorCase(TidbEvaluator):
     final_state_safety_verifiers = (K01ProtectedFinalStateVerifier(),)
 
 
-class TidbSystemFailureGcMvccRecoveryCaseEvaluator(
+class TidbSystemFailureGcMvccRecoveryForGcMvccRecoveryEvaluatorCase(
     TidbSystemFailureGcMvccRecoveryEvaluatorCase
 ):
     case_id = "gc_mvcc_recovery"
 
-__all__ = ("TidbSystemFailureGcMvccRecoveryEvaluatorCase", "TidbSystemFailureGcMvccRecoveryCaseEvaluator")
+__all__ = ("TidbSystemFailureGcMvccRecoveryEvaluatorCase", "TidbSystemFailureGcMvccRecoveryForGcMvccRecoveryEvaluatorCase")
