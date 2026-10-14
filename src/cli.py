@@ -42,20 +42,7 @@ DATASET_DEFINITIONS_ROOT = DATASETS_ROOT
 DATASET_OUTPUT_ROOT = PROJECT_ROOT / "artifacts" / "datasets"
 
 
-def require_clean_checkout() -> None:
-    status = subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=PROJECT_ROOT, text=True
-    ).splitlines()
-    if status:
-        raise RuntimeError(
-            "Formal experiment execution requires a clean Git worktree; "
-            f"found {len(status)} changed or untracked paths. Commit the exact experiment "
-            "code and manifest before running."
-        )
-
-
 def require_original_checkout(store: ExperimentStore) -> None:
-    require_clean_checkout()
     environment_path = store.root / "environment.json"
     environment = json.loads(environment_path.read_text(encoding="utf-8"))
     current_commit = subprocess.check_output(
@@ -106,7 +93,6 @@ def execute_experiment(
             )
         require_original_checkout(store)
     else:
-        require_clean_checkout()
         if store.root.exists():
             raise FileExistsError(
                 f"Experiment already exists: experiment_id={manifest.experiment_id!r}, "

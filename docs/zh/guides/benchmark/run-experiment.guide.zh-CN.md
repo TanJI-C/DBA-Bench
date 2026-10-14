@@ -93,7 +93,7 @@ conda run -n aiops aiopsbench experiment rerun <experiment_id> \
 ```
 
 `resume` 只执行 `pending` run。`rerun` 必须显式给出原终态，不自动重试；每次重跑增加
-attempt，并永久保留先前产物。正式执行要求 Git worktree clean；恢复或重跑还要求当前
+attempt，并永久保留先前产物。恢复或重跑要求当前
 checkout 与首次运行记录的 Git commit 完全一致。代码、prompt、场景、资源、模型、知识库
 或 evaluator 发生变化时必须创建新的 `experiment_id`。收到 SIGINT/SIGTERM 时，runner
 终止正在运行的子进程并记录 `interrupted`。

@@ -123,7 +123,7 @@ conda run -n aiops aiopsbench experiment rerun <experiment_id> \
   --status succeeded --run-id <run_id>
 ```
 
-`resume` only executes `pending` runs. `rerun` must be given the original terminal status explicitly and does not retry automatically; each rerun increments the attempt and permanently preserves prior artifacts. Formal execution requires a clean Git worktree; resume and rerun additionally require the current checkout to match exactly the Git commit recorded by the first run. When code, prompts, scenarios, resources, models, the knowledge base, or evaluators change, a new `experiment_id` must be created. On receiving SIGINT/SIGTERM, the runner terminates running child processes and records `interrupted`.
+`resume` only executes `pending` runs. `rerun` must be given the original terminal status explicitly and does not retry automatically; each rerun increments the attempt and permanently preserves prior artifacts. Resume and rerun require the current checkout to match exactly the Git commit recorded by the first run. When code, prompts, scenarios, resources, models, the knowledge base, or evaluators change, a new `experiment_id` must be created. On receiving SIGINT/SIGTERM, the runner terminates running child processes and records `interrupted`.
 
 ## 4. Artifacts
 
