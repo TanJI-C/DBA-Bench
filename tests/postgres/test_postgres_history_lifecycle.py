@@ -1,13 +1,18 @@
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from src.execution.environment import PGEnv
-from src.workloads.tpcds import _QUERY_FILE as TPCDS_QUERY_FILE
+from src.execution.environments.postgres import PGEnv
 from src.execution.history.metrics import MetricFrame
-from src.execution.history.records import CapturedRecords, FrozenHistoricalRecordStore, HistoricalCoverage, HistoricalIntervalRecord, HistoricalPointRecord, HistoricalRecordSource
+from src.execution.history.records import (
+    CapturedRecords,
+    FrozenHistoricalRecordStore,
+    HistoricalCoverage,
+    HistoricalIntervalRecord,
+    HistoricalPointRecord,
+    HistoricalRecordSource,
+)
 from src.execution.history.timeline import FrozenHistoryMetricProvider, FrozenHistoricalTimeline
 from src.execution.history.sql_archive import FrozenHistoricalSqlArchive
 from src.execution.postgres_history import PgStatementKey, snapshot_from_rows
@@ -138,10 +143,6 @@ def test_no_knowledge_frozen_history_tool_surface_has_no_diagnostic_tools():
 
 
 def test_all_postgres_frozen_history_environments_exclude_query_history_from_agent_schema():
-    if not Path(TPCDS_QUERY_FILE).exists():
-        pytest.skip(
-            "TPC-DS query text is not present; fetch it per docs/getting-started.md"
-        )
     from src.execution.backup_rpo import RpoPGEnv, RpoTopology
     from src.execution.postgres_replica_fleet import PgReplicaFleetDeployment, PgReplicaFleetEnv
     from src.scenarios.postgres.resource_governance.container_cpu_budget import CpuBudgetPGEnv

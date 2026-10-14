@@ -29,18 +29,12 @@ from src.scenarios.evaluation.tidb.health_check.ticdc_replication_trend_frozen_h
     TidbHealthCheckTiCdcReplicationTrendFrozenHistoryEvaluatorCase,
     TidbHealthCheckTiCdcReplicationTrendModerateSinkEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBReplicationRuntime,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.specs import TiDBReplicationRuntime
+from src.execution.tidb_runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TidbHealthCheckTiCdcReplicationTrendFrozenHistoryCase(TiDBScenarioCase):
@@ -470,7 +464,7 @@ _CASE = TidbHealthCheckTiCdcReplicationTrendFrozenHistoryForHistoryInvestigation
         diagnostic_depth=8,
         environmental_complexity=0.854134,
         reference_run_ids=(
-            "reference-244__"
+            "tidb_mf_hc05_execution_shape_mock_20260810_r001__"
             "tidb_health_check_ticdc_replication_trend_frozen_history__"
             "ticdc_replication_history_investigation__mock_reference__r001",
         ),

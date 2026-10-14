@@ -11,10 +11,10 @@ import pytest
 from src.scenarios.evaluation.protocol import EvaluationContext
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbSystemFailureBrPermissionScenario
-from src.execution.environment import _BR_REFRESH_IDENTITY_REJECTION, TiDBEnv
+from src.scenarios.tidb.system_failure.runtime.br_permission import _BR_REFRESH_IDENTITY_REJECTION, BrPermissionEnv
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.system_failure.br_permission import (
     TidbSystemFailureBrPermissionInjector,
@@ -586,7 +586,7 @@ def test_sf06_request_attempt_fixture_has_preflight_and_replay_around_failed_wri
 
 
 def test_sf06_storage_audit_runtime_keeps_attempt_projection_private():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-audit-dispatch"
     env._br_backup_attempt_no = 0
     runtime = _runtime_for_br_tool()
@@ -841,7 +841,7 @@ def test_sf06_mc_probe_allows_host_noise(monkeypatch):
 
 
 def test_br_backup_kills_client_and_cleans_named_container_on_timeout(monkeypatch):
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-timeout"
     env._br_backup_attempt_no = 0
     runtime = {
@@ -880,13 +880,13 @@ def test_br_backup_kills_client_and_cleans_named_container_on_timeout(monkeypatc
         def kill(self):
             calls.append("kill")
 
-    monkeypatch.setattr("src.execution.environment.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr("src.scenarios.tidb.system_failure.runtime.br_permission.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
 
     def cleanup(command, **kwargs):
         calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0, stdout="removed", stderr="")
 
-    monkeypatch.setattr("src.execution.environment.subprocess.run", cleanup)
+    monkeypatch.setattr("src.scenarios.tidb.system_failure.runtime.br_permission.subprocess.run", cleanup)
 
     result = env._run_br_backup("benchops", "admission_events", "wrong", "wrong-secret")
 
@@ -968,7 +968,7 @@ def _runtime_for_br_tool():
 
 
 def test_sf06_job_get_is_read_only_without_cross_layer_propagation_aggregation(monkeypatch):
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-job-get"
     env._import_controller = None
     env._br_backup_runtime = _runtime_for_br_tool()
@@ -998,7 +998,7 @@ def test_sf06_job_get_is_read_only_without_cross_layer_propagation_aggregation(m
 
 
 def test_sf06_refresh_binding_is_scoped_and_returns_revision_acknowledgement():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-refresh"
     env._br_backup_runtime = _runtime_for_br_tool()
     env._br_backup_runtime["uniform_refresh_rejection"] = True
@@ -1451,7 +1451,7 @@ def test_sf06_refresh_binding_is_scoped_and_returns_revision_acknowledgement():
 
 
 def test_sf06_r9_prefix_quarantine_release_requires_full_identity():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-quarantine"
     env._br_backup_runtime = _runtime_for_br_tool()
     env._br_backup_runtime.update({
@@ -1504,7 +1504,7 @@ def test_sf06_r9_prefix_quarantine_release_requires_full_identity():
 
 
 def test_sf06_same_watch_assignment_replay_fence_is_rejected_before_any_update():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-fence-replay"
     env._br_backup_runtime = _runtime_for_br_tool()
     env._br_backup_runtime["uniform_refresh_rejection"] = True
@@ -1590,7 +1590,7 @@ def test_sf06_same_watch_assignment_replay_fence_is_rejected_before_any_update()
 
 
 def test_sf06_refresh_without_uniform_rejection_keeps_internal_diagnostic_error():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-refresh-legacy"
     env._br_backup_runtime = _runtime_for_br_tool()
     updates = []
@@ -1665,7 +1665,7 @@ def test_sf06_refresh_without_uniform_rejection_keeps_internal_diagnostic_error(
 
 
 def test_sf06_br_backup_uses_observed_binding_without_override_and_explicit_override_once(monkeypatch):
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-credentials"
     env._br_backup_runtime = _runtime_for_br_tool()
     env._br_backup_attempt_no = 0
@@ -1680,7 +1680,7 @@ def test_sf06_br_backup_uses_observed_binding_without_override_and_explicit_over
             return "[total-ranges=3] [ranges-succeed=3] [ranges-failed=0] Checksum 100.00%", ""
 
     monkeypatch.setattr(
-        "src.execution.environment.subprocess.Popen",
+        "src.scenarios.tidb.system_failure.runtime.br_permission.subprocess.Popen",
         lambda command, **kwargs: (commands.append(command), FakeProcess())[1],
     )
 
@@ -1696,7 +1696,7 @@ def test_sf06_br_backup_uses_observed_binding_without_override_and_explicit_over
 
 
 def test_br_uses_unified_job_tool_without_exposing_backup_wrapper():
-    env = TiDBEnv(deployment=FakeDeployment())
+    env = BrPermissionEnv(deployment=FakeDeployment())
 
     aliases = {spec.alias for spec in env.get_tool_specs()}
     assert "run_br_backup" not in aliases
@@ -1704,7 +1704,7 @@ def test_br_uses_unified_job_tool_without_exposing_backup_wrapper():
 
 
 def test_br_log_pages_use_unified_read_log_contract():
-    env = TiDBEnv(deployment=FakeDeployment())
+    env = BrPermissionEnv(deployment=FakeDeployment())
     env._log_visible_lines = {"pd/pd-0": 0}
     env.deployment.read_logs = lambda target, lines=200: "\n".join(
         f"line-{index}" for index in range(1, 101)
@@ -1797,7 +1797,7 @@ def test_sf06_br_metric_parser_uses_final_checksum_progress_value():
         'Checksum <---------------------------------------------------------------------------------> 100.00%'
     )
 
-    assert TiDBEnv._parse_br_metrics(output) == {
+    assert BrPermissionEnv._parse_br_metrics(output) == {
         "total_ranges": 3,
         "ranges_succeed": 3,
         "ranges_failed": 0,
@@ -2493,7 +2493,7 @@ def test_sf06_r11_quarantine_stream_hides_release_ticket_and_registers_tickets_t
 
 
 def test_sf06_r11_denied_write_issues_ticket_and_stream_event():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-quarantine-denial"
     runtime = _runtime_for_br_tool()
     runtime.update({
@@ -2554,7 +2554,7 @@ def test_sf06_r11_denied_write_issues_ticket_and_stream_event():
 
 
 def test_sf06_r11_guard_denial_result_marks_policy_deny():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(BrPermissionEnv)
     env.run_id = "sf06-guard-deny-audit"
     env._br_backup_attempt_no = 0
     runtime = _runtime_for_br_tool()

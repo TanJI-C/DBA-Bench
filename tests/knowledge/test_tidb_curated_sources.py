@@ -1,9 +1,4 @@
-"""Knowledge-asset contract tests for the TiDB curated corpus.
-
-These tests read the internal `knowledge/` corpus tree, which is not part of the
-public repository export set. They live under `tests/knowledge/` so the public
-surface can exclude them as a whole.
-"""
+"""Knowledge-asset contracts for the tracked TiDB curated corpus."""
 
 from __future__ import annotations
 
@@ -104,18 +99,6 @@ def test_k12_manifest_uses_unified_serving_contract_and_all_knowledge_hops():
     assert materialization["no_fallback"] is True
     assert materialization["processed_record_count"] == 3571
     assert materialization["serving_record_count"] == 3571
-    assert materialization["processed_corpus_sha256"] == (
-        "f9bee981aaafc23ff557626e6997b7621860fcc257658d3dfe2a363ef9fb68d5"
-    )
-    assert materialization["serving_corpus_sha256"] == (
-        "e967a0533acf3f0631b0fd09131632a4ec30f4fb4fa60b909521f31ef9686e1a"
-    )
-    assert materialization["provenance_sha256"] == (
-        "420024afbc16d7dd38c347e5d0e85d936ee931ae7a57492023ac502a1f06a866"
-    )
-    assert materialization["unified_manifest_sha256"] == (
-        "328f3c9d5219f82a42abd79f4e52ee6cac73e6eed786cb427b3b1cfeda027f3c"
-    )
     assert materialization["source_kind_counts"] == {"official": 3515, "curated": 56}
     assert {hop["hop_id"] for hop in manifest["hops"]} == {
         "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8",

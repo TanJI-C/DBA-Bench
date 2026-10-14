@@ -4,7 +4,6 @@ from .model.calibration import require_validated_calibration
 from .model.enums import (
     SETTING_SCOPES_BY_SYSTEM,
     CalibrationStatus,
-    DatabaseSystem,
     EventTrigger,
     HtapMode,
     LoadClass,
@@ -13,6 +12,7 @@ from .model.enums import (
     SettingEffect,
     SettingScope,
 )
+from src.database.system import DatabaseSystem
 from .model.loader import load_persistent_scenario
 from .model.spec import (
     CalibrationSpec,

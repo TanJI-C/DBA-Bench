@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.postgres.resource_governance import pgbouncer_connection_budget as pgbouncer_module
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun, InjectionRecord
@@ -206,6 +206,8 @@ def _run(case, env, actions):
 
 def test_registry_identity_case_numbers_and_port_contract():
     scenario = next(item for item in ALL_SCENARIOS if item.scenario_id == SCENARIO_ID)
+    history_case = scenario.get_case("pool_partition_shortage")
+    history_case.frozen_history.validate(history_case.background_workload)
     assert [case.case_id for case in scenario.cases] == ["pool_partition_shortage", "pool_partition_shortage_simple"]
     assert [case.case_no for case in scenario.cases] == [0, 1]
     assert [case.evaluator.scenario_id for case in scenario.cases] == [SCENARIO_ID, SCENARIO_ID]

@@ -49,7 +49,10 @@ from typing import Any, Callable, Mapping
 
 import pymysql
 
+from src.execution.specs import HostPortLayout
 from src.execution.tidb_persistent_deployment import (
+    PORT_RANGE,
+    port_allocation_count,
     MYSQL_IMAGE,
     TICDC_IMAGE,
     TiDBPersistentDeployment,
@@ -83,7 +86,8 @@ from src.persistent_scenarios.backend.tidb.classifier import (
 )
 from src.persistent_scenarios.backend.tidb.environment import PersistentTiDBEnvironment
 from src.persistent_scenarios.backend.tidb.topology import expand_topology
-from src.persistent_scenarios.model.enums import DatabaseSystem, RequiredStateKind
+from src.persistent_scenarios.model.enums import RequiredStateKind
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.spec import PersistentScenarioSpec
 from src.persistent_scenarios.runtime.lifecycle import (
     ActionClassification,
@@ -95,7 +99,7 @@ from src.persistent_scenarios.runtime.lifecycle import (
 from src.persistent_scenarios.runtime.ledger import LedgerTerminal, LedgerView
 from src.persistent_scenarios.runtime.telemetry import TelemetryRuntime
 from src.persistent_scenarios.tidb.port_adapter import DeploymentPort
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, TiDBReleaseSpec
+from src.execution.tidb_runtime import TIDB_V8_1_0, TiDBReleaseSpec
 
 __all__ = [
     "DeferredTiKVStore",
@@ -468,6 +472,13 @@ class TiDBAssemblyEnvironmentProvider(EnvironmentProvider):
             "ticdc": TICDC_IMAGE,
             "downstream": MYSQL_IMAGE,
         }
+
+    def host_ports(self, spec: PersistentScenarioSpec) -> HostPortLayout:
+        if any(node.role == self._RESERVE_ROLE for node in spec.environment.nodes):
+            spec = self._translate_reserve_nodes(spec)
+        topology = expand_topology(spec, release_images=self._release_images(), data_dir=str(self.data_root))
+        return HostPortLayout(offsets=tuple(range(port_allocation_count(topology, enable_monitoring=self.enable_monitoring))),
+                              allowed_range=PORT_RANGE)
 
     def create(self, spec: PersistentScenarioSpec, run_id: str, port: int, *, time_scale: float = 1.0) -> TiDBAssemblyEnvironment:
         # The engine compresses the spec timeline itself (development_compressed);

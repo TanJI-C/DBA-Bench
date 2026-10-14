@@ -1,7 +1,8 @@
 import inspect
 from pathlib import Path
 
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import SCENARIO_REGISTRY
 from src.scenarios.tidb.system_failure.table_cache_lease_frozen_history import (
@@ -129,6 +130,6 @@ def test_missing_root_cause_does_not_pass_diagnosis():
     assert "cache_lease_metadata_conflict" in result["critical_missing"]
 
 
-def test_entrypoint_requires_model_without_version_default():
+def test_entrypoint_accepts_explicit_model_without_version_default():
     source = Path("examples/run_tidb_system_failure_table_cache_lease_frozen_history_scenario.py").read_text()
-    assert 'parser.add_argument("--model", required=True, help="LLM model name")' in source
+    assert 'parser.add_argument("--model", help="LLM model name")' in source

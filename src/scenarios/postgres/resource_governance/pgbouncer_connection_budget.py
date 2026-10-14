@@ -30,22 +30,11 @@ from src.scenarios.evaluation.postgres.resource_governance.pgbouncer_connection_
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.frozen_history import DecoyDirection, DecoyKind, HistoryDecoySpec, FrozenHistorySpec
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 from src.workloads.tpcds import get_tpcds_query
 
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import HostPortLayout, CaseResourceSpec, PostgresCaseRuntime, PostgresRuntimeSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 
 
 PGBOUNCER_FAULT_IMAGE_PREFIX = (
@@ -2764,7 +2753,7 @@ def _make_case(*, case_id: str, case_no: int, evaluator: type, simple: bool, ref
     history_spec = None if simple else FrozenHistorySpec(
         schema_version=1,
         duration_seconds=12 * 60 * 60,
-        normal_capture_seconds=120,
+        normal_capture_seconds=360,
         fault_capture_seconds=180,
         base_step_seconds=2,
         overview_step_seconds=20,
@@ -2882,6 +2871,7 @@ def _make_case(*, case_id: str, case_no: int, evaluator: type, simple: bool, ref
             )
         ),
         runtime=PostgresCaseRuntime(
+            host_ports=HostPortLayout(offsets=(0, 1)),
             resources=_RESOURCE_SPEC,
             parameters=PostgresRuntimeSpec(
                 parameters=(

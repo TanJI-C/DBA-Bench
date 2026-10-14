@@ -12,7 +12,7 @@ from src.scenarios.evaluation.semantic import (
     SemanticJudgment,
 )
 from src.database.query_results import capture_query_result_truth, latency_summary
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb.query_perf.index_order_correlation import (
     TidbQueryPerfIndexOrderCorrelationScenario,
@@ -785,7 +785,7 @@ def test_structured_mock_report_and_formal_entry_load():
 
 def test_reduced_case_merges_seven_diagnosis_states_into_two_and_softens_alert_path_count():
     from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     original, reduced = SCENARIO.cases
     assert (original.case_no, reduced.case_no) == (0, 1)

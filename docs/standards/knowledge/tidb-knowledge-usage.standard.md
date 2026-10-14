@@ -334,7 +334,7 @@ results[].content
 ~~~
 
 The runtime implementation lives in _search_tidb_knowledge() and search_knowledge() in
-src/execution/environment.py; the tool schema is in src/execution/tidb_tool_definitions.py.
+src/execution/environments/tidb.py; the tool schema is in src/execution/tidb_tool_definitions.py.
 
 Knowledge results provide only general TiDB product knowledge — never the current run's Stores,
 Regions, tables, checkpoints, TSO, dynamic objects, remediation results, or evaluator conclusions.
@@ -383,7 +383,7 @@ The script:
 5. checks marker recall of the standard queries;
 6. checks the Agent projection through TiDBEnv._search_tidb_knowledge();
 7. confirms that source/provenance/index fields do not leak;
-8. writes results to a timestamped JSON file under logs/ (that directory is not committed).
+8. writes results to `logs/tidb_unified_kb_smoke.json` (not committed; subsequent runs overwrite it).
 
 ### 6.2 Targeted tests
 

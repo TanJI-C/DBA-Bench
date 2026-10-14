@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import psycopg2
 import pytest
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 class FakeSamplerConn:

@@ -16,6 +16,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.execution.host_ports import claim_host_ports
+
 import psycopg2
 
 
@@ -42,8 +44,11 @@ class SingleNodePostgres:
         self.container_name = f"pg5r-htap-i3-{config.run_id}"
         self.volume_name = f"pg5r-htap-i3-{config.run_id}-data"
         self.network_name = f"pg5r-htap-i3-{config.run_id}-net"
+        self._port_lease = None
 
     def deploy(self) -> None:
+        if self._port_lease is None:
+            self._port_lease = claim_host_ports((self.config.port,), owner=self.container_name)
         self._assert_port_free()
         self._run(["docker", "network", "create", self.network_name])
         self._run(["docker", "volume", "create", self.volume_name])
@@ -110,6 +115,9 @@ class SingleNodePostgres:
         self._run(["docker", "rm", "-f", self.container_name], check=False)
         self._run(["docker", "volume", "rm", "-f", self.volume_name], check=False)
         self._run(["docker", "network", "rm", self.network_name], check=False)
+        if self._port_lease is not None:
+            self._port_lease.close()
+            self._port_lease = None
 
     def _assert_port_free(self) -> None:
         with socket.socket() as sock:

@@ -1,3 +1,4 @@
+from src.scenarios.evaluation.tidb.business_change.dr_auto_sync_errors import K09FinalStateUnavailable
 import json
 from types import SimpleNamespace
 from pathlib import Path
@@ -13,8 +14,7 @@ from src.scenarios.evaluation.tidb.business_change.dr_auto_sync_failover import 
     K09RegionIntegrityVerifier,
     K09UnplannedRecoveryVerifier,
 )
-from src.execution.tidb_dr_auto_sync import (
-    K09FinalStateUnavailable,
+from src.scenarios.tidb.business_change.runtime.dr_auto_sync_control import (
     TiDBDrAutoSyncControl,
 )
 
@@ -309,4 +309,3 @@ def test_k09_entry_uses_only_the_unified_search_knowledge_tool():
     assert "AIOPS_TIDB_KB_BACKEND" not in source
     assert "tidb81_k09_extended" not in source
     assert '_action("search_knowledge"' in source
-

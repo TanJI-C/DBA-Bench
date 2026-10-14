@@ -27,6 +27,8 @@ SCENARIO_ATTRIBUTE_VALUES = {
         "health_check",
         "business_change",
         "resource_governance",
+        "composite_fault",
+        "misleading_alert",
     },
     "difficulty": {"easy", "hard"},
     "diagnostic_depth": {"direct", "deep"},

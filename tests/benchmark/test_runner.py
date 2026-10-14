@@ -12,12 +12,13 @@ import time
 from collections import Counter
 
 from src.scenarios import ALL_SCENARIOS, SCENARIO_REGISTRY, ScenarioCategory
-from src.scenarios.base import CaseResourceSpec, DatabaseSystem
+from src.execution.specs import CaseResourceSpec
+from src.database.system import DatabaseSystem
 from src.benchmark.aggregate import aggregate
+from src.benchmark.adapters.scenario import assert_fault_snapshots_exist
 from src.benchmark.isolation import (
     HOST_EXCLUSIVE_SCENARIOS,
     allocate_workers,
-    assert_fault_snapshots_exist,
     derive_worker_demand,
     expand_linux_set,
     requires_host_exclusive,
@@ -41,7 +42,7 @@ from src.benchmark.runner import (
     validate_execution_plan,
 )
 from src.benchmark.store import ExperimentStore
-from src.execution.deployment import PGDockerDeployment
+from src.execution.deployments.postgres import PGDockerDeployment
 
 
 def test_runner_timeout_interrupts_before_escalating(monkeypatch):
@@ -773,7 +774,7 @@ def test_pg_readiness_requires_application_database_round_trip(monkeypatch):
     sql_ready = iter((False, True))
     monkeypatch.setattr(deployment, "is_ready", lambda: True)
     monkeypatch.setattr(deployment, "_sql_ready", lambda: next(sql_ready))
-    monkeypatch.setattr("src.execution.deployment.time.sleep", lambda _: None)
+    monkeypatch.setattr("src.execution.deployments.postgres.time.sleep", lambda _: None)
 
     assert deployment.wait_for_ready(timeout=1) is True
 
@@ -784,7 +785,7 @@ def test_pg_sql_readiness_treats_docker_timeout_as_not_ready(monkeypatch):
     def raise_timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd="docker exec", timeout=10)
 
-    monkeypatch.setattr("src.execution.deployment.subprocess.run", raise_timeout)
+    monkeypatch.setattr("src.execution.deployments.postgres.subprocess.run", raise_timeout)
 
     assert deployment._sql_ready() is False
 
@@ -800,10 +801,6 @@ def test_container_name_keeps_long_run_ids_unique():
     assert first != second
 
 
-@pytest.mark.skipif(
-    os.cpu_count() is not None and os.cpu_count() < 26,
-    reason="kernel affinity fixture pins CPUs 24-25",
-)
 def test_bound_process_wrapper_records_kernel_affinity(tmp_path):
     audit_path = tmp_path / "process-runtime.json"
     result = subprocess.run(
@@ -1365,7 +1362,8 @@ def test_store_rebuilds_jsonl_from_run_records(tmp_path):
     assert (store.root / "failures.jsonl").read_text(encoding="utf-8") == ""
 
 
-def test_runner_preserves_attempts_and_extracts_evaluation(tmp_path, monkeypatch):
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_runner_preserves_attempts_and_extracts_evaluation(tmp_path, monkeypatch, language):
     manifest_path = tmp_path / "experiment.yaml"
     manifest_path.write_text(
         """
@@ -1377,7 +1375,7 @@ seeds: [11]
 runtime:
   timeout_seconds: 10
   isolation: {numa_policy: local}
-""".strip(),
+""".strip() + f"\n  agent_language: {language}\n",
         encoding="utf-8",
     )
     manifest = load_manifest(manifest_path)
@@ -1387,6 +1385,7 @@ runtime:
     store.save(RunRecord.from_spec(spec))
     child = (
         "import json, os, pathlib; "
+        f"assert os.environ['AIOPS_AGENT_LANGUAGE'] == {language!r}; "
         "p=pathlib.Path(os.environ['AIOPS_TRACE_OUTPUT_DIR'])/os.environ['AIOPS_TRACE_FILENAME']; "
         "p.parent.mkdir(parents=True, exist_ok=True); "
         "p.write_text(json.dumps({'evaluation': {'DiagnosisPass': True, "
@@ -1395,7 +1394,7 @@ runtime:
     )
     monkeypatch.setattr(
         "src.benchmark.runner.build_command",
-        lambda run_spec, experiment: [sys.executable, "-c", child],
+        lambda run_spec, experiment: [sys.executable, "-c", child, "--port", str(run_spec.port)],
     )
     worker = _test_workers()[0]
     runner = ExperimentRunner(manifest, store, (worker,))
@@ -1658,7 +1657,7 @@ def test_fault_snapshot_use_preflight_requires_every_image(monkeypatch):
             port=19000,
         )
     ]
-    monkeypatch.setattr("src.execution.environment.PGEnv.snapshot_exists", lambda self, name: False)
+    monkeypatch.setattr("src.execution.environments.postgres.PGEnv.snapshot_exists", lambda self, name: False)
 
     try:
         assert_fault_snapshots_exist(specs)
@@ -1686,7 +1685,7 @@ def test_tidb_fault_snapshot_use_preflight_checks_image_group(monkeypatch):
         )
     ]
     monkeypatch.setattr(
-        "src.execution.deployment.TiDBDockerDeployment.image_group_exists",
+        "src.execution.deployments.tidb_components.snapshots.TiDBSnapshots.image_group_exists",
         lambda self, name: name == self.image_group_name,
     )
 

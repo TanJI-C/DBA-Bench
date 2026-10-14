@@ -20,15 +20,10 @@ from src.execution.postgres_replica_fleet import (
 from src.execution.history.records import HistoricalRecordSource
 from src.scenarios.frozen_history import DecoyDirection, DecoyKind, HistoryDecoySpec, FrozenHistorySpec
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import CaseResourceSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 
 
 SCENARIO_ID = "pg_business_change_lwlock_pgbouncer_cascade"

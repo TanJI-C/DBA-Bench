@@ -41,7 +41,7 @@ from src.persistent_scenarios.backend.tidb.capabilities.warehouse.store import (
     QueueTables,
     make_ingest_run,
 )
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.persistent_scenarios.runtime.clock import FakeClock
 from src.persistent_scenarios.runtime.ledger import (
@@ -1026,7 +1026,10 @@ def test_wh_report_result_truth_flags_delivery_over_superseded_inputs(tmp_path) 
                    "queued_at_monotonic": 1.0, "started_at_monotonic": 1.0,
                    "ended_at_monotonic": 2.0, "outcome": "succeeded", "detail": {}})
     # delivered over pre-correction inputs, before the wave's republish marker
-    from src.persistent_scenarios.backend.tidb.capabilities.warehouse.reports import report_sql, streaming_result_digest
+    from src.persistent_scenarios.backend.tidb.capabilities.warehouse.reports import (
+        report_sql,
+        streaming_result_digest,
+    )
 
     with connection.cursor() as cursor:
         cursor.execute(report_sql("region_daily_revenue", 1))

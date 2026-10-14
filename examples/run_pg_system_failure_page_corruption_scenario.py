@@ -11,10 +11,10 @@ sys.path.insert(0, project_root)
 from src.scenarios.runtime.config import required_run_timeout_seconds
 from src.agents.agent import LLMAgent, MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.postgres import PgSystemFailurePageCorruptionScenario
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -796,7 +796,7 @@ def main():
                         help="case-0 mock flow: reference/equivalent must pass, wrong_source/partial must fail the outcome")
     parser.add_argument("--port", type=int, default=15432)
     parser.add_argument("--container-name", default="aiopsbench-run-pg-system-failure-page-corruption-scenario")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=12)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")

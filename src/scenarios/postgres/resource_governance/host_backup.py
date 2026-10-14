@@ -7,7 +7,7 @@ from src.scenarios.evaluation.postgres.resource_governance import (
     PgResourceGovernanceHostBackupForSingleBackupReaderSimpleEvaluatorCase,
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
 from src.scenarios.postgres.common import (
     _join_thread,
@@ -16,16 +16,9 @@ from src.scenarios.postgres.common import (
     _run_cleanup_steps,
     _validate_sql_identifier,
 )
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    PostgresScenarioCase,
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-)
+from src.execution.specs import CaseResourceSpec, PostgresCaseRuntime
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
 
 
 RESOURCE_GOVERNANCE_POSTGRES_RESOURCES = CaseResourceSpec(

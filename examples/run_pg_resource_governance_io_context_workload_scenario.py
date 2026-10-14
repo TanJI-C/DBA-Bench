@@ -18,8 +18,9 @@ sys.path.insert(0, project_root)
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
+from src.execution.specs import HostPortLayout
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.postgres import PgResourceGovernanceIoContextWorkloadScenario
 from src.workloads.tpcds import TPCDSWorkload
@@ -255,8 +256,9 @@ def build_env(case, port: int, monitoring_port: int, container_name: str, mode: 
     # The dedicated image is initialized from the shared TPC-DS dataset, so use
     # its existing 1CPU/512MB baseline rather than creating a generated artifact.
     env.baseline_image_name = "aiopsbench-pg-tpcds:latest"
-    if monitoring_port != case.monitoring_port:
-        case = dataclasses.replace(case, monitoring_port=monitoring_port)
+    case = dataclasses.replace(case, monitoring_port=monitoring_port,
+        runtime=dataclasses.replace(case.runtime,
+            host_ports=HostPortLayout(offsets=(0, monitoring_port - port))))
     return env, case, network_name, volume_name
 
 
@@ -297,8 +299,8 @@ def main() -> None:
     parser.add_argument("--mode", choices=["mock", "zero", "flash", "llm", "all"], default="mock")
     parser.add_argument("--port", type=int, default=15871)
     parser.add_argument("--monitoring-port", type=int)
-    parser.add_argument("--container-name", default="aiopsbench-pg-pg-io-context")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--container-name", default="aiopsbench-pg-io-context")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", "--fault-image-mode", dest="fault_snapshot_mode", choices=["auto", "off", "save", "use"], default="auto")

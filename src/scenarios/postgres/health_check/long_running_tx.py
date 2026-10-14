@@ -22,15 +22,9 @@ from src.scenarios.evaluation.postgres.health_check import (
 )
 
 from src.workloads.tpcds import get_tpcds_query
-from ...base import (
-    DifficultyCalibration,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
-)
+from src.scenarios.base import DifficultyCalibration, PostgresScenario, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import EMPTY_BACKGROUND_WORKLOAD
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

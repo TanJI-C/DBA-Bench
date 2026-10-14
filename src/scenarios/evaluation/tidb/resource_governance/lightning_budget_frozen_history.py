@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from src.database.sql import execute_result_rows
-from src.execution.deployment import lightning_job_id
+from src.execution.deployments.tidb_support import lightning_job_id
 from src.scenarios.evaluation.common import condition
 from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, execute_sql_rows
 from src.scenarios.evaluation.protocol import EvaluationContext

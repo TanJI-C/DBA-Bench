@@ -111,6 +111,38 @@ def test_shared_scope_record_is_visible_to_specific_scope_and_component_filter(t
     assert result["results"][0]["component"] == "ticdc"
 
 
+def test_repository_manifest_survives_checkout_relocation(tmp_path, monkeypatch):
+    from src import project_paths
+    from src.knowledge import markdown_knowledge_base
+
+    root = tmp_path / "checkout"
+    monkeypatch.setattr(project_paths, "SHARED_REPOSITORY_ROOT", root)
+    monkeypatch.setattr(markdown_knowledge_base, "SHARED_REPOSITORY_ROOT", root)
+    source, kb = sqlite_kb(root)
+    stats = kb.build()
+    assert stats["source_file"] == source.relative_to(root).as_posix()
+    assert stats["persist_dir"] == "index"
+    assert stats["manifest_path"] == "index/manifest.json"
+    assert stats["database_path"] == f"index/{kb.collection_name}.sqlite3"
+
+    relocated = tmp_path / "relocated"
+    root.rename(relocated)
+    monkeypatch.setattr(project_paths, "SHARED_REPOSITORY_ROOT", relocated)
+    monkeypatch.setattr(markdown_knowledge_base, "SHARED_REPOSITORY_ROOT", relocated)
+    moved_kb = TiDBKnowledgeBase(
+        persist_dir=relocated / "index", backend="sqlite", knowledge_base_mode="hierarchical"
+    )
+    result = moved_kb.query("tidb_mem_quota_query", source_scope="self_managed")
+    assert result["count"] == 1
+    assert result["results"][0]["source_id"].endswith("#query-memory")
+
+
+def test_external_corpus_manifest_preserves_absolute_path(tmp_path):
+    source, kb = sqlite_kb(tmp_path)
+    assert kb.build()["source_file"] == str(source)
+    assert kb._validated_manifest()["source_file"] == str(source)
+
+
 def test_query_rejects_stale_materialized_corpus(tmp_path):
     source, kb = sqlite_kb(tmp_path)
     kb.build()

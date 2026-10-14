@@ -15,17 +15,11 @@ from src.scenarios.evaluation.tidb.health_check.empty_region_leader_skew import 
     TidbHealthCheckEmptyRegionLeaderSkewForRegionalJobSkewReviewEvaluatorCase,
     TidbHealthCheckEmptyRegionLeaderSkewForRecentSplitWindowEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

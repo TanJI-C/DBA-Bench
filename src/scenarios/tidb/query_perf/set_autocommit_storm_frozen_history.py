@@ -24,17 +24,11 @@ from src.scenarios.frozen_history import (
     FrozenHistorySpec,
 )
 from src.scenarios.tidb.common import validate_sql_identifier
-from src.scenarios.workloads import SessionSetupBehavior, WorkloadProfile
+from src.workloads.specs import SessionSetupBehavior, WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _DB = "benchops_mf_ma03"
@@ -503,8 +497,8 @@ _MF_SET_AUTOCOMMIT_CASE = TidbQueryPerfSetAutocommitStormFrozenHistoryForHistory
         diagnostic_depth=10,
         environmental_complexity=0.815104,
         reference_run_ids=(
-            "tidb_mf-set-autocommit_frozen_history_reference_lease_pending",
-            "tidb_mf-set-autocommit_frozen_history_reference_lane_pending",
+            "tidb_mfma03_frozen_history_reference_lease_pending",
+            "tidb_mfma03_frozen_history_reference_lane_pending",
         ),
     ),
     db=_DB,

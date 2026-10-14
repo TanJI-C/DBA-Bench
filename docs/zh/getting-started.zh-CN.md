@@ -12,6 +12,7 @@ language: zh-CN
 |---|---|---|
 | Python | 3.10 – 3.12 | `python3 --version` |
 | Docker Engine | 20.10+ | 包含 Compose v2（`docker compose version`） |
+| Docker 存储文件系统 | xfs + pquota | PG/TiDB 使用容器磁盘配额；ext4 不支持该配置，见第 2 节 |
 | 空闲磁盘 | ~10 GB | `postgres:16` 镜像加上每次运行的容器；TiDB Compose 还会拉取 PD/TiKV/TiDB/Prometheus 镜像 |
 | 空闲内存 | 4 GB（PG）/ 8 GB（TiDB） | TiDB Compose 运行 PD + TiKV + TiDB + Prometheus |
 | （可选）NVIDIA GPU | 24 GB+ 显存 | 仅本地语义诊断裁判（vLLM）需要 |
@@ -50,7 +51,13 @@ python -c "from src.benchmark import api; print('ok')"
    docker compose version   # must be Compose v2
    ```
 
-3. 如果在 Linux 上第 2 步报 `permission denied`，请把自己加入 `docker` 组并重新登录：
+3. 如果第 2 步报 `docker: unknown command: docker compose`，安装 Compose v2 插件后重新验证：
+
+   ```bash
+   sudo apt-get install docker-compose-plugin   # Debian/Ubuntu；Docker Desktop 已包含
+   ```
+
+4. 如果在 Linux 上第 2 步报 `permission denied`，请把自己加入 `docker` 组并重新登录：
 
    ```bash
    sudo usermod -aG docker "$USER"
@@ -61,6 +68,23 @@ python -c "from src.benchmark import api; print('ok')"
 - PostgreSQL 场景从 Docker Hub 拉取 **`postgres:16`**。
 - TiDB 场景使用一个按 digest 固定 **`pingcap/pd`、`pingcap/tikv`、`pingcap/tidb`** 的 Compose 文件，外加 Prometheus 与 cAdvisor。
 - 如果在你的网络中 `pingcap/*` 拉取缓慢或被阻断，请在 Docker daemon 中配置注册表镜像（例如 `https://docker.m.daocloud.io`）——Compose 文件中的部分内容已直接引用它。
+
+### Ext4 主机：将 Docker 数据目录迁移到 xfs
+
+```bash
+df -T /var/lib/docker
+```
+
+如文件系统为 ext4，容器的 `--storage-opt` 磁盘配额会导致启动失败（exit 125）。可执行：
+
+```bash
+sudo bash scripts/setup_docker_xfs_dataroot.sh
+```
+
+脚本创建稀疏镜像（默认 200G，可用 `SIZE=...` 调整），格式化为 xfs，以 pquota 挂载到
+`/srv/docker-xfs`，复制旧数据，更新 `/etc/docker/daemon.json` 的 `data-root`，并验证 1G
+容器配额。迁移前运行的容器会重新启动。按脚本输出补齐 fstab 挂载项，否则重启后挂载会消失。
+原目录保留为 `/var/lib/docker.ext4.bak`，便于按英文指南回滚。
 
 ## 3. 首次运行
 

@@ -280,10 +280,6 @@ def test_scenario_identity_outside_the_binding_is_refused(tmp_path):
 
 
 def test_gate_script_covers_every_registered_pg5_scenario():
-    if not Path(TPCDS_QUERY_FILE).exists():
-        pytest.skip(
-            "TPC-DS query text is not present; fetch it per docs/getting-started.md"
-        )
     smoke = gate_script("pg_continuous_ops_smoke")
     assert smoke.reference_actions and smoke.wrong_actions
     assert all(action["api"] == "execute_sql" for action in smoke.reference_actions)

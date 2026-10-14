@@ -4,8 +4,9 @@ from types import SimpleNamespace
 import pytest
 
 from src.scenarios import SCENARIO_REGISTRY
-from src.scenarios.base import DatabaseSystem
-from src.execution.environment import PGEnv, TiDBEnv
+from src.database.system import DatabaseSystem
+from src.execution.environments.postgres import PGEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.benchmark.isolation import derive_worker_demand
 from src.benchmark.manifest import load_manifest
 from src.benchmark.planner import plan_runs
@@ -110,7 +111,7 @@ def test_tidb_fault_injectors_are_colocated_with_their_scenario():
     ("relative_root", "allowed_root_modules"),
     (
         ("src/scenarios/postgres", {"__init__.py", "common.py"}),
-        ("src/scenarios/tidb", {"__init__.py", "common.py", "runtime.py"}),
+        ("src/scenarios/tidb", {"__init__.py", "common.py"}),
         ("src/scenarios/evaluation/postgres", {"__init__.py"}),
         ("src/scenarios/evaluation/tidb", {"__init__.py", "base.py"}),
     ),

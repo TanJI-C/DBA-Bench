@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.persistent_scenarios.api import build_postgres_backend, build_tidb_backend
 from src.persistent_scenarios.model.calibration import require_validated_calibration
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.project_paths import CALIBRATION_ARTIFACT_ROOT, SOURCE_ROOT, persistent_scenario_definition_roots
 
@@ -55,6 +55,9 @@ def plan_persistent_scenario_runs(manifest: ExperimentManifest) -> list[Persiste
         path = persistent_scenario_definition_path(scenario_id)
         persistent_scenario = load_persistent_scenario(path)
         validate_persistent_scenario_target(persistent_scenario, manifest)
+        backend = (build_tidb_backend(persistent_scenario) if persistent_scenario.system is DatabaseSystem.TIDB
+                   else build_postgres_backend(persistent_scenario))
+        host_ports = backend.environment.host_ports(persistent_scenario)
         for agent in manifest.agents:
             for repetition, seed in enumerate(manifest.seeds, start=1):
                 run_id = "__".join((
@@ -74,6 +77,7 @@ def plan_persistent_scenario_runs(manifest: ExperimentManifest) -> list[Persiste
                     seed=seed,
                     port=manifest.runtime.port_base + index,
                     resources=persistent_scenario.environment.nodes[0].resources,
+                    host_ports=host_ports,
                 ))
                 index += 1
     if not runs:

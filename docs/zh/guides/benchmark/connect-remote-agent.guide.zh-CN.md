@@ -59,7 +59,7 @@ bounded Scenario；不接受 `reasoning_effort` 和 `max_output_tokens`，因为
 动作格式为 `{"id", "api", "args", "thinking"?, "turn_id"?, "usage"?}`：
 
 - `api` 是 `tools` 中的工具名，或 `submit` / `exit`。`submit` 的参数为
-  `{"report": ...}`，报告结构见 [protocol.py](../../../../src/scenarios/evaluation/protocol.py)。
+  `{"report": ...}`，报告结构见 [report.py](../../../../src/protocols/report.py)。
 - `thinking` 是可选文本，随动作记录。
 - `turn_id` 是服务提供的可选标识，计数规则见下文。
 - `usage` 是可选的模型 token 用量记录列表，上报规则见下文。

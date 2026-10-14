@@ -9,7 +9,7 @@ from examples.run_tidb_business_change_pitr_checkpoint_recovery_scenario import 
     _assert_restore_log_table_rewrite,
 )
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb import (
     SCENARIO_REGISTRY,
@@ -18,7 +18,7 @@ from src.scenarios.tidb import (
 from src.scenarios.tidb.business_change.pitr_checkpoint_recovery import (
     TidbBusinessChangePitrCheckpointRecoveryInjector,
 )
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.business_change.runtime.pitr_checkpoint_recovery import PitrCheckpointRecoveryEnv
 
 
 SCENARIO = TidbBusinessChangePitrCheckpointRecoveryScenario()
@@ -179,10 +179,10 @@ def test_case_identity_registry_fault_plan_and_hard_contract():
 
 
 def test_k08_runtime_registration_has_explicit_environment_ownership():
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(PitrCheckpointRecoveryEnv)
     env.run_id = "k08-runtime-ownership"
     env._k08_pitr_runtime = None
-    runtime = object()
+    runtime = SimpleNamespace(observe_agent_sql=lambda target, sql: None)
 
     env.configure_k08_pitr_runtime(runtime)
     assert env.owns_k08_pitr_runtime(runtime) is True
@@ -502,13 +502,14 @@ def test_catalog_audit_accepts_equivalent_primary_and_replica_queries():
 
 
 def test_agent_sql_surface_records_k08_catalog_audit_without_trusting_evaluator_sql(monkeypatch):
-    from src.execution.environment import TiDBEnv
+    from src.scenarios.tidb.business_change.runtime.pitr_checkpoint_recovery import PitrCheckpointRecoveryEnv
 
-    env = object.__new__(TiDBEnv)
+    env = object.__new__(PitrCheckpointRecoveryEnv)
     observed = []
-    env._k08_pitr_runtime = SimpleNamespace(
+    env._k08_pitr_runtime = None
+    env.configure_k08_pitr_runtime(SimpleNamespace(
         observe_agent_sql=lambda target, sql: observed.append((target, sql))
-    )
+    ))
     env._history_timeline = None
     env._sql_connection_surfaces = {}
     monkeypatch.setattr(env, "_validate_registered_sql_write_policies", lambda *args, **kwargs: None)

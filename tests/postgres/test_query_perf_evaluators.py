@@ -7,7 +7,7 @@ from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.postgres.query_perf.sort_spill import _work_mem_is_increased
 from src.scenarios.evaluation.diagnosis import DiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 
 
 SCENARIOS = (

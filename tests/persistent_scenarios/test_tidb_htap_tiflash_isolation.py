@@ -20,7 +20,8 @@ from src.persistent_scenarios.backend.tidb.capabilities.tiflash import (
 )
 from src.persistent_scenarios.backend.tidb.capabilities.tiflash import verifiers as htap_verifiers
 from src.persistent_scenarios.backend.tidb.capabilities.tiflash.runtime import HtapIsolationRuntime
-from src.persistent_scenarios.model.enums import DatabaseSystem, LoadClass
+from src.persistent_scenarios.model.enums import LoadClass
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.loader import load_persistent_scenario
 from src.persistent_scenarios.runtime.ledger import (
     JobAttempt,

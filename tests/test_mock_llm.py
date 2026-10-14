@@ -146,6 +146,39 @@ def _prompt_action_response(api, args):
     }
 
 
+def test_llm_requires_model_without_config(tmp_path):
+    with pytest.raises(ValueError, match="LLMAgent requires an explicit model"):
+        LLMAgent(url="mock", api_key="mock", config_path=str(tmp_path / "absent.json"))
+
+
+def test_llm_does_not_select_first_configured_model(tmp_path):
+    path = tmp_path / "llm.json"
+    path.write_text(json.dumps({"configured-model": {"url": "mock", "api_key": "mock"}}))
+    with pytest.raises(ValueError, match="LLMAgent requires an explicit model"):
+        LLMAgent(config_path=str(path))
+
+
+@pytest.mark.parametrize("field", ["reasoning_content", "reasoning", "thinking"])
+def test_reasoning_response_fields_work_for_any_model(field):
+    agent = LLMAgent(model="test-model", url="mock", api_key="mock")
+    response = _openai_tool_response(("execute_sql", {"sql_query": "SELECT 1"}))
+    response["choices"][0]["message"][field] = "Inspect the database."
+    parsed, history = agent._parse_llm_response_message(response)
+    assert "Inspect the database." in parsed["thinking"]
+    assert parsed["tool_calls"][0]["api"] == "execute_sql"
+    assert history[field] == "Inspect the database."
+
+
+def test_glm_plain_json_response_uses_content_protocol():
+    agent = LLMAgent(model="glm-test", url="mock", api_key="mock")
+    parsed, _ = agent._parse_llm_response_message(
+        _prompt_action_response("execute_sql", {"sql_query": "SELECT 1"})
+    )
+    assert json.loads(parsed["content"])["action"] == {
+        "api": "execute_sql", "args": {"sql_query": "SELECT 1"}
+    }
+
+
 def test_mock_agent_requires_explicit_submission():
     agent = MockLLMAgent(url="mock", api_key="mock", system_prompt="test")
     agent.set_mock_responses([

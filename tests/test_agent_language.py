@@ -81,7 +81,7 @@ def _frozen_history_env():
     """A PGEnv whose help carries the frozen-history runtime sections, without a database."""
     from types import SimpleNamespace
 
-    from src.execution.environment import PGEnv
+    from src.execution.environments.postgres import PGEnv
     from src.execution.history.records import HistoricalRecordSource
 
     env = PGEnv(deployment=object())
@@ -111,7 +111,8 @@ def _postgres_agent_text():
     from src.agents.context_compaction import burst_warning_prefix, prompt_tool_result_prefix
     from src.agents.prompt_manager import PromptManager
     from src.execution.backup_rpo import RpoPGEnv, RpoTopology
-    from src.execution.environment import SQL_TRUNCATION_HINT, SQL_TRUNCATION_HINT_EN, PGEnv
+    from src.execution.environments.sql import SQL_TRUNCATION_HINT, SQL_TRUNCATION_HINT_EN
+    from src.execution.environments.postgres import PGEnv
     from src.execution.history.metrics import QUERY_METRICS_TRUNCATION_HINT, QUERY_METRICS_TRUNCATION_HINT_EN
     from src.execution.postgres_replica_fleet import PgReplicaFleetDeployment, PgReplicaFleetEnv
     from src.scenarios.postgres.resource_governance.container_cpu_budget import CpuBudgetPGEnv

@@ -22,13 +22,9 @@ from src.scenarios.tidb.common import (
     run_sql_batches,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TidbHealthCheckSyncpointConsistencyCase(TiDBScenarioCase):

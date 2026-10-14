@@ -63,7 +63,7 @@ All bodies are JSON. Paths are relative to `endpoint`.
 An action is `{"id", "api", "args", "thinking"?, "turn_id"?, "usage"?}`:
 
 - `api` is a tool name from `tools`, `submit` with `{"report": ...}` (the structured report
-  in [protocol.py](../../../src/scenarios/evaluation/protocol.py)), or `exit`, which fails the run.
+  in [report.py](../../../src/protocols/report.py)), or `exit`, which fails the run.
 - `thinking` is optional text recorded with the action.
 - `turn_id` is an optional identifier supplied by the service; its accounting rules are below.
 - `usage` is an optional list of model token-usage records; its reporting rules are below.

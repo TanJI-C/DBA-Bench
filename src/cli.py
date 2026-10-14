@@ -201,7 +201,7 @@ def run_persistent_scenario_command(
         build_tidb_backend,
         load_definition,
     )
-    from .persistent_scenarios.model.enums import DatabaseSystem
+    from src.database.system import DatabaseSystem
 
     spec = load_definition(persistent_scenario_path)
     if spec.system is DatabaseSystem.TIDB:
@@ -352,7 +352,7 @@ def validate_persistent_scenario_gate(
         build_tidb_backend,
         load_definition,
     )
-    from .persistent_scenarios.model.enums import DatabaseSystem
+    from src.database.system import DatabaseSystem
     from src.agents.mock_persistent_scenario_agent import ZeroPersistentScenarioAgent
 
     if gate not in _ENGINE_GATE_NAMES:

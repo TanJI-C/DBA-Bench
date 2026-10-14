@@ -18,16 +18,11 @@ from src.scenarios.tidb.common import (
     run_cleanup_steps,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _WORKER_ALIASES = tuple(f"worker-{index:02d}" for index in range(1, 14))
@@ -55,10 +50,20 @@ class TidbHealthCheckLongTransactionMvccCase(TiDBScenarioCase):
     stale_worker_id: int
     non_blocking_abandoned_worker_ids: tuple[int, ...]
     delayed_checkpoint_worker_ids: tuple[int, ...]
+    history_generations: tuple[int, ...]
+    checkpoint_phases: tuple[str, ...]
+    pre_write_current_worker_ids: tuple[int, ...] = ()
+    review_batch_id: str = "orders-0807-01"
+    settled_source_table: str | None = None
 
     @property
     def qualified_table(self) -> str:
         return f"{self.database}.{self.table}"
+
+    @property
+    def qualified_business_tables(self) -> tuple[str, ...]:
+        tables = (self.qualified_table,)
+        return tables if self.settled_source_table is None else tables + (f"{self.database}.{self.settled_source_table}",)
 
     @property
     def qualified_audit_table(self) -> str:
@@ -86,12 +91,16 @@ class TidbHealthCheckLongTransactionMvccCase(TiDBScenarioCase):
 
     @property
     def history_row_count(self) -> int:
-        return len(self.worker_aliases) + 1 + len(self.non_blocking_abandoned_worker_ids)
+        return (
+            (len(self.worker_aliases) if 2 in self.history_generations else 0)
+            + 1
+            + len(self.non_blocking_abandoned_worker_ids)
+        )
 
     @property
     def checkpoint_row_count(self) -> int:
         return (
-            len(self.worker_aliases) * 3
+            len(self.worker_aliases) * len(self.checkpoint_phases)
             + 1
             + len(self.delayed_checkpoint_worker_ids)
         )
@@ -102,14 +111,14 @@ class TidbHealthCheckLongTransactionMvccCase(TiDBScenarioCase):
             f"SELECT COUNT(*), SUM(version = {self.updated_version}), "
             "BIT_XOR(CRC32(CONCAT_WS('#', order_id, customer_id, status, amount, "
             "version, updated_at, payload))) "
-            f"FROM {self.qualified_table}"
+            f"FROM ({' UNION ALL '.join(f'SELECT * FROM {table}' for table in self.qualified_business_tables)}) AS source_rows"
         )
 
     @property
     def lease_registry_sql(self) -> str:
         return (
             "SELECT worker_id, worker_alias, workload_class, run_state, lease_state, "
-            "heartbeat_at, lease_expires_at, session_id "
+            "heartbeat_at, lease_expires_at, session_id, checkpoint_stream, review_batch_id "
             f"FROM {self.qualified_lease_table} ORDER BY worker_id"
         )
 
@@ -125,7 +134,7 @@ class TidbHealthCheckLongTransactionMvccCase(TiDBScenarioCase):
     def checkpoint_sql(self) -> str:
         return (
             "SELECT checkpoint_id, worker_id, checkpoint_at, checkpoint_state, "
-            "commit_tso, batch_name, checkpoint_note "
+            "commit_tso, batch_name, checkpoint_note, batch_id, source_table_id "
             f"FROM {self.qualified_checkpoint_table} "
             "ORDER BY worker_id, checkpoint_at, checkpoint_id"
         )
@@ -353,6 +362,8 @@ _CASE = TidbHealthCheckLongTransactionMvccForDailyReconciliationSnapshotTransact
     stale_worker_id=_STALE_WORKER_ID,
     non_blocking_abandoned_worker_ids=_NON_BLOCKING_ABANDONED_WORKER_IDS,
     delayed_checkpoint_worker_ids=_DELAYED_CHECKPOINT_WORKER_IDS,
+    history_generations=(1, 2),
+    checkpoint_phases=("morning-carryover", "order-version-rollout", "supervisor-settled"),
 )
 
 
@@ -361,7 +372,7 @@ _NEW_CASE = replace(
     case_id="single_handoff_mvcc_review",
     case_no=1,
     evaluator=TidbHealthCheckLongTransactionMvccForSingleHandoffEvaluatorCase,
-    title="A focused TiDB MVCC review for one stale worker handoff boundary.",
+    title="A focused TiDB MVCC health review after a worker handoff.",
     reference_report={
         "diagnosis": {"conditions": []},
         "outcome": {
@@ -371,44 +382,46 @@ _NEW_CASE = replace(
         "summary": "The single handoff review correlated the worker checkpoint boundary with the live transaction TSO before one session-scoped repair.",
     },
     alert=(
-        "例行 MVCC 健康复核：订单服务有一个 abandoned worker session 的 snapshot 早于交接写入边界。"
-        "请关联当前 worker lease、handoff history、worker-specific checkpoint 和 live TxnStart，区分唯一 stale session、"
-        "当前 worker 与 post-write retry。只结束该 session，保留其它连接、checkpoint 和已提交业务数据。"
+        "例行 MVCC 健康复核：订单服务仍正常，但换岗后历史版本保留需要复核。"
+        "本次复核当前 worker 登记的已关闭业务来源批次中的旧版本读取，识别已释放职责且过时的读取并做最小范围处理，保持当前服务 owner 和正常读取连续。"
+        "允许结束确认属于该风险的连接；不得批量终止连接、修改业务或交接记录、重启实例。"
     ),
     initial_state={
         "status": "serving",
-        "snapshot_transactions": 5,
+        "snapshot_transactions": 4,
         "historical_processlist_connections": 0,
-        "worker_session_history_rows": 5,
-        "checkpoint_rows": 10,
+        "worker_session_history_rows": 2,
+        "checkpoint_rows": 3,
         "new_versions": 12,
     },
     expected_target={
         "pre_write_abandoned_session": "gone",
-        "current_worker_sessions": 3,
+        "current_worker_sessions": 2,
         "post_write_abandoned_sessions": 1,
         "historical_processlist_connections": 0,
-        "checkpoint_rows": 10,
+        "checkpoint_rows": 3,
         "new_versions": 12,
         "business_integrity": "post-write row count and CRC unchanged",
     },
     background_workload=replace(_CASE.background_workload, worker_count=3, warmup_seconds=6),
     runtime=replace(_CASE.runtime, bootstrap_cache_enabled=False, sql_timeout_seconds=120),
     difficulty=DifficultyCalibration(
-        diagnostic_depth=2,
-        environmental_complexity=0.735294,
+        diagnostic_depth=4,
+        environmental_complexity=7 / 18,
         reference_run_ids=(
-            "tidb-reference-11__"
-            "tidb_health_check_long_transaction_mvcc__"
-            "single_handoff_mvcc_review__mock__r001",
+            "mvcc-r7-mock-20261012__tidb_health_check_long_transaction_mvcc__single_handoff_mvcc_review__mock__r001",
         ),
     ),
     versioned_row_count=12,
-    worker_aliases=tuple(f"worker-{index:02d}" for index in range(1, 4)),
+    worker_aliases=tuple(f"worker-{index:02d}" for index in range(1, 3)),
     historical_processlist_aliases=(),
-    stale_worker_id=3,
-    non_blocking_abandoned_worker_ids=(2,),
+    stale_worker_id=2,
+    non_blocking_abandoned_worker_ids=(1,),
     delayed_checkpoint_worker_ids=(),
+    history_generations=(1,),
+    checkpoint_phases=("order-version-rollout",),
+    pre_write_current_worker_ids=(1,),
+    settled_source_table="hc09_order_versions_settled",
 )
 
 
@@ -531,6 +544,11 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         self.delayed_checkpoint_worker_ids = tuple(
             int(value) for value in config["delayed_checkpoint_worker_ids"]
         )
+        self.history_generations = tuple(config["history_generations"])
+        self.checkpoint_phases = tuple(config["checkpoint_phases"])
+        self.pre_write_current_worker_ids = tuple(config["pre_write_current_worker_ids"])
+        self.review_batch_id = str(config["review_batch_id"])
+        self.settled_source_table = config["settled_source_table"]
         if self.stale_worker_id in self.non_blocking_abandoned_worker_ids:
             raise ValueError(
                 "HC09 stale worker cannot also be a non-blocking abandoned worker: "
@@ -550,6 +568,11 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         return f"{self.database}.{self.table}"
 
     @property
+    def qualified_business_tables(self) -> tuple[str, ...]:
+        tables = (self.qualified_table,)
+        return tables if self.settled_source_table is None else tables + (f"{self.database}.{self.settled_source_table}",)
+
+    @property
     def qualified_audit_table(self) -> str:
         return f"{self.database}.{self.audit_table}"
 
@@ -567,14 +590,16 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
 
     @property
     def history_row_count(self) -> int:
-        return len(self.worker_aliases) + 1 + len(
-            self.non_blocking_abandoned_worker_ids
+        return (
+            (len(self.worker_aliases) if 2 in self.history_generations else 0)
+            + 1
+            + len(self.non_blocking_abandoned_worker_ids)
         )
 
     @property
     def checkpoint_row_count(self) -> int:
         return (
-            len(self.worker_aliases) * 3
+            len(self.worker_aliases) * len(self.checkpoint_phases)
             + 1
             + len(self.delayed_checkpoint_worker_ids)
         )
@@ -585,7 +610,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             f"SELECT COUNT(*), SUM(version = {self.updated_version}), "
             "BIT_XOR(CRC32(CONCAT_WS('#', order_id, customer_id, status, amount, "
             "version, updated_at, payload))) "
-            f"FROM {self.qualified_table}"
+            f"FROM ({' UNION ALL '.join(f'SELECT * FROM {table}' for table in self.qualified_business_tables)}) AS source_rows"
         )
 
     def _create_tables(self, env: object) -> None:
@@ -594,7 +619,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             self.qualified_history_table,
             self.qualified_lease_table,
             self.qualified_audit_table,
-            self.qualified_table,
+            *self.qualified_business_tables,
         ):
             require_sql_success(
                 env.execute_sql(f"DROP TABLE IF EXISTS {table}"),
@@ -621,22 +646,29 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
                 "worker_id INT PRIMARY KEY, worker_alias VARCHAR(64) NOT NULL, "
                 "workload_class VARCHAR(32) NOT NULL, run_state VARCHAR(16) NOT NULL, "
                 "lease_state VARCHAR(16) NOT NULL, heartbeat_at DATETIME(6) NOT NULL, "
-                "lease_expires_at DATETIME(6) NOT NULL, session_id BIGINT NOT NULL",
+                "lease_expires_at DATETIME(6) NOT NULL, session_id BIGINT NOT NULL COMMENT 'authoritative current lease owner session', "
+                "checkpoint_stream VARCHAR(64) NOT NULL COMMENT 'logical business stream whose committed source boundary is reviewed', "
+                "review_batch_id VARCHAR(64) NOT NULL COMMENT 'closed batch authorized for this review; other batches in the same stream are outside scope'",
             ),
             (
                 self.qualified_history_table,
                 "event_id BIGINT PRIMARY KEY, worker_id INT NOT NULL, "
                 "worker_alias VARCHAR(64) NOT NULL, lease_generation INT NOT NULL, "
-                "event_state VARCHAR(16) NOT NULL, observed_at DATETIME(6) NOT NULL, "
+                "event_state VARCHAR(16) NOT NULL COMMENT 'observed generation state: CURRENT held lease then, RELEASED relinquished it', "
+                "observed_at DATETIME(6) NOT NULL COMMENT 'observation publication time', "
                 "observed_session_id BIGINT NOT NULL, handoff_reason VARCHAR(64) NOT NULL, "
                 "KEY idx_handoff_worker_time (worker_id, observed_at)",
             ),
             (
                 self.qualified_checkpoint_table,
                 "checkpoint_id BIGINT PRIMARY KEY, worker_id INT NOT NULL, "
-                "checkpoint_at DATETIME(6) NOT NULL, checkpoint_state VARCHAR(16) NOT NULL, "
-                "commit_tso DECIMAL(20,0) NOT NULL, batch_name VARCHAR(64) NOT NULL, "
+                "checkpoint_at DATETIME(6) NOT NULL COMMENT 'checkpoint observation publication time', "
+                "checkpoint_state VARCHAR(16) NOT NULL COMMENT 'source boundary state', "
+                "commit_tso DECIMAL(20,0) NOT NULL COMMENT 'source boundary TSO observed after successful COMMIT', "
+                "batch_name VARCHAR(64) NOT NULL COMMENT 'logical business stream', "
                 "checkpoint_note VARCHAR(96) NOT NULL, "
+                "batch_id VARCHAR(64) NOT NULL COMMENT 'source batch identity within logical stream', "
+                "source_table_id BIGINT NOT NULL COMMENT 'native TiDB physical source table ID', "
                 "KEY idx_checkpoint_worker_time (worker_id, checkpoint_at)",
             ),
         )
@@ -644,6 +676,12 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             require_sql_success(
                 env.execute_sql(f"CREATE TABLE {table} ({columns})"),
                 f"create HC09 table {table}",
+            )
+
+        if self.settled_source_table is not None:
+            require_sql_success(
+                env.execute_sql(f"CREATE TABLE {self.qualified_business_tables[1]} LIKE {self.qualified_table}"),
+                "create HC09 settled business source",
             )
 
     def _business_values(self) -> tuple[list[str], list[str]]:
@@ -686,13 +724,19 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             "load HC09 audit rows",
         )
 
+        if self.settled_source_table is not None:
+            require_sql_success(
+                env.execute_sql(f"INSERT INTO {self.qualified_business_tables[1]} SELECT * FROM {self.qualified_table}"),
+                "load HC09 settled business source",
+            )
+
     def _reset_persisted_state(self, env: object) -> None:
         for table in (
             self.qualified_checkpoint_table,
             self.qualified_history_table,
             self.qualified_lease_table,
             self.qualified_audit_table,
-            self.qualified_table,
+            *self.qualified_business_tables,
         ):
             require_sql_success(
                 env.execute_sql(f"DELETE FROM {table}"),
@@ -758,7 +802,25 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
     def _start_runtime_fault(self, env: object) -> None:
         if self._snapshot_connections or self._historical_connections:
             raise RuntimeError("HC09 runtime connections already exist")
+        catalog = json_object(env.execute_sql(
+            f"SELECT TABLE_NAME, TIDB_TABLE_ID FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = {sql_literal(self.database)}"
+        ), "read HC09 native source table IDs")["result"]
+        native_ids = {str(row[0]): int(row[1]) for row in catalog}
+        self._source_table_ids = {table: native_ids[table.split(".")[1]] for table in self.qualified_business_tables}
+        if self.settled_source_table is not None:
+            self._commit_source_versions(self.qualified_business_tables[1])
+        self._settled_boundary_tso = self._read_current_tso()
         self._pre_write_integrity = self._read_integrity(env)
+        self._historical_boundary_tso = self._read_current_tso()
+        current_by_worker = {}
+        self._valid_session_ids = []
+        for worker_id in self.pre_write_current_worker_ids:
+            snapshot = self._start_current_snapshot(worker_id)
+            current_by_worker[worker_id] = snapshot[1]
+        abandoned_by_worker = {}
+        self._non_blocking_abandoned_session_ids = []
+        if self.settled_source_table is not None:
+            abandoned_by_worker = self._start_released_snapshots(self.qualified_business_tables[1])
         target_alias = self.worker_aliases[self.stale_worker_id - 1]
         target = self._start_snapshot(
             target_alias,
@@ -778,42 +840,19 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
                 f"write_boundary_tso={self._write_boundary_tso}"
             )
 
-        abandoned_by_worker = {}
-        self._non_blocking_abandoned_session_ids = []
-        for worker_id in self.non_blocking_abandoned_worker_ids:
-            alias = self.worker_aliases[worker_id - 1]
-            snapshot = self._start_snapshot(
-                alias,
-                f"SELECT customer_id, COUNT(*), SUM(amount) FROM {self.qualified_table} "
-                f"WHERE customer_id BETWEEN {10 + worker_id} AND {35 + worker_id} "
-                "GROUP BY customer_id",
-            )
-            if snapshot[2] <= self._write_boundary_tso:
-                raise RuntimeError(
-                    "HC09 non-blocking retry snapshot must follow the write boundary: "
-                    f"worker_id={worker_id}, snapshot_tso={snapshot[2]}, "
-                    f"write_boundary_tso={self._write_boundary_tso}"
-                )
-            self._snapshot_connections.append((alias, snapshot[0]))
-            self._non_blocking_abandoned_session_ids.append(snapshot[1])
-            abandoned_by_worker[worker_id] = snapshot[1]
+        if self.settled_source_table is None:
+            abandoned_by_worker = self._start_released_snapshots(self.qualified_table)
 
-        current_by_worker = {}
-        self._valid_session_ids = []
         for worker_id, alias in enumerate(self.worker_aliases, start=1):
-            snapshot = self._start_snapshot(
-                alias,
-                f"SELECT status, COUNT(*), SUM(amount) FROM {self.qualified_table} "
-                f"WHERE order_id BETWEEN {worker_id} AND {worker_id + 60} GROUP BY status",
-            )
+            if worker_id in current_by_worker:
+                continue
+            snapshot = self._start_current_snapshot(worker_id)
             if snapshot[2] <= self._write_boundary_tso:
                 raise RuntimeError(
                     "HC09 current worker snapshot must follow the write boundary: "
                     f"worker_id={worker_id}, snapshot_tso={snapshot[2]}, "
                     f"write_boundary_tso={self._write_boundary_tso}"
                 )
-            self._snapshot_connections.append((alias, snapshot[0]))
-            self._valid_session_ids.append(snapshot[1])
             current_by_worker[worker_id] = snapshot[1]
 
         self._historical_session_ids = []
@@ -831,14 +870,45 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         self._post_write_integrity = self._read_integrity(env)
         self._verify_runtime_state(env)
 
+    def _start_released_snapshots(self, table: str) -> dict[int, int]:
+        sessions = {}
+        for worker_id in self.non_blocking_abandoned_worker_ids:
+            alias = self.worker_aliases[worker_id - 1]
+            snapshot = self._start_snapshot(
+                alias,
+                f"SELECT customer_id, COUNT(*), SUM(amount) FROM {table} "
+                f"WHERE customer_id BETWEEN {10 + worker_id} AND {35 + worker_id} GROUP BY customer_id",
+            )
+            boundary = self._settled_boundary_tso if self.settled_source_table is not None else self._write_boundary_tso
+            if snapshot[2] <= boundary:
+                raise RuntimeError(f"HC09 healthy released source reader must follow its commit: table={table!r}, snapshot_tso={snapshot[2]}, boundary={boundary}")
+            self._snapshot_connections.append((alias, snapshot[0]))
+            self._non_blocking_abandoned_session_ids.append(snapshot[1])
+            sessions[worker_id] = snapshot[1]
+        return sessions
+
+    def _start_current_snapshot(self, worker_id: int) -> tuple[object, int, int]:
+        alias = self.worker_aliases[worker_id - 1]
+        snapshot = self._start_snapshot(
+            alias,
+            f"SELECT status, COUNT(*), SUM(amount) FROM {self.qualified_table} "
+            f"WHERE order_id BETWEEN {worker_id} AND {worker_id + 60} GROUP BY status",
+        )
+        self._snapshot_connections.append((alias, snapshot[0]))
+        self._valid_session_ids.append(snapshot[1])
+        return snapshot
+
     def _commit_new_versions(self) -> None:
+        self._commit_source_versions(self.qualified_table)
+
+    def _commit_source_versions(self, table: str) -> None:
         connection = self._connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute("START TRANSACTION")
                 for order_id in range(1, self.versioned_row_count + 1):
                     cursor.execute(
-                        f"UPDATE {self.qualified_table} "
+                        f"UPDATE {table} "
                         "SET version = version + 1, amount = amount + 1.25, "
                         "updated_at = NOW(6), payload = CONCAT(payload, '-v2') "
                         f"WHERE order_id = {order_id}"
@@ -858,20 +928,24 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         checkpoint_values = []
         checkpoint_id = 1
         event_id = 1
-        historical_tso = self._target_snapshot_tso - 1
+        historical_tso = self._historical_boundary_tso
         for worker_id, alias in enumerate(self.worker_aliases, start=1):
             workload_class = ("orders", "inventory", "finance")[(worker_id - 1) % 3]
             state_values.append(
                 f"({worker_id}, {sql_literal(alias)}, {sql_literal(workload_class)}, "
                 "'RUNNING', 'VALID', '2026-08-07 11:30:00.000000', "
-                f"'2026-08-07 12:00:00.000000', {current_by_worker[worker_id]})"
+                f"'2026-08-07 12:00:00.000000', {current_by_worker[worker_id]}, 'order-version-rollout', {sql_literal(self.review_batch_id)})"
             )
-            history_values.append(
-                f"({event_id}, {worker_id}, {sql_literal(alias)}, 2, 'CURRENT', "
-                f"'2026-08-07 11:30:00.000000', {current_by_worker[worker_id]}, "
-                "'supervisor replacement active')"
-            )
-            event_id += 1
+            if 2 in self.history_generations:
+                history_values.append(
+                    f"({event_id}, {worker_id}, {sql_literal(alias)}, 2, 'CURRENT', "
+                    f"'2026-08-07 11:30:00.000000', {current_by_worker[worker_id]}, "
+                    "'supervisor replacement active')"
+                )
+                event_id += 1
+            source = self.qualified_business_tables[1] if self.settled_source_table is not None and worker_id in self.non_blocking_abandoned_worker_ids else self.qualified_table
+            boundary = self._settled_boundary_tso if source != self.qualified_table else self._write_boundary_tso
+            publisher = 0 if self.settled_source_table is not None else worker_id
             for checkpoint_at, state, tso, batch, note in (
                 (
                     "2026-08-07 09:00:00.000000",
@@ -883,7 +957,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
                 (
                     "2026-08-07 10:00:00.000000",
                     "COMMITTED",
-                    self._write_boundary_tso,
+                    boundary,
                     "order-version-rollout",
                     "committed order version boundary",
                 ),
@@ -895,32 +969,35 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
                     "current generation heartbeat",
                 ),
             ):
+                if batch not in self.checkpoint_phases:
+                    continue
                 checkpoint_values.append(
-                    f"({checkpoint_id}, {worker_id}, {sql_literal(checkpoint_at)}, "
-                    f"{sql_literal(state)}, {tso}, {sql_literal(batch)}, {sql_literal(note)})"
+                    f"({checkpoint_id}, {publisher}, {sql_literal(checkpoint_at)}, "
+                    f"{sql_literal(state)}, {tso}, {sql_literal(batch)}, {sql_literal(note)}, {sql_literal(self.review_batch_id)}, {self._source_table_ids[source]})"
                 )
                 checkpoint_id += 1
 
         history_values.append(
             f"({event_id}, {self.stale_worker_id}, "
             f"{sql_literal(self.worker_aliases[self.stale_worker_id - 1])}, 1, "
-            f"'ABANDONED', '2026-08-07 10:15:00.000000', {self._target_session_id}, "
-            "'handoff acknowledgement missing')"
+            f"'RELEASED', '2026-08-07 10:15:00.000000', {self._target_session_id}, "
+            "'lease generation advanced')"
         )
         event_id += 1
         for worker_id in self.non_blocking_abandoned_worker_ids:
             history_values.append(
                 f"({event_id}, {worker_id}, {sql_literal(self.worker_aliases[worker_id - 1])}, "
-                f"1, 'ABANDONED', '2026-08-07 10:15:00.000000', "
-                f"{abandoned_by_worker[worker_id]}, 'post-commit retry detached')"
+                f"1, 'RELEASED', '2026-08-07 10:15:00.000000', "
+                f"{abandoned_by_worker[worker_id]}, 'lease generation advanced')"
             )
             event_id += 1
 
         for worker_id in (*self.delayed_checkpoint_worker_ids, self.stale_worker_id):
+            publisher = 0 if self.settled_source_table is not None else worker_id
             checkpoint_values.append(
-                f"({checkpoint_id}, {worker_id}, '2026-08-07 10:30:00.000000', "
-                f"'REPLAYED', {historical_tso}, 'delayed-replay', "
-                f"'late visibility for worker-{worker_id:02d}')"
+                f"({checkpoint_id}, {publisher}, '2026-08-07 10:30:00.000000', "
+                f"'COMMITTED', {historical_tso}, 'order-version-rollout', "
+                f"'supervisor checkpoint worker-{worker_id:02d}', {sql_literal(self.review_batch_id)}, {self._source_table_ids[self.qualified_table]})"
             )
             checkpoint_id += 1
 
@@ -928,7 +1005,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             (
                 f"INSERT INTO {self.qualified_lease_table} "
                 "(worker_id, worker_alias, workload_class, run_state, lease_state, "
-                "heartbeat_at, lease_expires_at, session_id) VALUES "
+                "heartbeat_at, lease_expires_at, session_id, checkpoint_stream, review_batch_id) VALUES "
                 + ",".join(state_values),
                 "write HC09 worker state",
             ),
@@ -942,7 +1019,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
             (
                 f"INSERT INTO {self.qualified_checkpoint_table} "
                 "(checkpoint_id, worker_id, checkpoint_at, checkpoint_state, commit_tso, "
-                "batch_name, checkpoint_note) VALUES "
+                "batch_name, checkpoint_note, batch_id, source_table_id) VALUES "
                 + ",".join(checkpoint_values),
                 "write HC09 checkpoint history",
             ),
@@ -990,7 +1067,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         return json_object(
             env.execute_sql(
                 "SELECT worker_id, worker_alias, workload_class, run_state, lease_state, "
-                "heartbeat_at, lease_expires_at, session_id "
+                "heartbeat_at, lease_expires_at, session_id, checkpoint_stream, review_batch_id "
                 f"FROM {self.qualified_lease_table} ORDER BY worker_id"
             ),
             "read HC09 worker state",
@@ -1010,7 +1087,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
         return json_object(
             env.execute_sql(
                 "SELECT checkpoint_id, worker_id, checkpoint_at, checkpoint_state, "
-                "commit_tso, batch_name, checkpoint_note "
+                "commit_tso, batch_name, checkpoint_note, batch_id, source_table_id "
                 f"FROM {self.qualified_checkpoint_table} "
                 "ORDER BY worker_id, checkpoint_at, checkpoint_id"
             ),
@@ -1031,19 +1108,19 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
     def _verify_runtime_state(self, env: object) -> None:
         if self._pre_write_integrity is None or self._post_write_integrity is None:
             raise RuntimeError("HC09 integrity snapshots are incomplete")
-        if self._pre_write_integrity[0] != self.row_count:
+        if self._pre_write_integrity[0] != self.row_count * len(self.qualified_business_tables):
             raise RuntimeError(
                 "HC09 pre-write row count mismatch: "
-                f"expected={self.row_count}, observed={self._pre_write_integrity!r}"
+                f"expected={self.row_count * len(self.qualified_business_tables)}, observed={self._pre_write_integrity!r}"
             )
         if self._post_write_integrity[:2] != (
-            self.row_count,
-            self.versioned_row_count,
+            self.row_count * len(self.qualified_business_tables),
+            self.versioned_row_count * len(self.qualified_business_tables),
         ):
             raise RuntimeError(
                 "HC09 post-write integrity mismatch: "
-                f"expected_rows={self.row_count}, "
-                f"expected_versioned={self.versioned_row_count}, "
+                f"expected_rows={self.row_count * len(self.qualified_business_tables)}, "
+                f"expected_versioned={self.versioned_row_count * len(self.qualified_business_tables)}, "
                 f"observed={self._post_write_integrity!r}"
             )
         transaction_ids = {int(row[0]) for row in self._read_transaction_rows(env)}
@@ -1090,7 +1167,7 @@ class TidbHealthCheckLongTransactionMvccInjector(BaseFaultInjector):
                     self.qualified_history_table,
                     self.qualified_lease_table,
                     self.qualified_audit_table,
-                    self.qualified_table,
+                    *self.qualified_business_tables,
                 ):
                     try:
                         cursor.execute(f"DROP TABLE IF EXISTS {table}")
@@ -1138,6 +1215,11 @@ class TidbHealthCheckLongTransactionMvccScenario(TiDBScenario):
                     "delayed_checkpoint_worker_ids": (
                         case.delayed_checkpoint_worker_ids
                     ),
+                    "history_generations": case.history_generations,
+                    "checkpoint_phases": case.checkpoint_phases,
+                    "pre_write_current_worker_ids": case.pre_write_current_worker_ids,
+                    "review_batch_id": case.review_batch_id,
+                    "settled_source_table": case.settled_source_table,
                 },
             ),
         )

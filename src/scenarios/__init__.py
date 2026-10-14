@@ -1,24 +1,15 @@
 """System-neutral scenario registry."""
 
-from .base import (
-    BackgroundWorkloadSpec,
+from src.scenarios.base import (
     BaseScenario,
     CaseRun,
-    DatabaseSystem,
     FaultPlan,
     InjectionRecord,
-    PostgresCaseRuntime,
-    CaseResourceSpec,
-    PostgresRuntimeSpec,
     PostgresScenario,
     PostgresScenarioCase,
     ScenarioCase,
-    TiDBCaseRuntime,
-    TiDBReleaseSpec,
-    TiDBReplicationRuntime,
     TiDBScenario,
     TiDBScenarioCase,
-    TiDBTopologySpec,
 )
 from .registry import ScenarioCategory, ScenarioRegistration
 
@@ -59,15 +50,10 @@ def __getattr__(name: str):
 
 __all__ = (
     "ALL_SCENARIOS",
-    "BackgroundWorkloadSpec",
     "BaseScenario",
     "CaseRun",
-    "DatabaseSystem",
     "FaultPlan",
     "InjectionRecord",
-    "PostgresCaseRuntime",
-    "CaseResourceSpec",
-    "PostgresRuntimeSpec",
     "PostgresScenario",
     "PostgresScenarioCase",
     "POSTGRES_SCENARIO_REGISTRY",
@@ -76,11 +62,7 @@ __all__ = (
     "ScenarioCase",
     "ScenarioCategory",
     "ScenarioRegistration",
-    "TiDBCaseRuntime",
-    "TiDBReleaseSpec",
-    "TiDBReplicationRuntime",
     "TiDBScenario",
     "TiDBScenarioCase",
-    "TiDBTopologySpec",
     "TIDB_SCENARIO_REGISTRY",
 )

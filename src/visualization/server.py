@@ -62,6 +62,10 @@ class VisualizationHandler(SimpleHTTPRequestHandler):
         """Skip reverse DNS lookup to avoid latency."""
         return self.client_address[0]
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/human/"):

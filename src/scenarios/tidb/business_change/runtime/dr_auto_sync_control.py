@@ -1,6 +1,7 @@
 """Scenario-owned TiDB DR Auto-Sync control for K09."""
 
 from __future__ import annotations
+from src.scenarios.evaluation.tidb.business_change.dr_auto_sync_errors import K09FinalStateUnavailable
 
 import json
 import time
@@ -8,15 +9,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from src.database.sql import parse_json_object, require_success_payload
-
-
-class K09FinalStateUnavailable(RuntimeError):
-    """A trusted K09 endpoint returned a structured final-state read error."""
-
-    def __init__(self, context: str, response: object):
-        self.context = context
-        self.response = response
-        super().__init__(f"{context} final state is unavailable: response={response!r}")
 
 
 class TiDBDrAutoSyncControl:

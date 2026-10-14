@@ -1,4 +1,4 @@
-"""Three-path calibration script for pg_continuous_ops_business_priority_v2.
+"""Three-path calibration script for pg_continuous_ops_business_priority.
 
 Runs the contract section 5 timeline for healthy / reference (scripted
 oracle) / zero-action / wrong-action paths over the oltp_core driver and the
@@ -95,7 +95,7 @@ def _deliverable_deadline(spec, deliverable_id: str) -> float:
         f"No deliverable contract found for the requested deliverable: deliverable_id={deliverable_id!r}"
     )
 
-SPEC_PATH = Path("src/persistent_scenarios/postgres/pg_continuous_ops_business_priority_v2.yaml")
+SPEC_PATH = Path("src/persistent_scenarios/postgres/pg_continuous_ops_business_priority.yaml")
 
 _BASE_EVENTS = (
     ScheduledEvent(480.0, "promo_ramp_up", "promo_tier", {"tier": "promo"}),
@@ -334,7 +334,7 @@ def main() -> int:
             and float(archive_terminal["completed_at"]) <= origin + archive_deadline_seconds
         )
         report = {
-            "scenario_id": "pg_continuous_ops_business_priority_v2",
+            "scenario_id": "pg_continuous_ops_business_priority",
             "path": args.path,
             "run_id": args.run_id,
             "observations": observations,

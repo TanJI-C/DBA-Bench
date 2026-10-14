@@ -137,6 +137,12 @@ for:
 The core layer must not import Scenario evaluators, and must not contain PostgreSQL/TiDB object
 names, SQL text, or fault special cases.
 
+`src/protocols/report.py` defines structured reports shared by both task domains;
+`src/database/system.py` defines database identities; `src/execution/specs.py` defines
+environment resources, topology, and release specifications. Shared infrastructure must not
+import task domains or benchmark. Environment and deployment implementations live under
+`src/execution/environments/` and `src/execution/deployments/`; callers import defining modules directly.
+
 ### 4.2 System-specific provider
 
 The database provider implements the generic contract as real system behavior:

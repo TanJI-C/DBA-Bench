@@ -17,7 +17,7 @@ from src.scenarios.evaluation.safety import (
 )
 from src.scenarios.evaluation.tidb.base import TidbEvaluator
 from src.database.sql import execute_result_rows, parse_json_object
-from src.execution.environment import ReplicationProgressUnavailableError
+from src.execution.environments.tidb import ReplicationProgressUnavailableError
 from src.execution.history.metrics import format_utc_timestamp, parse_utc_timestamp
 
 

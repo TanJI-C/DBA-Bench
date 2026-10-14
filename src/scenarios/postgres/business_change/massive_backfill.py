@@ -11,18 +11,11 @@ from src.scenarios.evaluation.postgres.business_change import (
 )
 
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    PostgresScenario,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
-)
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.workloads.specs import BackgroundWorkloadSpec, EMPTY_BACKGROUND_WORKLOAD
+from src.scenarios.base import DifficultyCalibration, PostgresScenario, FaultPlan, PostgresScenarioCase
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

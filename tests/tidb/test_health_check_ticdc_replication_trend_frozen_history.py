@@ -8,12 +8,12 @@ from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.scenarios import TIDB_SCENARIO_REGISTRY
 from src.scenarios.base import CaseRun
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.tidb.health_check.ticdc_replication_trend_frozen_history import (
     TidbHealthCheckTiCdcReplicationTrendFrozenHistoryInjector,
     TidbHealthCheckTiCdcReplicationTrendFrozenHistoryScenario,
 )
-from src.execution.environment import ReplicationProgressUnavailableError
+from src.execution.environments.tidb import ReplicationProgressUnavailableError
 
 
 SCENARIO_ID = "tidb_health_check_ticdc_replication_trend_frozen_history"

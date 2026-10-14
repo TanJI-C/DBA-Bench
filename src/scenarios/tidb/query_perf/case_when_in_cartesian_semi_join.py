@@ -16,17 +16,11 @@ from src.scenarios.evaluation.tidb.query_perf.case_when_in_cartesian_semi_join i
     TidbQueryPerfCaseWhenInCartesianSemiJoinEvaluatorCase,
     TidbQueryPerfCaseWhenInCartesianSemiJoinSimpleEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -363,8 +357,8 @@ _CASE_REDUCED = replace(
         diagnostic_depth=2,
         environmental_complexity=0.279863,
         reference_run_ids=(
-            "tidb-reference-1__tidb_query_perf_case_when_in_cartesian_semi_join__"
-            "case_when_in_cartesian_semi_join_simple__mock__r001",
+            "tidb-cs-close-a-20260908__tidb_query_perf_case_when_in_cartesian_semi_join__"
+            "case_when_in_cartesian_semi_join_simplified__mock__r001",
         ),
     ),
 )

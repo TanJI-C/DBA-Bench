@@ -10,7 +10,7 @@ from src.execution.history.records import (
     HistoricalRecordSource,
 )
 from src.execution.history.timeline import FrozenHistoryMetricProvider, FrozenHistoricalTimeline
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 BASE_MS = 1_700_000_000_000

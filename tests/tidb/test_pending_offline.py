@@ -8,7 +8,8 @@ from src.scenarios.tidb.system_failure.pending_offline import (
     TidbSystemFailurePendingOfflineInjector,
     TidbSystemFailurePendingOfflineScenario,
 )
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.safety import SafetyContext, TraceEvent
 from src.scenarios.evaluation.tidb.system_failure.pending_offline import (
     AffectedRegionHealthVerifier,
@@ -83,6 +84,7 @@ def _report(*, include_plan=True) -> dict:
 
 class FakeDeployment:
     def __init__(self, recovery_output="Unsafe recovery finished", incomplete_global_scope=False):
+        self.pd_recovery = SimpleNamespace(online_unsafe_recovery=self.online_unsafe_recovery)
         self.recovery_output = recovery_output
         self.online_recovery_calls = []
         global_scope_state = "Offline" if incomplete_global_scope else "Tombstone"
@@ -189,7 +191,9 @@ class CleanupDeployment:
     NODES = {f"tikv/tikv-{index}": f"tikv-{index}" for index in range(7)}
 
     def __init__(self, *, recovery_started, recovery_outputs):
-        self.online_unsafe_recovery_started = recovery_started
+        self.pd_recovery = SimpleNamespace(online_unsafe_recovery=self.online_unsafe_recovery)
+        self.stores = SimpleNamespace(restore_tikv_stores=self.restore_tikv_stores)
+        self.pd_recovery.online_unsafe_recovery_started = recovery_started
         self.recovery_outputs = list(recovery_outputs)
         self.recovery_reads = 0
         self.restore_calls = []

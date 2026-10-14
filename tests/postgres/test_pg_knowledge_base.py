@@ -7,8 +7,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from src.agents.prompt_manager import PromptManager
-from src.execution import environment
-from src.execution.environment import PGEnv
+from src.execution.environments import postgres as environment
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator
 from src.knowledge.pg_knowledge_base import (
     PGKnowledgeBase,

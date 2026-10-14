@@ -95,7 +95,7 @@ def _final_state(context) -> dict[str, object]:
                 "K02 final abandoned capture diagnostics must return a list: "
                 f"capture={case.abandoned_capture!r}, payload={abandoned_payload!r}"
             )
-    lock_state = deployment.mvcc_lock_list(
+    lock_state = deployment.mvcc.mvcc_lock_list(
         int(_evidence(context, "target_region_id")),
         tuple(_evidence(context, "target_store_targets")),
         32,

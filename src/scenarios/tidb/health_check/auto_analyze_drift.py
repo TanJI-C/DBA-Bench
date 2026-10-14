@@ -4,7 +4,12 @@ from collections.abc import Mapping
 
 from src.database.sql import execute_result_rows, require_success_payload
 
-from src.scenarios.tidb.common import BaseFaultInjector, FaultLifecycleContext, require_sql_success, validate_sql_identifier
+from src.scenarios.tidb.common import (
+    BaseFaultInjector,
+    FaultLifecycleContext,
+    require_sql_success,
+    validate_sql_identifier,
+)
 
 from dataclasses import dataclass, replace
 
@@ -12,17 +17,11 @@ from src.scenarios.evaluation.tidb.health_check.auto_analyze_drift import (
     TidbHealthCheckAutoAnalyzeDriftEvaluatorCase,
     TidbHealthCheckAutoAnalyzeTargetScopeEvaluatorCase,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

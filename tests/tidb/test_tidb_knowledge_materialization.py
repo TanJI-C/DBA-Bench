@@ -136,6 +136,9 @@ def test_materialization_writes_markdown_json_mappings_and_jsonl(tmp_path):
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "## Official Source Content" in markdown
     assert "tidb_mem_quota_query" in markdown
+    assert "Processing Model" not in markdown
+    assert "Processing Prompt" not in markdown
+    assert "fixture-model" not in markdown
     assert (output / "ATTRIBUTION.md").is_file()
 
 

@@ -22,14 +22,13 @@ sys.path.insert(0, project_root)
 from src.agents.factory import build_experiment_agent
 from src.agents.agent import MockLLMAgent
 from src.scenarios.evaluation.base import evaluation_passed
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
-from src.execution.environment import PGEnv
+from src.protocols.report import EMPTY_REPORT
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.config import required_run_timeout_seconds
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.postgres.system_failure.checkpoint_archive import (
     ARCHIVE_TARGET_CONTAINER_PATH,
     ARCHIVE_BINDING_STATE_TABLE,
-    ASSIST_PORTS,
     ARCHIVE_GUARD_TABLE,
     ARCHIVE_POLICY_TABLE,
     ARCHIVE_ROUTE_STATE_TABLE,
@@ -403,16 +402,9 @@ def build_env(case: PgSystemFailureCheckpointArchiveCase, port: int, container_n
 
 
 def allocate_ports(primary_port: int) -> tuple[int, int]:
-    if primary_port == 15841:
-        return 15842, 15843
-    if primary_port not in range(15841, 15850):
-        if primary_port >= 65534:
-            raise ValueError(f"primary port leaves no room for archive/restore ports: primary={primary_port}")
-        return primary_port + 1, primary_port + 2
-    available = [port for port in ASSIST_PORTS if port != primary_port]
-    if len(available) < 2:
-        raise ValueError(f"no archive/restore ports remain in the task range for primary={primary_port}")
-    return tuple(available[:2])
+    if primary_port > 65533:
+        raise ValueError(f"primary port leaves no room for archive/restore ports: primary={primary_port}")
+    return primary_port + 1, primary_port + 2
 
 
 def check_startup_resources(port: int, container_name: str) -> None:
@@ -501,7 +493,7 @@ def main() -> None:
     parser.add_argument("--mode", choices=["mock", "zero", "llm"], default="mock")
     parser.add_argument("--port", type=int, default=15841, help="primary PostgreSQL host port; task-external ports derive archive/restore as +1/+2")
     parser.add_argument("--container-name", default="aiopsbench-pg-system-failure-checkpoint-archive")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--reasoning-effort", choices=["low", "medium", "high", "xhigh"], default="xhigh")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)

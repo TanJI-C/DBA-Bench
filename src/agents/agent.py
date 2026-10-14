@@ -33,7 +33,7 @@ from src.agents.loop_guard import (
     round_signature,
 )
 from src.utils import LogManager
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 
 
 FINAL_TURN_SUBMIT_PROMPT = (
@@ -408,27 +408,19 @@ class LLMAgent(BaseAgent):
                  reasoning_effort: Optional[str] = None):
         super().__init__(enable_log, log_dir)
 
+        if model is None:
+            raise ValueError("LLMAgent requires an explicit model")
         loaded_config = None
         if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    loaded_config = json.load(f)
-            except Exception as e:
-                self._log(f"读取LLM配置文件失败: {str(e)}", "warning")
+            with open(config_path, 'r', encoding='utf-8') as f:
+                loaded_config = json.load(f)
 
         # 尝试从配置文件加载 URL 和 API_KEY
         if (not url or not api_key) and loaded_config:
-            if model is None:
-                model = next(iter(loaded_config), None)
             if model in loaded_config:
                 url = url or loaded_config[model].get('url')
                 api_key = api_key or loaded_config[model].get('api_key')
                 provider = provider or loaded_config[model].get('provider')
-        if model is None:
-            raise ValueError(
-                "LLMAgent requires a model: pass model explicitly or configure one in "
-                f"{config_path}"
-            )
         self._cache_breaker = CacheCircuitBreaker(
             CacheBreakerConfig.from_entry((loaded_config or {}).get(model)), model)
             

@@ -6,9 +6,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.tidb import TidbSystemFailureDeadlockScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -187,7 +187,7 @@ def main():
     parser.add_argument("--port", type=int, default=4600)
     parser.add_argument("--container-name", default="tidb-system-failure-sf05")
     parser.add_argument("--mode", choices=("mock", "zero", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--llm-config", "--config-path", dest="config_path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=16)
     args = parser.parse_args()

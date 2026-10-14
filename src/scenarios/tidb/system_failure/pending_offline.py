@@ -6,7 +6,7 @@ import time
 import zlib
 
 from src.database.sql import parse_json_object, require_result_rows
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.system_failure.pending_offline import (
     ONLINE_UNSAFE_DP_FACTORS,
     TidbSystemFailurePendingOfflineEvaluatorCase,
@@ -19,10 +19,11 @@ from src.scenarios.tidb.common import (
     run_cleanup_steps,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import BackgroundWorkloadSpec, DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 SF07_DB = "bench_sf07"
@@ -533,7 +534,7 @@ class TidbSystemFailurePendingOfflineInjector(BaseFaultInjector):
                 ("wait Online Unsafe Recovery terminal", self._wait_for_recovery_terminal),
                 (
                     "restore Case-owned TiKV stores",
-                    lambda: self.env.deployment.restore_tikv_stores(tuple(self.failed_nodes)),
+                    lambda: self.env.deployment.stores.restore_tikv_stores(tuple(self.failed_nodes)),
                 ),
                 ("restore PD scheduling baseline", self._restore_schedule),
                 ("drop SF07 database", self._drop_database),
@@ -542,7 +543,7 @@ class TidbSystemFailurePendingOfflineInjector(BaseFaultInjector):
         )
 
     def _wait_for_recovery_terminal(self) -> None:
-        if not self.env.deployment.online_unsafe_recovery_started:
+        if not self.env.deployment.pd_recovery.online_unsafe_recovery_started:
             return
         if self._recovery_terminal(self._unsafe_recovery_status()):
             return
@@ -1146,7 +1147,7 @@ class TidbSystemFailurePendingOfflineInjector(BaseFaultInjector):
         self.env.deployment.pd_request("POST", "/pd/api/v1/config", {key: value})
 
     def _unsafe_recovery_status(self):
-        output = self.env.deployment.online_unsafe_recovery("get")
+        output = self.env.deployment.pd_recovery.online_unsafe_recovery("get")
         if output in ([], {}, None):
             return None
         return output

@@ -3,7 +3,7 @@ import os
 
 from src.agents.baselines.dbot import DbotAgent
 from src.scenarios.postgres import PgQueryPerfMissingIndexScenario
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator
 from src.workloads.tpcds import TPCDSXWorkload
 

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from .base import BaseScenario, DatabaseSystem
+from src.scenarios.base import BaseScenario
+from src.database.system import DatabaseSystem
 
 
 class ScenarioCategory(str, Enum):
@@ -11,6 +12,8 @@ class ScenarioCategory(str, Enum):
     HEALTH_CHECK = "health_check"
     BUSINESS_CHANGE = "business_change"
     RESOURCE_GOVERNANCE = "resource_governance"
+    COMPOSITE_FAULT = "composite_fault"
+    MISLEADING_ALERT = "misleading_alert"
 
 
 @dataclass(frozen=True, slots=True)

@@ -15,7 +15,7 @@ from src.database.sql import (
     require_success_payload,
 )
 from src.database.tidb import execute_integrity_tuple, table_cache_lease_integrity_sql
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
 
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

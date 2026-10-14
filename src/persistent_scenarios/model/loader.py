@@ -10,7 +10,6 @@ import yaml
 
 from .enums import (
     CalibrationStatus,
-    DatabaseSystem,
     EventTrigger,
     HtapMode,
     LoadClass,
@@ -19,6 +18,7 @@ from .enums import (
     SettingEffect,
     SettingScope,
 )
+from src.database.system import DatabaseSystem
 from .spec import (
     PROTOCOL_VERSION,
     CalibrationSpec,

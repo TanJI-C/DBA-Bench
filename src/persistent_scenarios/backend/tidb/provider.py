@@ -24,8 +24,11 @@ from src.execution.tidb_persistent_deployment import (
     RUN_ID_PREFIX,
     TICDC_IMAGE,
     TiDBPersistentDeployment,
+    PORT_RANGE,
+    port_allocation_count,
 )
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, TiDBReleaseSpec
+from src.execution.specs import HostPortLayout
+from src.execution.tidb_runtime import TIDB_V8_1_0, TiDBReleaseSpec
 
 from .environment import PersistentTiDBEnvironment
 from .topology import expand_topology
@@ -59,6 +62,11 @@ class TiDBEnvironmentProvider:
             "ticdc": TICDC_IMAGE,
             "downstream": MYSQL_IMAGE,
         }
+
+    def host_ports(self, spec) -> HostPortLayout:
+        topology = expand_topology(spec, release_images=self._release_images(), data_dir=str(self.data_root))
+        return HostPortLayout(offsets=tuple(range(port_allocation_count(topology, enable_monitoring=True))),
+                              allowed_range=PORT_RANGE)
 
     def create(self, spec, run_id: str, port: int) -> PersistentTiDBEnvironment:
         if not run_id.startswith(RUN_ID_PREFIX):

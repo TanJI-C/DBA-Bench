@@ -17,7 +17,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.agents.agent import BaseAgent, LLMAgent
-from src.scenarios.evaluation.protocol import structured_submission
+from src.protocols.report import structured_submission
 from src.agents.baselines.andromeda.prompts import (
     NO_ANOMALY_TEXT,
     NO_EVIDENCE_TEXT,

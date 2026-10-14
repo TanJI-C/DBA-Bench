@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 import pymysql
 
 from src.database.sql import execute_result_rows, require_one_result_row
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.tidb.system_failure.table_cache_lease_frozen_history import (
     TidbSystemFailureTableCacheLeaseFrozenHistoryEvaluatorCase,
     TidbSystemFailureTableCacheLeaseNarrowCatalogEvaluatorCase,
@@ -22,10 +22,10 @@ from src.scenarios.frozen_history import (
     FrozenHistorySpec,
 )
 from src.scenarios.tidb.common import join_thread, validate_sql_identifier
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from src.scenarios.tidb_frozen_history_table_cache_helpers import (
     TableCacheLeaseTables,
     business_summary_sql,

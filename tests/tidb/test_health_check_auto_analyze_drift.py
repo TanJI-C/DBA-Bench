@@ -1,7 +1,7 @@
 import json
 from contextlib import nullcontext
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun, FaultLifecycleContext, InjectionRecord
 from src.scenarios.tidb import SCENARIO_REGISTRY
 from src.scenarios.tidb.health_check.auto_analyze_drift import (

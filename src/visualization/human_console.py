@@ -9,7 +9,7 @@ from threading import RLock
 import time
 from uuid import uuid4
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 
 
 class SessionConflict(ValueError):

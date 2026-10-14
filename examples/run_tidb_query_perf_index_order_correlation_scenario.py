@@ -7,9 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.tidb import TidbQueryPerfIndexOrderCorrelationScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -192,7 +192,7 @@ def main() -> None:
         choices=[case.case_id for case in scenario.cases],
     )
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--port", type=int, default=16650)

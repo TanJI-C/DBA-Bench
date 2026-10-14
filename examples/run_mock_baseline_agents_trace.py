@@ -18,13 +18,11 @@ from src.agents.baselines.dbot.agent import MockDbotAgent
 from src.scenarios.evaluation.base import BaseEvaluator
 from src.scenarios.evaluation.common import condition
 from src.scenarios.evaluation.outcome import SqlScalarVerifier
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios import BaseScenario
-from src.scenarios.base import (
-    DatabaseSystem,
-    EMPTY_BACKGROUND_WORKLOAD,
-    PostgresScenarioCase,
-)
+from src.database.system import DatabaseSystem
+from src.workloads.specs import EMPTY_BACKGROUND_WORKLOAD
+from src.scenarios.base import PostgresScenarioCase
 from src.scenarios.runtime.orchestrator import Orchestrator
 from src.visualization.exporter import export_run_trace
 

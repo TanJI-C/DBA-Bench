@@ -214,9 +214,17 @@ def _final_state(row: list[Any], case) -> tuple[bool, dict[str, Any]]:
         and actual["forward_state"] == "normal"
         and int(actual["forward_enabled"]) == 1
         and int(actual["forward_lag"]) == 0
+        and actual["reverse_state"] == "normal"
+        and int(actual["reverse_enabled"]) == 1
+        and int(actual["reverse_lag"]) == 0
         and float(actual["p95_latency_ms"]) <= case.slo_p95_ms
+        and actual["east_count"] == actual["west_count"]
+        and actual["east_sum_id"] == actual["west_sum_id"]
+        and actual["east_sum_amount"] == actual["west_sum_amount"]
+        and actual["east_crc"] == actual["west_crc"]
+        and int(actual["target_lineage_mismatches"]) == 0
         and int(actual["east_only_rows"]) == 0
-        and int(actual["west_only_rows"]) == case.unreplicable_backlog_rows
+        and int(actual["west_only_rows"]) == 0
     )
     return forward_passed or rollback_passed, actual
 
@@ -245,8 +253,8 @@ class _EventuallyMigrationStateVerifier(OutcomeVerifier):
             self.check_id,
             passed,
             "the migration closes either by a verified rollback-ready west cutover with equal "
-            "business truth, or by a guarded rollback to the complete east copy with zero loss "
-            "and the unreplicable residual preserved on west",
+            "business truth, or by a guarded rollback to an equally complete east copy "
+            "with zero loss and healthy live links",
             actual,
             (statement, f"attempts={attempts}"),
         )

@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
-from src.execution import environment
-from src.execution.environment import TiDBEnv
+from src.execution.environments import tidb as environment
+from src.execution.environments.tidb import TiDBEnv
 from src.benchmark.run_table import _trace_metrics
-from src.knowledge.tidb_knowledge_base import default_persist_dir
 
 
 class FakeDeployment:
@@ -96,15 +93,12 @@ def test_search_dispatches_hierarchical_mode_and_stable_arguments(monkeypatch):
     assert [instance.mode for instance in instances] == ["hierarchical"]
 
 
-def test_search_reads_shared_unified_index_and_projects_agent_fields(monkeypatch):
+def test_search_reads_shared_unified_index_and_projects_agent_fields(monkeypatch, tmp_path):
+    from src.knowledge.tidb_knowledge_base import TiDBKnowledgeBase
+
     monkeypatch.setenv("AIOPS_TIDB_KB_BACKEND", "sqlite")
-    persist_dir = default_persist_dir("sqlite", "hierarchical")
-    if not (persist_dir / "manifest.json").is_file():
-        pytest.skip(
-            "shared unified knowledge index is not built; "
-            "run scripts/build_tidb_knowledge_base.py --backend sqlite "
-            "--knowledge-mode hierarchical"
-        )
+    monkeypatch.setenv("AIOPS_TIDB_HIERARCHICAL_KB_SQLITE_DIR", str(tmp_path / "index"))
+    TiDBKnowledgeBase(backend="sqlite").build()
     env = TiDBEnv(deployment=FakeDeployment())
 
     result = json.loads(env.execute_action("search_knowledge", {

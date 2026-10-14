@@ -8,7 +8,7 @@ sys.path.insert(0, project_root)
 
 from src.agents.agent import MockLLMAgent
 from src.scenarios.tidb import TidbDemoScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator
 
 

@@ -8,7 +8,7 @@ from copy import deepcopy
 import json
 import threading
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 
 from src.persistent_scenarios.runtime.lifecycle import ActionClassification, ActionFact
 from src.persistent_scenarios.runtime.mailbox import PersistentScenarioMailbox

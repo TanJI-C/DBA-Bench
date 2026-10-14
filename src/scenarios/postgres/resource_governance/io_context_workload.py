@@ -27,21 +27,14 @@ from src.scenarios.evaluation.postgres.resource_governance.io_context_workload i
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.postgres.common import _json_object, _require_sql_success, _run_cleanup_steps
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.execution.specs import HostPortLayout, CaseResourceSpec, PostgresCaseRuntime, PostgresRuntimeSpec
 from src.workloads.tpcds import get_tpcds_query
 
 
 SCENARIO_ID = "pg_resource_governance_io_context_workload"
-BASE_IMAGE = "aiopsbench-pg-pg-io-context-tpcds:latest"
+BASE_IMAGE = "aiopsbench-pg-io-context-tpcds:latest"
 DEFAULT_POSTGRES_PORT = 15871
 MONITOR_PORT_MIN = 15872
 MONITOR_PORT_MAX = 15879
@@ -107,6 +100,7 @@ IO_CONTEXT_RESOURCES = CaseResourceSpec(
 )
 
 IO_CONTEXT_RUNTIME = PostgresCaseRuntime(
+    host_ports=HostPortLayout(offsets=(0, 1)),
     resources=IO_CONTEXT_RESOURCES,
     parameters=PostgresRuntimeSpec(
         parameters=(

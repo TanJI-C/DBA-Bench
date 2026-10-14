@@ -4,11 +4,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from src.database.sql import sql_literal
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.tidb import TidbResourceGovernanceSqlBindingScenario
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.resource_governance.sql_binding import (
+    TidbResourceGovernanceSqlBindingInjector,
+)
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -17,8 +21,7 @@ CASE = SCENARIO.cases[0]
 
 
 def bound_query(case, index: str) -> str:
-    prefix, remainder = case.business_query.split(" ", 1)
-    return f"{prefix} /*+ USE_INDEX({case.table}, {index}) */ {remainder}"
+    return TidbResourceGovernanceSqlBindingInjector._bound_query(case.business_query, case.table, index)
 
 
 def candidate_probe_sql(case) -> str:
@@ -59,37 +62,50 @@ StructuredReport.from_mapping(PASS_REPORT)
 
 
 def channel_window_mock_responses(case):
-    return [
-        {
-            "thinking": "从 TopSQL、全局 policy、索引目录、结果摘要和当前计划一次性确认 batch-channel 请求与匹配访问路径。",
-            "actions": [
-                {"api": "execute_sql", "args": {"sql_query": "SELECT INSTANCE, DIGEST_TEXT, EXEC_COUNT, AVG_LATENCY, SUM_LATENCY FROM information_schema.cluster_statements_summary ORDER BY SUM_LATENCY DESC LIMIT 40"}},
-                {"api": "execute_sql", "args": {"sql_query": "SHOW GLOBAL BINDINGS"}},
-                {"api": "execute_sql", "args": {"sql_query": f"SHOW INDEX FROM {case.db}.{case.table}"}},
-                {"api": "execute_sql", "args": {"sql_query": case.result_summary_sql}},
-                {"api": "execute_sql", "args": {"sql_query": f"EXPLAIN {case.business_query}"}},
-            ],
-        },
-        {
-            "thinking": "为本 session 创建 channel/time 计划绑定，验证最终计划由 binding 控制且业务真值未变后提交。",
-            "actions": [
-                {
-                    "api": "execute_sql",
-                    "args": {
-                        "sql_query": (
-                            f"CREATE SESSION BINDING FOR {case.business_query} "
-                            f"USING {bound_query(case, case.expected_index)}"
-                        )
-                    },
-                },
-                {"api": "execute_sql", "args": {"sql_query": "SHOW SESSION BINDINGS"}},
-                {"api": "execute_sql", "args": {"sql_query": f"EXPLAIN {case.business_query}"}},
-                {"api": "execute_sql", "args": {"sql_query": case.business_query}},
-                {"api": "execute_sql", "args": {"sql_query": "SELECT @@last_plan_from_binding"}},
-                {"api": "submit", "args": {"report": case.reference_report}},
-            ],
-        },
-    ]
+    def sql(query, target="primary"):
+        return {"api": "execute_sql", "args": {"sql_query": query, "target": target}}
+
+    def observations(target):
+        return [sql(f"EXPLAIN {case.business_query}", target),
+                sql("SELECT @@last_plan_from_binding", target), sql(case.result_summary_sql, target)]
+
+    responses = [{
+        "thinking": "完整公开部署记录区分rollback的实际SQL和所有serving reader；原生connection身份、全局policy和索引目录独立可见。",
+        "actions": [
+            sql("SHOW CREATE TABLE test.export_route_registry"),
+            sql("SELECT endpoint, reader_target, deployment_epoch, config_revision, deploy_state, request_sql FROM test.export_route_registry ORDER BY endpoint, reader_target, deployment_epoch"),
+            sql("SHOW GLOBAL BINDINGS"), sql(f"SHOW INDEX FROM {case.db}.{case.table}"),
+            *[action for target in case.serving_targets
+              for action in [sql("SELECT CONNECTION_ID(), @@hostname, @@port", target),
+                             sql("SHOW SESSION BINDINGS", target), *observations(target)]],
+        ],
+    }, {
+        "thinking": "仅primary的正确SESSION策略不是完整fleet approval；replica原生扫描仍不满足业务目标。",
+        "actions": [sql(f"CREATE SESSION BINDING FOR {case.business_query} USING {bound_query(case, 'idx_tenant_time')}"),
+                    *observations("primary"), *observations("replica")],
+    }]
+    responses.insert(1, {
+        "thinking": "原生GLOBAL发布只更新GLOBAL作用域；rollback serving replica连接的SESSION策略仍优先，真实fleet目标仍未完成。",
+        "actions": [sql(f"CREATE GLOBAL BINDING FOR {case.business_query} USING {bound_query(case, 'idx_tenant_time')}"),
+                    *observations("primary"), *observations("replica"),
+                    sql(f"CREATE GLOBAL BINDING FOR {case.binding_template_query} USING {bound_query(case, 'PRIMARY')}")],
+    })
+    outer_bound = case.business_query.replace(
+        "SELECT exported.event_id", "SELECT /*+ USE_INDEX(exported, idx_tenant_time) */ exported.event_id", 1)
+    responses.append({
+        "thinking": "外层derived alias原生有效的hint仍是合法替代，不按hint拼写评分。",
+        "actions": [sql(f"CREATE SESSION BINDING FOR {case.business_query} USING {outer_bound}"),
+                    sql("SHOW WARNINGS"), *observations("primary")],
+    })
+    for index in ("idx_tenant_time", case.expected_index):
+        responses.append({
+            "thinking": "每个真实serving session均修复；完整观察两种等价既有索引访问路径和260行truth。",
+            "actions": [action for target in case.serving_targets
+                        for action in [sql(f"CREATE SESSION BINDING FOR {case.business_query} USING {bound_query(case, index)}", target),
+                                       sql("SHOW SESSION BINDINGS", target), *observations(target)]],
+        })
+    responses[-1]["actions"].append({"api": "submit", "args": {"report": case.reference_report}})
+    return responses
 
 
 def full_pass_mock_responses(case):
@@ -134,7 +150,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the TiDB RG10 SQL binding scenario.")
     parser.add_argument("--case", required=True, choices=[case.case_id for case in SCENARIO.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--port", type=int, default=4000)

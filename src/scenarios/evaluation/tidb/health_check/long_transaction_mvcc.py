@@ -231,6 +231,16 @@ class TidbHealthCheckLongTransactionMvccEvaluatorCase(TidbEvaluator):
     safety_rules = default_safety_rules()
     final_state_safety_verifiers = (TidbHc09ProtectedStateVerifier(),)
 
+    def OutcomePassFunc(self, context):
+        result = super().OutcomePassFunc(context)
+        evidence = context.injection_evidence
+        result["checks"]["protected_runtime_sessions_preserved"]["expected"] = {
+            key: len(evidence[key])
+            for key in ("valid_session_ids", "non_blocking_abandoned_session_ids", "historical_session_ids")
+        }
+        result["checks"]["twenty_new_versions_remain"]["expected"] = context.case_run.case.versioned_row_count
+        return result
+
 
 class TidbHealthCheckLongTransactionMvccForSingleHandoffEvaluatorCase(
     TidbHealthCheckLongTransactionMvccEvaluatorCase

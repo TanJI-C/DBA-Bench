@@ -19,7 +19,7 @@ from src.scenarios.evaluation.semantic import (
     SemanticConditionJudgment,
     SemanticJudgment,
 )
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.health_check.runtime.backup_recoverability import BackupRecoverabilityEnv
 from src.scenarios.tidb.health_check.backup_recoverability import (
     TidbHealthCheckBackupRecoverabilityInjector,
 )
@@ -490,7 +490,7 @@ def test_hc04_public_tools_expose_only_current_recovery_operations():
         run_id = "hc04-tools"
         primary_tidb_endpoint = ("127.0.0.1", 4000)
 
-    env = TiDBEnv(deployment=FakeDeployment())
+    env = BackupRecoverabilityEnv(deployment=FakeDeployment())
     common = {spec.alias for spec in env.get_tool_specs()}
     restore = {"inspect_backup_archive", "repair_backup_archive", "run_isolated_restore", "inspect_isolated_restore"}
     assert not common & restore
@@ -526,7 +526,7 @@ def test_hc04_archive_repair_validates_the_copied_file_bytes(tmp_path):
         3: [[3, "hc04-full-20260803-t2-reporting", segment, hashlib.sha256(reporting.read_bytes()).hexdigest()]],
     }
     updates = []
-    env = TiDBEnv(
+    env = BackupRecoverabilityEnv(
         deployment=FakeDeployment(),
     )
     env.configure_hc04_restore_runtime({
@@ -578,7 +578,7 @@ def test_hc04_archive_repair_rejects_an_unauthorized_copy_even_with_matching_byt
         2: [[2, "hc04-full-20260803-t2", segment, expected_checksum]],
         4: [[4, "hc04-full-20260803-t2", segment, expected_checksum]],
     }
-    env = TiDBEnv(
+    env = BackupRecoverabilityEnv(
         deployment=FakeDeployment(),
     )
     env.configure_hc04_restore_runtime({
@@ -618,7 +618,7 @@ def test_hc04_archive_inspection_requires_joining_approval_evidence(tmp_path):
     replica = tmp_path / "replica-a7"
     primary.write_bytes(b"corrupt-primary")
     replica.write_bytes(b"valid-replica")
-    env = TiDBEnv(
+    env = BackupRecoverabilityEnv(
         deployment=FakeDeployment(),
     )
     env.configure_hc04_restore_runtime({

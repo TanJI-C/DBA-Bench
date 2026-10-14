@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.tidb import TidbBusinessChangeRollingUpgradeScenario
-from src.execution.deployment import TiDBDockerDeployment
-from src.execution.environment import TiDBEnv
+from src.execution.deployments.tidb import TiDBDockerDeployment
+from src.scenarios.tidb.business_change.runtime.rolling_upgrade import RollingUpgradeEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -157,7 +157,7 @@ def main() -> None:
     )
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=["mock", "llm"], default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=40)
     parser.add_argument("--port", type=int, default=4780)
@@ -174,7 +174,7 @@ def main() -> None:
         storage_key=args.storage_key,
         storage_root=args.storage_root,
     )
-    env = TiDBEnv(deployment=deployment)
+    env = RollingUpgradeEnv(deployment=deployment)
     if args.mode == "mock":
         agent = MockLLMAgent(
             url="mock",

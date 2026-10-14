@@ -18,18 +18,11 @@ from src.scenarios.postgres.common import (
     _run_cleanup_steps,
     _validate_sql_identifier,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import PostgresCaseRuntime, PostgresRuntimeSpec, CaseResourceSpec
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

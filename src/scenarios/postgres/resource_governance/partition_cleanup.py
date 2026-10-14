@@ -36,17 +36,11 @@ from src.scenarios.postgres.common import (
     _run_cleanup_steps,
     _validate_sql_identifier,
 )
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 from src.workloads.tpcds import get_tpcds_query
 
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import CaseResourceSpec, HostPortLayout, PostgresCaseRuntime
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 
 
 PARTITION_CLEANUP_RESOURCES = CaseResourceSpec(
@@ -240,7 +234,7 @@ HARD_CASE = PgResourceGovernancePartitionCleanupForFilesystemCleanupPressureScen
         start_phase=BackgroundWorkloadStartPhase.BEFORE_FAULTS,
         warmup_seconds=2,
     ),
-    runtime=PostgresCaseRuntime(resources=PARTITION_CLEANUP_RESOURCES),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1, 2)), resources=PARTITION_CLEANUP_RESOURCES),
     parent_table="pc_hard_events",
     metadata_table="pc_hard_partition_catalog",
     lifecycle_table="pc_hard_partition_lifecycle",
@@ -327,7 +321,7 @@ SIMPLE_CASE = PgResourceGovernancePartitionCleanupForFilesystemCleanupPressureSi
         start_phase=BackgroundWorkloadStartPhase.BEFORE_FAULTS,
         warmup_seconds=1,
     ),
-    runtime=PostgresCaseRuntime(resources=PARTITION_CLEANUP_SIMPLE_RESOURCES),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1, 2)), resources=PARTITION_CLEANUP_SIMPLE_RESOURCES),
     parent_table="pc_easy_events",
     metadata_table="pc_easy_partition_catalog",
     lifecycle_table="pc_easy_partition_lifecycle",
@@ -1367,10 +1361,10 @@ class PgResourceGovernancePartitionCleanupScenario(PostgresScenario):
         if (
             len(auxiliary_ports) != case.aux_port_count
             or len(set(auxiliary_ports)) != len(auxiliary_ports)
-            or any(port < 15862 or port > 15869 for port in auxiliary_ports)
+            or any(port < 1024 or port > 65535 for port in auxiliary_ports)
         ):
             raise ValueError(
-                "PG-RG-PC01 requires unique auxiliary ports in 15862-15869: "
+                "PG-RG-PC01 requires unique auxiliary ports in 1024-65535: "
                 f"expected_count={case.aux_port_count}, got={auxiliary_ports!r}"
             )
         return (

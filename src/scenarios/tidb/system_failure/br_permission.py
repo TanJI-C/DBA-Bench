@@ -24,17 +24,11 @@ from src.scenarios.evaluation.tidb.system_failure.br_permission import (
     TidbSystemFailureBrPermissionEvaluatorCase,
     TidbSystemFailureBrPermissionFocusedEvaluatorCase,
 )
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.workloads.specs import WorkloadProfile
 
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _DATABASE = "benchops"

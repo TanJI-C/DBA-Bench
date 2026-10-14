@@ -708,7 +708,7 @@ def test_formal_entry_exposes_required_case_and_mode_aware_mock_path():
 
 def test_reduced_decoy_case_merges_suffix_and_range_states_keeps_literal_vs_wildcard():
     from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     original, reduced = SCENARIO.cases
     assert (original.case_no, reduced.case_no) == (0, 1)

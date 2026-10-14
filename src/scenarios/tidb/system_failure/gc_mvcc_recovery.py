@@ -6,6 +6,8 @@ import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
+from pymysql import err as pymysql_err
+
 from src.database.sql import sql_literal
 from src.scenarios.evaluation.tidb.system_failure.gc_mvcc_recovery import (
     TidbSystemFailureGcMvccRecoveryEvaluatorCase,
@@ -21,17 +23,11 @@ from src.scenarios.tidb.common import (
     json_object,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 K01_DB = "bench_k01"
@@ -735,7 +731,7 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
         target_value_hex, timestamp_facts = _encode_abnormal_async_commit_lock(target_key)
         self._target_key_hex = target_key.hex().upper()
         self._target_value_hex = target_value_hex
-        result = env.deployment.rewrite_mvcc_lock(
+        result = env.deployment.mvcc.rewrite_mvcc_lock(
             self.region_id,
             self.store_targets,
             self.target_key_hex,
@@ -761,7 +757,7 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
             case.target_row_id,
         )
         target_key_hex = target_key.hex().upper()
-        scan = context.env.deployment.mvcc_lock_list(self.region_id, self.store_targets, 32)
+        scan = context.env.deployment.mvcc.mvcc_lock_list(self.region_id, self.store_targets, 32)
         target_records = {
             peer["target"]: [record for record in peer["records"] if record["key_hex"] == target_key_hex]
             for peer in scan["peers"]
@@ -785,7 +781,7 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
         self._timestamp_facts = _decode_abnormal_async_commit_lock(value_hex, target_key)
 
     def _assert_fault(self, context: FaultLifecycleContext) -> dict[str, object]:
-        scan = context.env.deployment.mvcc_lock_list(self.region_id, self.store_targets, 32)
+        scan = context.env.deployment.mvcc.mvcc_lock_list(self.region_id, self.store_targets, 32)
         peers = scan["peers"]
         observed = {
             peer["target"]: [record for record in peer["records"] if record["key_hex"] == self.target_key_hex]
@@ -878,22 +874,21 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
         }
 
     def _close_neighbors(self) -> None:
-        for connection_name in ("_normal_lock_connection", "_long_tx_connection", "_stuck_holder_connection"):
+        for connection_name in (
+            "_normal_lock_connection", "_long_tx_connection",
+            "_target_lock_connection", "_stuck_holder_connection",
+        ):
             connection = getattr(self, connection_name)
             if connection is not None:
-                connection.rollback()
-                connection.close()
+                try:
+                    connection.rollback()
+                except pymysql_err.Error as exc:
+                    self._backfill_commit_error = self._backfill_commit_error or (
+                        f"{connection_name} rollback during cleanup: {type(exc).__name__}: {exc}"
+                    )
+                finally:
+                    connection.close()
                 setattr(self, connection_name, None)
-        operator_connection = self._target_lock_connection
-        if operator_connection is not None:
-            # After a broken in-flight backfill commit the operator session may already be
-            # aborted server-side; that incident state is recorded, closing it is cleanup.
-            try:
-                operator_connection.rollback()
-                operator_connection.close()
-            except Exception as exc:
-                self._backfill_commit_error = self._backfill_commit_error or f"close after incident: {exc}"
-            self._target_lock_connection = None
 
     def legal_neighbors_alive(self) -> bool:
         connections = (
@@ -905,7 +900,10 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
         if any(connection is None or not connection.open for connection in connections):
             return False
         for connection in connections:
-            connection.ping(reconnect=False)
+            try:
+                connection.ping(reconnect=False)
+            except pymysql_err.Error:
+                return False
         return True
 
     def quiesce(self, context: FaultLifecycleContext) -> None:
@@ -920,18 +918,18 @@ class TidbSystemFailureGcMvccRecoveryInjector(BaseFaultInjector):
         self._stop_backfill_watchdog()
         self._close_neighbors()
         if self._region_id is not None and self._store_targets and self._target_key_hex is not None:
-            scan = context.env.deployment.mvcc_lock_list(self.region_id, self.store_targets, 32)
+            scan = context.env.deployment.mvcc.mvcc_lock_list(self.region_id, self.store_targets, 32)
             target_present = any(
                 record["key_hex"] == self.target_key_hex
                 for peer in scan["peers"]
                 for record in peer["records"]
             )
             if target_present:
-                inspection = context.env.deployment.mvcc_recovery_inspect(
+                inspection = context.env.deployment.mvcc.mvcc_recovery_inspect(
                     self.region_id,
                     self.store_targets,
                 )
-                context.env.deployment.mvcc_recovery_execute(
+                context.env.deployment.mvcc.mvcc_recovery_execute(
                     self.region_id,
                     inspection["inspection_id"],
                 )
@@ -1120,8 +1118,9 @@ _CASE = TidbSystemFailureGcMvccRecoveryForRecoverMvccAfterAsyncCommitLockScenari
         tikv_count=3,
         tidb_count=2,
         image_group_key=None,
-        tikv_memory_mb=2048,
-        tidb_memory_mb=1024,
+        # Budget each TiKV for cold bootstrap and offline lock-CF maintenance.
+        tikv_memory_mb=4096,
+        tidb_memory_mb=2048,
         bootstrap_cache_enabled=False,
         readiness_timeout_seconds=1800,
         # Route pessimistic locks to the lock CF so the in-flight operator lock is a real,

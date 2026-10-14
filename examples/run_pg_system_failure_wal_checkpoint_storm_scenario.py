@@ -11,7 +11,7 @@ from src.scenarios.runtime.config import required_run_timeout_seconds
 from src.agents.agent import LLMAgent, MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.postgres import PgSystemFailureWalCheckpointStormScenario
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.workloads.tpcds import TPCDSWorkload
 
@@ -428,7 +428,7 @@ def main():
     parser.add_argument("--mode", choices=["mock", "zero", "llm", "all"], default="mock")
     parser.add_argument("--port", type=int, default=15432)
     parser.add_argument("--container-name", default="aiopsbench-run-pg-system-failure-wal-checkpoint-storm")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")

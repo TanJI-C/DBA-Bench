@@ -37,7 +37,7 @@ from src.persistent_scenarios.backend.postgres.registry import PostgresEventCapa
 from src.persistent_scenarios.backend.postgres.safety import PostgresSafetyProvider
 from src.persistent_scenarios.backend.postgres.state_facts import PostgresStateFactProvider
 from src.persistent_scenarios.backend.postgres.telemetry import PostgresTelemetryProvider
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.runtime.ledger import TrustedLedger
 from src.persistent_scenarios.model.spec import PersistentScenarioSpec
 

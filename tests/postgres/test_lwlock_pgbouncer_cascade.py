@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.execution.history.metrics import MetricFrame
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.execution.postgres_replica_fleet import (
     PgReplicaFleetDeployment,
     PgReplicaFleetEnv,

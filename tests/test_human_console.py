@@ -169,16 +169,19 @@ def test_tidb_launcher_needs_no_pg_cpu_setting(tmp_path, monkeypatch):
 
 def test_human_sessions_enforce_tidb_runtime_tool_scope(tmp_path):
     from types import SimpleNamespace
-    from src.execution.environment import TiDBEnv
+    from src.execution.environments.tidb import TiDBEnv
+    from src.scenarios.tidb.health_check.runtime.backup_recoverability import BackupRecoverabilityEnv
 
-    env = TiDBEnv(deployment=SimpleNamespace(run_id='scope-test', primary_tidb_endpoint=('127.0.0.1', 4000)))
+    deployment = SimpleNamespace(run_id='scope-test', primary_tidb_endpoint=('127.0.0.1', 4000))
+    env = TiDBEnv(deployment=deployment)
     console = HumanConsole(tmp_path)
     common = console.register({'tools': env.get_tool_schemas(), 'participant': 'p1',
                                'run_id': 'common', 'scenario_id': 'sql-binding', 'case_id': 'approval'})
-    for name in env.HC04_RESTORE_TOOLS:
+    for name in BackupRecoverabilityEnv.HC04_RESTORE_TOOLS:
         with pytest.raises(ValueError, match='会话未提供工具'):
             console.enqueue(common['id'], {'api': name, 'args': {}, 'thinking': ''})
     assert common['actions'] == []
+    env = BackupRecoverabilityEnv(deployment=deployment)
     env.configure_hc04_restore_runtime({})
     restore = console.register({'tools': env.get_tool_schemas(), 'participant': 'p1',
                                 'run_id': 'restore', 'scenario_id': 'hc04', 'case_id': 'repair'})

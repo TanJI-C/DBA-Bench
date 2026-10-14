@@ -152,8 +152,8 @@ Injector 拥有夹具、动态映射、Region 放置、调度基线、失败 TiK
 ## 11. 代码、测试与相关标准
 
 - 运行时知识归属：`src/knowledge/tidb_knowledge_base.py`、`src/knowledge/markdown_knowledge_base.py`、`src/knowledge/embedding_model_runtime.py`。
-- Agent 投影：`src/execution/environment.py`；工具 schema：`src/execution/tidb_tool_definitions.py`。
-- 部署与恢复生命周期：`src/execution/deployment.py`、`src/scenarios/tidb/system_failure/pending_offline.py`、`src/scenarios/runtime/orchestrator.py` 与 `src/visualization/exporter.py`。
+- Agent 投影：`src/execution/environments/tidb.py`；工具 schema：`src/execution/tidb_tool_definitions.py`。
+- 部署与恢复生命周期：`src/execution/deployments/tidb.py`、`src/scenarios/tidb/system_failure/pending_offline.py`、`src/scenarios/runtime/orchestrator.py` 与 `src/visualization/exporter.py`。
 - 统一构建：`scripts/merge_tidb_curated_knowledge.py` 与 `scripts/build_tidb_knowledge_base.py`。
 - 聚焦 Case 测试：`tests/tidb/test_pending_offline.py`、`tests/tidb/test_tidb_environment.py` 与 `tests/tidb/test_tidb_deployment.py`。
 - 统一知识库来源清单：`knowledge/tidb/curated/manifests/tidb_system_failure_pending_offline.yaml`。

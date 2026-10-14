@@ -23,23 +23,16 @@ from src.scenarios.evaluation.postgres.system_failure.checkpoint_archive import 
     PgSystemFailureCheckpointArchiveForDualFaultEvaluatorCase,
     PgSystemFailureCheckpointArchiveForDualFaultSimpleEvaluatorCase,
 )
-from src.execution.deployment import PGDockerDeployment
+from src.execution.deployments.postgres import PGDockerDeployment
 from src.execution.history.records import HistoricalRecordSource
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.postgres.common import _json_object, _require_sql_success, _validate_sql_identifier
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 from src.scenarios.frozen_history import DecoyDirection, DecoyKind, HistoryDecoySpec, FrozenHistorySpec
 from src.workloads.tpcds import get_tpcds_query
 
-from ...base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.execution.specs import HostPortLayout, CaseResourceSpec, PostgresCaseRuntime, PostgresRuntimeSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
 from .checkpoint_archive_history import OLTP_PROFILE_NAME, CheckpointArchiveHistoryAdapter
 
 
@@ -49,7 +42,6 @@ FAULT_IMAGE_PREFIX = "aiopsbench-pg-fault-pg-system-failure-checkpoint-archive"
 PRIMARY_PORT = 15841
 ARCHIVE_PORT = 15842
 RESTORE_CANARY_PORT = 15843
-ASSIST_PORTS = tuple(range(15844, 15850))
 ARCHIVE_TARGET_CONTAINER_PATH = "/var/lib/postgresql/archive_target"
 BACKFILL_CONFIG_TABLE = "warehouse_refresh_controls"
 ARCHIVE_POLICY_TABLE = "archive_transfer_policy"
@@ -836,6 +828,7 @@ _HARD_CASE = PgSystemFailureCheckpointArchiveForCheckpointArchiveDualFaultScenar
         warmup_seconds=2,
     ),
     runtime=PostgresCaseRuntime(
+        host_ports=HostPortLayout(offsets=(0, 1, 2)),
         resources=CaseResourceSpec(worker_physical_cores=2, worker_memory_mb=2048, container_cpu_limit=2.0, container_memory_mb=2048),
         parameters=PostgresRuntimeSpec(parameters=(
             ("archive_mode", "on"),
@@ -945,6 +938,7 @@ _SIMPLE_CASE = PgSystemFailureCheckpointArchiveForCheckpointArchiveDualFaultSimp
     frozen_history=_simple_metric_history_spec(),
     frozen_history_adapter=CheckpointArchiveHistoryAdapter(),
     runtime=PostgresCaseRuntime(
+        host_ports=HostPortLayout(offsets=(0, 1, 2)),
         resources=CaseResourceSpec(worker_physical_cores=1, worker_memory_mb=1024, container_cpu_limit=0.75, container_memory_mb=768),
         parameters=PostgresRuntimeSpec(parameters=(
             ("archive_mode", "on"),
@@ -2917,7 +2911,6 @@ class PgSystemFailureCheckpointArchiveScenario(PostgresScenario):
 
 __all__ = (
     "ARCHIVE_PORT",
-    "ASSIST_PORTS",
     "BASE_IMAGE_NAME",
     "FAULT_IMAGE_PREFIX",
     "PgSystemFailureCheckpointArchiveCase",

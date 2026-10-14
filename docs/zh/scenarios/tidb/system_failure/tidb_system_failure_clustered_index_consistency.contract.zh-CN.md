@@ -154,7 +154,7 @@ Hard 难度立足跨层因果关联、竞争性证据与修复族
 - 评测器：`src/scenarios/evaluation/tidb/system_failure/clustered_index_consistency.py`
 - 统一运行时：`src/project_paths.py`、`src/knowledge/embedding_model_runtime.py`、
   `src/knowledge/markdown_knowledge_base.py`、`src/knowledge/tidb_knowledge_base.py`，以及
-  `src/execution/environment.py` 中既有的投影
+  `src/execution/environments/tidb.py` 中既有的投影
 - 构建/查询/冒烟：`scripts/merge_tidb_curated_knowledge.py`、
   `scripts/build_tidb_knowledge_base.py`、`scripts/query_tidb_unified_knowledge.py`、
   `scripts/smoke_tidb_unified_knowledge.py`、`scripts/start_embedding_model.py`

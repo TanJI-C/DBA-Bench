@@ -390,7 +390,7 @@ def main() -> None:
     )
     parser.add_argument("--port", type=int, default=15851)
     parser.add_argument("--container-name", default="aiopsbench-pg-business-change-lwlock-pgbouncer-cascade")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--seed", type=int, default=None, help="Deterministic frozen history seed.")

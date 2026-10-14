@@ -3,9 +3,9 @@ import time
 
 import pytest
 
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.tidb_connection_router import TiDBConnectionRouter
-from src.scenarios.workloads import SessionSetupBehavior, WorkloadProfile
+from src.workloads.specs import SessionSetupBehavior, WorkloadProfile
 from src.scenarios.runtime.workload_runner import WorkloadRunner
 
 

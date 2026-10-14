@@ -73,6 +73,7 @@ def export_persistent_scenario_trace(persistent_scenario_run, output_dir: str | 
         "metadata": {
             "scenario_kind": "persistent",
             "scenario_id": persistent_scenario_run.spec.scenario_id,
+            "citation_tag": persistent_scenario_run.spec.citation_tag,
             "family_id": persistent_scenario_run.spec.family_id,
             "system": persistent_scenario_run.spec.system.value,
             "run_id": persistent_scenario_run.run_id,

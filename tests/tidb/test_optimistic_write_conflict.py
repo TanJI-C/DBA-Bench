@@ -531,7 +531,7 @@ def test_formal_entry_has_required_case_structured_mock_and_knowledge_path():
 
 def test_reduced_case_merges_four_diagnosis_states_into_two_without_losing_aliases():
     from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-    from src.scenarios.evaluation.protocol import StructuredReport
+    from src.protocols.report import StructuredReport
 
     original, reduced = SCENARIO.cases
     assert (original.case_no, reduced.case_no) == (0, 1)

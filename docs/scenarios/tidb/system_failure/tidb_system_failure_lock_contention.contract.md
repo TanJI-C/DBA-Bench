@@ -44,8 +44,8 @@ The following fields are the public state boundary exposed by the current Case c
 - Initial-state fields: `lock`, `status`
 - Expected-target fields: `amount`, `lock`, `status`
 - Background profiles: sf04_checkout_event_detail, sf04_checkout_account_total, sf04_checkout_status_summary, sf04_checkout_event_account_join, sf04_checkout_pending_scan, sf04_checkout_recent_events, sf04_account_profile, sf04_account_balance_dashboard, sf04_account_tier_mix, sf04_account_top_balances, sf04_audit_reconciliation, sf04_audit_recent
-- Difficulty: hard; per-case calibration values are maintained in the code registry and the scenario catalogs; see the [difficulty standard](../../../standards/scenario/difficulty.standard.md).
-- Evaluator: `src.scenarios.evaluation.tidb.system_failure.lock_contention.TidbSystemFailureLockContentionForDeadlockTestRowLockEvaluatorCase`
+- Evaluator: `src.scenarios.evaluation.tidb.system_failure.lock_contention.TidbSystemFailureLockContentionForAdmissionEventsRowLockDeadlockEvaluatorCase`
+- Difficulty: hard; D=3, C=0.842857, reference=tidb_system_failure_lock_contention__admission_events_row_lock_deadlock__mock__r001
 - Calibration evidence (tool m/n): execute_sql.DEADLOCKS=4/0; execute_sql.DATA_LOCK_WAITS=2/22; execute_sql.business_candidate_rows=1/5; execute_sql.CLUSTER_TIDB_TRX=1/5; execute_sql.CLUSTER_PROCESSLIST=2/27; execute_sql.final_business_state=1/0
 
 ### `checkout_row_lock_simple`

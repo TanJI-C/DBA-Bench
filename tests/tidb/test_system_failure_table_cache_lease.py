@@ -13,8 +13,8 @@ from src.scenarios.evaluation.semantic import SemanticConditionJudgment, Semanti
 from src.database.query_results import capture_query_result_truth
 from src.scenarios.base import CaseRun, FaultLifecycleContext
 from src.scenarios.tidb import TidbSystemFailureTableCacheLeaseScenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
-from src.execution.environment import TiDBEnv
+from src.execution.tidb_runtime import TIDB_V8_1_0
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.tidb.system_failure.table_cache_lease import (
     TidbSystemFailureTableCacheLeaseInjector,
 )

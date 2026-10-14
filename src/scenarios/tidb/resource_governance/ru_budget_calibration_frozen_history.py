@@ -23,10 +23,10 @@ from src.scenarios.tidb.resource_governance.ru_budget_calibration import (
     TidbResourceGovernanceRuBudgetCalibrationInjector,
     _build_rg01_workload,
 )
-from src.scenarios.workloads import BackgroundWorkloadStartPhase
+from src.workloads.specs import BackgroundWorkloadStartPhase
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 MF_RG01_RESOURCE_GROUPS = (
@@ -378,7 +378,7 @@ _MF_RG01_CASE = TidbResourceGovernanceRuBudgetCalibrationFrozenHistoryForHistory
         diagnostic_depth=6,
         environmental_complexity=0.762289,
         reference_run_ids=(
-            "reference-172__tidb_resource_governance_ru_budget_calibration_frozen_history__"
+            "tidb_frozen_history_rg01_mock_reference_r9_20260816__tidb_resource_governance_ru_budget_calibration_frozen_history__"
             "ru_budget_history_calibration__reference_mock__r001",
         ),
     ),

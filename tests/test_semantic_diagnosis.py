@@ -16,7 +16,7 @@ from src.scenarios.evaluation.semantic import (
     SemanticJudgment,
     _parse_judgments,
 )
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.semantic import (

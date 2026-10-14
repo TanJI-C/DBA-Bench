@@ -7,9 +7,26 @@ import pytest
 from src.agents.agent import LLMAgent
 from src.benchmark.token_accounting import (
     ReconstructedCall,
+    _reconstructed_calls,
     account_tokens,
     load_token_config,
 )
+
+
+def test_anthropic_reconstruction_uses_protocol_instead_of_model_identity():
+    trace = {
+        "metadata": {"agent_type": "LLMAgent"},
+        "conversation_history": [
+            {"role": "system", "content": "Diagnose the database."},
+            {"role": "user", "content": "Inspect the failure."},
+            {"role": "assistant", "content": "Checking evidence."},
+        ],
+    }
+    anthropic = _reconstructed_calls(trace, "anthropic", [], [])[0]
+    openai = _reconstructed_calls(trace, "openai", [], [])[0]
+    assert anthropic.input_payload["system"] == "Diagnose the database."
+    assert all(message["role"] != "system" for message in anthropic.input_payload["messages"])
+    assert openai.input_payload["messages"][0]["role"] == "system"
 
 
 class UnusedTokenizers:

@@ -14,11 +14,7 @@ from src.scenarios.frozen_history import (
 )
 from src.scenarios.tidb.common import validate_sql_identifier
 from src.scenarios.faults import FaultLifecycleContext
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
 from ...base import (
     DifficultyCalibration,
@@ -26,7 +22,7 @@ from ...base import (
     TiDBScenario,
     TiDBScenarioCase,
 )
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from .statistics_drift import TidbQueryPerfStatisticsDriftInjector
 
 
@@ -329,7 +325,7 @@ _FROZEN_HISTORY_HISTORY = FrozenHistorySpec(
             target="tikv/tikv-0",
             direction=DecoyDirection.SPIKE,
             count=2,
-            duration_seconds=120,
+            duration_seconds=60,
             minimum_deviation_mad=2.0,
         ),
         HistoryDecoySpec(
@@ -428,7 +424,7 @@ _CASE = TidbQueryPerfStatisticsDriftFrozenHistoryForHistoryInvestigationScenario
         diagnostic_depth=7,
         environmental_complexity=0.741419,
         reference_run_ids=(
-            "reference-216__"
+            "tidb_query_perf_statistics_drift_frozen_history_smoke_r10_20260817__"
             "tidb_query_perf_statistics_drift_frozen_history__statistics_drift_history_investigation__mock__r001",
         ),
     ),

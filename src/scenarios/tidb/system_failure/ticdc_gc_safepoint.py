@@ -21,10 +21,11 @@ from src.scenarios.tidb.common import (
     run_sql_batches,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ...base import DifficultyCalibration, FaultPlan, TiDBReplicationRuntime, TiDBScenario, TiDBScenarioCase
-from ..runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.specs import TiDBReplicationRuntime
+from src.execution.tidb_runtime import MYSQL_8_4, TICDC_V8_1_0, TIDB_V8_1_0, tidb_runtime
 
 
 SCENARIO_ID = "tidb_system_failure_ticdc_gc_safepoint"
@@ -378,7 +379,7 @@ class TidbSystemFailureTiCdcGcSafepointInjector(BaseFaultInjector):
         self._configure(context.config)
         self._verify_fault_state(context.env)
         deployment = context.env.get_deployment()
-        lock_observation = deployment.mvcc_lock_list(
+        lock_observation = deployment.mvcc.mvcc_lock_list(
             int(self._evidence["target_region_id"]),
             tuple(self._evidence["target_store_targets"]),
             32,
@@ -785,7 +786,7 @@ class TidbSystemFailureTiCdcGcSafepointInjector(BaseFaultInjector):
         stale_value, timestamp_facts = _encode_stale_lock(target_key)
         self._lock_connection.close()
         self._lock_connection = None
-        rewritten = env.get_deployment().rewrite_mvcc_lock(
+        rewritten = env.get_deployment().mvcc.rewrite_mvcc_lock(
             int(self._evidence["target_region_id"]),
             tuple(self._evidence["target_store_targets"]),
             target_key.hex().upper(),

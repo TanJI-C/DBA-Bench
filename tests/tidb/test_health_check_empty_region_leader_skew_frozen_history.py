@@ -11,7 +11,7 @@ from examples.run_tidb_health_check_empty_region_leader_skew_frozen_history_scen
 )
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher, verify_historical_investigation
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.metrics import MetricFrame, MetricQuery, format_utc_timestamp
 from src.execution.history.records import (
     CapturedRecords,

@@ -15,11 +15,11 @@ from src.scenarios.tidb.common import (
     run_sql_batches,
     validate_sql_identifier,
 )
-from src.execution.deployment import canonical_pd_config
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.execution.deployments.tidb_support import canonical_pd_config
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from src.scenarios.evaluation.tidb.system_failure.pd_total_metadata_loss_recovery import (
     TidbSystemFailurePdMetadataRecoveryEvaluatorCase,
     TidbSystemFailurePdTotalMetadataLossRecoveryEvaluatorCase,
@@ -323,13 +323,13 @@ class TidbSystemFailurePdTotalMetadataLossRecoveryInjector(BaseFaultInjector):
         self._configure(context.config, context.env)
         self._create_business_state()
         deployment = self.env.deployment
-        recovery_artifact = deployment.capture_pd_recovery_artifact()
+        recovery_artifact = deployment.pd_recovery.capture_pd_recovery_artifact()
         self._capture_original_state(recovery_artifact)
         for target in (*self._database_targets("tidb"), *self._database_targets("tikv")):
             deployment.stop_component(target)
         for target in self._database_targets("pd"):
             deployment.stop_component(target)
-        deployment.wipe_pd_metadata()
+        deployment.pd_recovery.wipe_pd_metadata()
         for target in self._database_targets("pd"):
             deployment.start_component(target)
         deployment._wait(
@@ -349,8 +349,8 @@ class TidbSystemFailurePdTotalMetadataLossRecoveryInjector(BaseFaultInjector):
     def prepare_observability(self, context: FaultLifecycleContext) -> Mapping[str, object]:
         self._verify_fault_state()
         deployment = self.env.deployment
-        current_identity = deployment.pd_identity_observation()
-        inspection = deployment.pd_recovery_inspection()
+        current_identity = deployment.pd_recovery.pd_identity_observation()
+        inspection = deployment.pd_recovery.pd_recovery_inspection()
         clock = deployment.clock_status_observation()
         mismatch_targets = tuple(
             target
@@ -373,7 +373,7 @@ class TidbSystemFailurePdTotalMetadataLossRecoveryInjector(BaseFaultInjector):
             "original_pd_config": self.original_pd_config,
             "business_truth": self.business_truth,
             "clock_offset_limit_ms": self.clock_offset_limit_ms,
-            "fault_record_id": deployment.pd_recovery_current_record_id(),
+            "fault_record_id": deployment.pd_recovery.pd_recovery_current_record_id(),
             "mismatch_targets": mismatch_targets,
             "fault_identity": current_identity,
             "inspection_snapshot": inspection,
@@ -414,11 +414,11 @@ class TidbSystemFailurePdTotalMetadataLossRecoveryInjector(BaseFaultInjector):
         self.item_rows = int(config["item_rows"])
         self.new_event_id = int(config["new_event_id"])
         self.clock_offset_limit_ms = int(config["clock_offset_limit_ms"])
-        if self.env.deployment.image_group_enabled or self.env.deployment.bootstrap_cache_enabled:
+        if self.env.deployment.snapshots.image_group_enabled or self.env.deployment.snapshots.bootstrap_cache_enabled:
             raise RuntimeError(
                 "K03 requires bootstrap_cache_enabled=false and no image group: "
-                f"run_id={self.env.run_id!r}, image_group={self.env.deployment.image_group_enabled}, "
-                f"bootstrap_cache={self.env.deployment.bootstrap_cache_enabled}"
+                f"run_id={self.env.run_id!r}, image_group={self.env.deployment.snapshots.image_group_enabled}, "
+                f"bootstrap_cache={self.env.deployment.snapshots.bootstrap_cache_enabled}"
             )
         self._configured = True
 
@@ -607,7 +607,7 @@ class TidbSystemFailurePdTotalMetadataLossRecoveryInjector(BaseFaultInjector):
         )
 
     def _verify_fault_state(self) -> None:
-        identity = self.env.deployment.pd_identity_observation()
+        identity = self.env.deployment.pd_recovery.pd_identity_observation()
         current_cluster_id = int(identity["cluster"]["id"])
         self.new_cluster_id = current_cluster_id
         if current_cluster_id == self.original_cluster_id:

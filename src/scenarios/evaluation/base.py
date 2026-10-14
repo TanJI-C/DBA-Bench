@@ -3,10 +3,8 @@
 from abc import ABC
 from typing import TYPE_CHECKING, Any
 
-from src.scenarios.evaluation.protocol import (
-    EvaluationContext,
-    parse_submission_report,
-)
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import parse_submission_report
 from src.scenarios.evaluation.diagnosis import (
     DiagnosisMatchingStrategy,
     ExactDiagnosisMatcher,

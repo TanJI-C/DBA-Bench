@@ -209,7 +209,7 @@ trace、评测器调用与清理；入口只负责组合这些部分。
 - 入口与参考 Mock：`examples/run_tidb_system_failure_ticdc_gc_safepoint_scenario.py`
 - 聚焦测试：`tests/tidb/test_system_failure_ticdc_gc_safepoint.py`
 - 知识库运行时：`src/knowledge/tidb_knowledge_base.py`、`src/knowledge/markdown_knowledge_base.py`、
-  `src/knowledge/embedding_model_runtime.py` 与 `src/execution/environment.py`
+  `src/knowledge/embedding_model_runtime.py` 与 `src/execution/environments/tidb.py`
 
 当前代码验证包括静态编译与聚焦单元覆盖，覆盖身份标识、五个
 注入器签名、完整/部分/错误/危险修复、显式的仅 A/仅 B/A+B 行为、

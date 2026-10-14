@@ -102,7 +102,7 @@ report was briefly slow. The model must use the temporal ordering of multiple me
 to rule out these windows; it must not treat host business, high process CPU, or sibling pressure directly as the DB quota root cause.
 
 Both Cases give the Agent only the real historical metrics and the public `operation_event` records. The history uses the public
-`frozen_history_history` and `read_log(operation_event)` contracts; the physical staging tables are not read through SQL, and the
+`frozen_history` and `read_log(operation_event)` contracts; the physical staging tables are not read through SQL, and the
 evaluator is not allowed to read the frozen history. The evaluator verifies the final state only with a trusted live replay.
 Therefore a current state that has already recovered or is idle cannot overturn the historical incident; conversely, a single historical
 spike cannot replace the cross-metric causal chain.

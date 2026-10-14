@@ -20,8 +20,8 @@ from src.scenarios.postgres import (
     PgQueryPerfImplicitTypeConversionScenario, PgQueryPerfSortSpillScenario,
     PgQueryPerfSuboptimalJoinScenario,
 )
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
 from src.workloads.tpcds import TPCDSWorkload
 
 

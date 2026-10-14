@@ -97,6 +97,7 @@ Merely changing table names, constants, alert wording, or hidden object names do
 - faults must occur in the real database/system, and evidence must be visible through formal tools; do not fake metrics, responses, or ground truth;
 - entry points do not duplicate the Orchestrator's deploy, inject, evaluate, recover, teardown, and trace logic;
 - runtime state, PIDs, connections, timestamps, and dynamic objects do not enter static Scenario/Case definitions;
+- Put Case-specific tools, recovery guards, and controllers in the owning scenario's `<category>/runtime/<scenario>.py`; select that environment directly and reuse existing tools. Do not add fixture state or dedicated branches to PGEnv/TiDBEnv. See the architecture standard for TiDB control, Agent SQL observation, and log extensions.
 - first use `rg` to find and reuse existing behavior in `src/database/`, `src/scenarios/evaluation/`, `src/workloads/`, and
   `src/scenarios/runtime/`; do not keep legacy interface compatibility layers or fallbacks.
 

@@ -9,7 +9,7 @@ from src.agents.agent import LLMAgent, MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.evaluation.base import evaluation_passed
 from src.scenarios.tidb import TidbQueryPerfCaseWhenInCartesianSemiJoinScenario
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -103,7 +103,7 @@ def main():
     )
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=["mock", "llm"], default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--port", type=int, default=4680)

@@ -6,20 +6,16 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from src.database.sql import require_success_payload
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios.evaluation.tidb.business_change.dr_auto_sync_failover import (
     TidbBusinessChangeDrAutoSyncPlannedFailoverEvaluatorCase,
     TidbBusinessChangeDrAutoSyncUnplannedFailoverEvaluatorCase,
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 def _k09_workload() -> BackgroundWorkloadSpec:

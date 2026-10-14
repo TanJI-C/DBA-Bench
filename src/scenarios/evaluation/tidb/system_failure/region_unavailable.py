@@ -132,7 +132,7 @@ class _NetworkBoundaryVerifier(OutcomeVerifier):
         case = context.case_run.case
         target = getattr(case, self.target_attribute)
         expected_rule_count = int(context.injection_evidence[self.evidence_key])
-        rules = context.case_run.env.get_deployment().inspect_pd_network(target)
+        rules = context.case_run.env.get_deployment().network.inspect_pd_network(target)
         actual_rule_count = rules.count("--dport 2379")
         required_rule = (
             getattr(case, self.required_rule_attribute)
@@ -171,7 +171,7 @@ class _PdResponseEgressBoundaryVerifier(OutcomeVerifier):
         for expected in expected_rules:
             target = str(expected["pd_target"])
             destination = str(expected["destination_address"])
-            rules = context.case_run.env.get_deployment().inspect_pd_network(target)
+            rules = context.case_run.env.get_deployment().network.inspect_pd_network(target)
             actual[target] = [
                 line
                 for line in rules.splitlines()
@@ -203,7 +203,7 @@ class _PdResponseShadowEgressBoundaryVerifier(OutcomeVerifier):
         for item in evidence["ma01_pd_response_shadow_rules"]:
             target = str(item["pd_target"])
             expected[target] = {}
-            rules = context.case_run.env.get_deployment().inspect_pd_network(target)
+            rules = context.case_run.env.get_deployment().network.inspect_pd_network(target)
             lines = rules.splitlines()
             accepts: dict[str, list[int]] = {}
             rejects: dict[str, list[int]] = {}
@@ -280,7 +280,7 @@ class _TidbShadowEgressBoundaryVerifier(OutcomeVerifier):
                 actual={"target": target, "node_state": node_state},
                 evidence=("deployment.node_states()",),
             )
-        rules = deployment.inspect_pd_network(target)
+        rules = deployment.network.inspect_pd_network(target)
         lines = rules.splitlines()
         accepts: dict[str, list[int]] = {}
         rejects: dict[str, list[int]] = {}
@@ -333,7 +333,7 @@ class _TidbStaleEgressBoundaryVerifier(OutcomeVerifier):
                 actual={"target": target, "node_state": node_state},
                 evidence=("deployment.node_states()",),
             )
-        rules = deployment.inspect_pd_network(target)
+        rules = deployment.network.inspect_pd_network(target)
         actual = [
             line
             for line in rules.splitlines()
@@ -373,7 +373,7 @@ class _TidbPostRestartRehydratedBoundaryVerifier(OutcomeVerifier):
                 actual={"target": target, "node_state": node_state},
                 evidence=("deployment.node_states()",),
             )
-        rules = deployment.inspect_pd_network(target)
+        rules = deployment.network.inspect_pd_network(target)
         actual = [
             line
             for line in rules.splitlines()
@@ -408,7 +408,7 @@ class _PdShadowIngressBoundaryVerifier(OutcomeVerifier):
         source_address = str(evidence["ma01_pd_shadow_ingress_source_address"])
         actual = {}
         for target in targets:
-            rules = context.case_run.env.get_deployment().inspect_pd_network(target)
+            rules = context.case_run.env.get_deployment().network.inspect_pd_network(target)
             lines = rules.splitlines()
             accept_indexes = [
                 index
@@ -460,7 +460,7 @@ class _PdIngressDecoyBoundaryVerifier(OutcomeVerifier):
             target = str(decoy["pd_target"])
             marker = str(decoy["marker"])
             source_address = str(decoy["source_address"])
-            rules = context.case_run.env.get_deployment().inspect_pd_network(target)
+            rules = context.case_run.env.get_deployment().network.inspect_pd_network(target)
             actual[f"{target}:{marker}"] = sum(
                 "-A INPUT" in line
                 and "--dport 2379" in line

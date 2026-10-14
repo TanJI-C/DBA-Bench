@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping, Protocol, Sequence, runtime_checkable
 
-from src.persistent_scenarios.model.enums import DatabaseSystem
+from src.execution.specs import HostPortLayout
+from src.database.system import DatabaseSystem
 from src.persistent_scenarios.model.spec import PersistentScenarioSpec, EventSpec
 from src.persistent_scenarios.runtime.ledger import TrustedLedger
 from src.persistent_scenarios.runtime.lifecycle import (
@@ -139,6 +140,8 @@ class EventCapabilityRegistry(Protocol):
 
 @runtime_checkable
 class EnvironmentProvider(Protocol):
+    def host_ports(self, spec: PersistentScenarioSpec) -> HostPortLayout: ...
+
     def create(self, spec: PersistentScenarioSpec, run_id: str, port: int) -> object: ...
 
     def deploy(self, environment: object) -> None: ...

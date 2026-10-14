@@ -28,21 +28,16 @@ from src.scenarios.tidb.common import (
     sequence_row_source,
     validate_sql_identifier,
 )
-from src.scenarios.tidb.runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from src.scenarios.frozen_history import (
     DecoyDirection,
     DecoyKind,
     HistoryDecoySpec,
     FrozenHistorySpec,
 )
-from src.scenarios.workloads import BackgroundWorkloadStartPhase, WorkloadProfile
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenarioCase,
-    TiDBScenario,
-)
+from src.workloads.specs import BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenarioCase, TiDBScenario
 
 
 HC02_DB = "benchops_mf_hc03"

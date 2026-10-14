@@ -15,20 +15,14 @@ from src.scenarios.evaluation.tidb.query_perf.set_autocommit_storm import (
     TidbQueryPerfSetAutocommitStormEvaluatorCase,
     TidbQueryPerfSetAutocommitStormFocusedEvaluatorCase,
 )
-from src.scenarios.evaluation.protocol import structured_reference_report
+from src.protocols.report import structured_reference_report
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 from src.scenarios.tidb.common import validate_sql_identifier
-from src.scenarios.workloads import SessionSetupBehavior, WorkloadProfile
+from src.workloads.specs import SessionSetupBehavior, WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 _DB = "benchops"

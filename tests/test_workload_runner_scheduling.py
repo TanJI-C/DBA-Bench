@@ -1,7 +1,7 @@
 import threading
 import time
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 from src.scenarios.runtime.workload_runner import WorkloadRunner
 
 

@@ -3,13 +3,9 @@ from dataclasses import dataclass
 from src.scenarios.evaluation.tidb.basic.demo import TidbDemoForMinimalHealthyEvaluatorCase
 from src.scenarios.faults import NoopFaultInjector
 
-from ...base import (
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import EMPTY_BACKGROUND_WORKLOAD
+from src.scenarios.base import FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

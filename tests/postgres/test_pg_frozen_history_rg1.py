@@ -3,7 +3,7 @@ import threading
 from dataclasses import replace
 from types import SimpleNamespace
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.execution.postgres_metrics import (
     POSTGRES_METRIC_CATALOG,
     PostgresScenarioMetricCatalog,

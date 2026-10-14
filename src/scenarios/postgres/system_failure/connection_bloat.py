@@ -7,18 +7,11 @@ from src.scenarios.evaluation.postgres.system_failure import (
 )
 
 from src.workloads.tpcds import get_tpcds_query
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
-)
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import BackgroundWorkloadSpec, EMPTY_BACKGROUND_WORKLOAD
 
 
 POSTGRES_RESOURCES = CaseResourceSpec(

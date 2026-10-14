@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.scenarios.base import DatabaseSystem
+from src.database.system import DatabaseSystem
 
 
 def metric_catalog_for_system(system: DatabaseSystem):

@@ -44,6 +44,45 @@ Each exclusion must match a bounded Scenario cell in the plan, otherwise the pla
 
 Parallel experiments must configure `runtime.isolation`, and every selected Case must declare `resources`. The runner computes each worker's CPU and memory requirements from the generic resource contract and allocates cpusets by full physical cores and NUMA node. PostgreSQL scenarios marked host-exclusive take over the entire host machine even when they appear in a parallel manifest; TiDB QP scenarios reuse PD/TiKV data via image groups and still enter isolated scheduling as an independent Compose project, network, ports, and container group. For the full configuration see `experiments/pg_system_failure_parallel.example.yaml`.
 
+Before execution, `src/benchmark/host_resources.py` atomically reserves host resources under
+`/tmp/aiopsbench-host-resources/`. Processes and worktrees under the same account share these
+locks. Dry runs validate the plan; execution allocates CPUs again and records the actual
+allocation in `host-reservation.json`, `environment.json`, and each run record.
+
+Bound experiments reserve complete physical cores, including SMT sibling identity. NUMA memory
+is charged per worker contract; a worker spanning NUMA nodes reserves its full allowance on each
+permitted node. Admission uses available memory minus active reservations. Insufficient resources
+raise an error listing the active reservations. Unbound experiments and experiments containing
+host-exclusive scenarios hold an exclusive host lock; other bound experiments share the host
+lock and reserve their own CPUs and memory.
+
+Run subprocesses inherit host locks and lease file descriptors. Parent exit does not release
+resources still held by surviving children. After all processes exit, admission checks old run
+Docker namespaces and blocks on leftover containers until they are cleaned up. Completed leases
+are reclaimed. This coordination covers benchmark runner processes, not unrelated host programs.
+
+`src/execution/host_ports.py` reserves each run's complete port layout using per-port `flock`
+leases under `/tmp/aiopsbench-host-resources/ports/`. Case runtimes declare relative layouts;
+Persistent Scenario providers declare full topology layouts and permitted ranges. The shared
+coordinator does not recognize Case identities. The runner atomically reserves the full set and
+shifts the explicit command port together with recovery, PgBouncer, monitoring, TiDB SQL/status,
+and replication ports. Exhausting the permitted range raises an error.
+
+Port lease descriptors reach the run through `pass_fds`. Native deployments inherit leases;
+standalone deployments acquire their own. Start, restart, reset, and container replacement retain
+leases until teardown. Each attempt's `port-reservation.json` records every allocated port;
+`run.json` and the command record the actual primary port. Host resource leases remain scoped to
+the experiment lifetime.
+
+Entrypoints that allow auxiliary ports must declare their actual recovery, PgBouncer, and HTTP
+ports rather than assuming `primary + 1`. Partition cleanup declares two HTTP offsets after the
+primary port, and both move with the run's complete allocation.
+
+Admission checks IPv4/IPv6 listeners and Docker port declarations, including stopped containers.
+Participants cannot take each other's reserved ports during deployment or rebuilding. External
+programs do not hold these locks; a later external listener can still cause Docker publication to
+fail. That failure is exposed without silently retrying another port.
+
 ### Agent-facing language
 
 Set `runtime.agent_language` to `zh` (default) or `en`:
@@ -103,6 +142,7 @@ artifacts/experiments/<experiment_id>/
         │   ├── attempt.json
         │   ├── trace.json
         │   ├── evaluator.json
+        │   ├── port-reservation.json
         │   └── stdout.log
         └── 002/
             └── ...

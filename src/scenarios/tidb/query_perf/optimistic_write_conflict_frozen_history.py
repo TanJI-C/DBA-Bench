@@ -23,14 +23,10 @@ from src.scenarios.frozen_history import (
     HistoryDecoySpec,
     FrozenHistorySpec,
 )
-from src.scenarios.workloads import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    WorkloadProfile,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 
 from ...base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 from src.execution.history.records import HistoricalRecordSource
 
 

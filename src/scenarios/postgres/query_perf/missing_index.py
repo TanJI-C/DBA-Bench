@@ -22,18 +22,14 @@ from src.workloads.tpcds import get_tpcds_query
 from src.scenarios.postgres.common import (
     build_query_perf_noise_profiles,
 )
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
 )
 
 QUERY_PERF_RESOURCES = CaseResourceSpec(

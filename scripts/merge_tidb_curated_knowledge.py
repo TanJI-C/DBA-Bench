@@ -158,11 +158,11 @@ def load_markdown_records() -> list[tuple[dict[str, Any], dict[str, Any]]]:
     result = []
     for source_dir_name in (
         "tidb_system_failure_gc_mvcc_recovery",
+        "tidb_composite_fault_ticdc_gc_safepoint",
         "tidb_system_failure_pending_offline",
         "tidb_business_change_pitr_checkpoint_recovery",
         "tidb_business_change_lightning_checkpoint",
         "tidb_dr_auto_sync",
-        "tidb_composite_fault_ticdc_gc_safepoint",
     ):
         source_dir = root / source_dir_name
         for path in sorted(source_dir.glob("*.md")):

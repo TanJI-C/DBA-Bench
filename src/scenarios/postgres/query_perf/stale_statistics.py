@@ -20,16 +20,12 @@ from src.scenarios.evaluation.postgres.query_perf import (
 )
 
 from src.workloads.tpcds import get_tpcds_query
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresScenarioCase,
 )
 
 

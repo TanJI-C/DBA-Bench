@@ -28,7 +28,7 @@ from src.scenarios.tidb.system_failure.gc_mvcc_recovery import (
     k01_crc,
 )
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.scenarios.tidb.system_failure.runtime.gc_mvcc_recovery import GcMvccRecoveryEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -55,6 +55,25 @@ class K01ReferenceMockAgent(BaseAgent):
     ):
         super().__init__()
         self.case = case
+
+    def _write_after_schema_recovery(self, sql):
+        deadline = time.monotonic() + self.case.runtime.sql_timeout_seconds
+        while True:
+            result = self.execute(
+                "execute_sql", {"sql_query": sql},
+                thinking="恢复后按工单授权规格写入恰好一笔验证行。",
+            )
+            if result["status"] == "success":
+                return result
+            if "error=(8027," not in result["error"]:
+                _success(result, "authorized verification write")
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "K01 TiDB schema did not recover before the authorized write deadline: "
+                    f"sql={sql!r}, timeout_seconds={self.case.runtime.sql_timeout_seconds}, "
+                    f"result={result!r}"
+                )
+            time.sleep(K01_BACKFILL_POLL_SECONDS)
 
     def solve(self):
         knowledge = _success(
@@ -190,7 +209,7 @@ class K01ReferenceMockAgent(BaseAgent):
                 "K01 reference lock decode is inconsistent: "
                 f"header_start_ts={orphan_start_ts!r}, facts={orphan_facts!r}"
             )
-        trx_rows = _success(
+        _success(
             self.execute(
                 "execute_sql",
                 {
@@ -263,6 +282,11 @@ class K01ReferenceMockAgent(BaseAgent):
             ),
             "storage maintenance preflight",
         )["result"]
+        resolve_parameters = {"inspection_id": inspection["preflight_id"]}
+        if self.case.case_no == 0:
+            resolve_parameters.update(
+                key=orphan_key_hex, lock_type="P", start_ts=orphan_start_ts,
+            )
         _success(
             self.execute(
                 "manage_cluster",
@@ -270,16 +294,15 @@ class K01ReferenceMockAgent(BaseAgent):
                     "resource": "mvcc_lock",
                     "operation": "resolve",
                     "target": f"region/{region_id}",
-                    "parameters": {
-                        "inspection_id": inspection["preflight_id"],
-                        "key": orphan_key_hex,
-                        "lock_type": "P",
-                        "start_ts": orphan_start_ts,
-                    },
+                    "parameters": resolve_parameters,
                 },
-                thinking="只解析已解码证实的 orphan async-commit 锁：提交其 key、'P' 类型与 start_ts 解码凭证，在全部 peer 上做 key 级清理。",
+                thinking=(
+                    "只解析已解码证实的 orphan async-commit 锁，提交 key、'P' 类型与 start_ts 解码凭证。"
+                    if self.case.case_no == 0 else
+                    "使用预检查凭证对已确认的目标 Region 执行 recover-mvcc。"
+                ),
             ),
-            "key-level mvcc lock resolve",
+            "mvcc lock resolve",
         )
         verify_scan = _success(
             self.execute(
@@ -304,18 +327,12 @@ class K01ReferenceMockAgent(BaseAgent):
             raise RuntimeError(
                 f"K01 reference resolved lock must be absent from every peer: remaining={remaining_orphan!r}"
             )
-        self.execute(
-            "execute_sql",
-            {
-                "sql_query": (
-                    f"INSERT INTO {self.case.db}.{self.case.target_table} "
-                    f"(id, amount, payload, row_crc) VALUES "
-                    f"({authorized_id}, {authorized_amount}, "
-                    f"'{authorized_payload}', "
-                    f"CRC32('k01:{authorized_id}:{authorized_amount}'))"
-                )
-            },
-            thinking="恢复后按工单授权规格写入恰好一笔验证行。",
+        self._write_after_schema_recovery(
+            f"INSERT INTO {self.case.db}.{self.case.target_table} "
+            f"(id, amount, payload, row_crc) VALUES "
+            f"({authorized_id}, {authorized_amount}, "
+            f"'{authorized_payload}', "
+            f"CRC32('k01:{authorized_id}:{authorized_amount}'))"
         )
         self.execute(
             "execute_sql",
@@ -352,7 +369,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=scenario.description)
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=("mock", "zero", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=28)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -367,7 +384,7 @@ def main() -> None:
         raise ValueError("K01 semantic diagnosis matching is only valid for the explicit target-LLM path")
 
     case = scenario.get_case(args.case)
-    env = TiDBEnv(
+    env = GcMvccRecoveryEnv(
         run_id=args.container_name.removeprefix("aiopsbench-"),
         port_base=args.port,
     )

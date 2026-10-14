@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb.business_change import (
     TidbBusinessChangeOnlineDdlPauseResumeScenario,

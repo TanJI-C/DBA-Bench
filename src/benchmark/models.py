@@ -4,11 +4,9 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
-from src.persistent_scenarios.model.spec import (
-    DatabaseSystem as PersistentScenarioDatabaseSystem,
-    PersistentScenarioResourceSpec,
-)
-from src.scenarios.base import CaseResourceSpec, DatabaseSystem as ScenarioDatabaseSystem
+from src.persistent_scenarios.model.spec import PersistentScenarioResourceSpec
+from src.execution.specs import CaseResourceSpec, HostPortLayout
+from src.database.system import DatabaseSystem
 
 
 TERMINAL_STATUSES = {"succeeded", "failed", "timed_out", "interrupted"}
@@ -80,7 +78,7 @@ class RuntimeSpec:
 class BoundedScenarioRunSpec:
     experiment_id: str
     run_id: str
-    system: ScenarioDatabaseSystem
+    system: DatabaseSystem
     scenario_id: str
     script: str
     category: str
@@ -90,6 +88,7 @@ class BoundedScenarioRunSpec:
     seed: int
     port: int
     resources: CaseResourceSpec | None = None
+    host_ports: HostPortLayout = HostPortLayout()
     scenario_kind: ScenarioKind = ScenarioKind.BOUNDED
 
 
@@ -98,12 +97,13 @@ class PersistentScenarioRunSpec:
     experiment_id: str
     run_id: str
     scenario_id: str
-    system: PersistentScenarioDatabaseSystem
+    system: DatabaseSystem
     agent: AgentSpec
     repetition: int
     seed: int
     port: int
     resources: PersistentScenarioResourceSpec | None = None
+    host_ports: HostPortLayout = HostPortLayout()
     scenario_kind: ScenarioKind = ScenarioKind.PERSISTENT
 
 

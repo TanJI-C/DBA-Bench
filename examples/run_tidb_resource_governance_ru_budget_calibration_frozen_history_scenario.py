@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.metrics import format_utc_timestamp
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb.resource_governance.ru_budget_calibration_frozen_history import (
@@ -137,7 +137,7 @@ def main() -> None:
     )
     parser.add_argument("--case", required=True, choices=[case.case_id for case in scenario.cases])
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--port", type=int, default=53000)

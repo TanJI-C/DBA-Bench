@@ -434,6 +434,66 @@ def test_captured_benign_sources_do_not_reuse_the_same_normal_window():
     assert second != first
 
 
+def test_captured_benign_count_times_duration_must_fit_the_normal_capture():
+    spec = replace(
+        _spec(),
+        duration_seconds=160,
+        normal_capture_seconds=36,
+        target_age_seconds_range=(60, 80),
+        decoys=(HistoryDecoySpec(
+            decoy_id="captured",
+            kind=DecoyKind.CAPTURED_BENIGN,
+            metric="qps",
+            field="queries_per_second",
+            target=None,
+            direction=DecoyDirection.SPIKE,
+            count=2,
+            duration_seconds=24,
+            minimum_deviation_mad=0.5,
+        ),),
+    )
+    with pytest.raises(ValueError, match="count times duration cannot exceed normal_capture_seconds"):
+        spec.validate(None)
+
+
+def test_captured_benign_repeated_units_replay_disjoint_normal_windows():
+    spec = replace(
+        _spec(),
+        duration_seconds=160,
+        normal_capture_seconds=36,
+        target_age_seconds_range=(60, 80),
+        decoys=(HistoryDecoySpec(
+            decoy_id="captured",
+            kind=DecoyKind.CAPTURED_BENIGN,
+            metric="qps",
+            field="queries_per_second",
+            target=None,
+            direction=DecoyDirection.SPIKE,
+            count=2,
+            duration_seconds=12,
+            minimum_deviation_mad=0.5,
+        ),),
+    )
+    result = HistoryAssembler(StubMetricCatalog()).assemble(
+        CapturedHistoryInputs(
+            normal_metrics=(_frame((10, 12, 11, 15, 13, 20, 18, 16, 14, 12, 10, 8, 11, 13, 12, 14, 11, 9)),),
+            normal_records=_captured(BASE_MS, 18),
+            target_metrics=(_frame((100, 102, 104, 106, 108, 110, 112, 114), start_ms=BASE_MS + 100_000),),
+            target_records=_captured(BASE_MS + 100_000, 8),
+            spec=spec,
+            seed=33,
+        ),
+        agent_start_candidate_ms=BASE_MS + 500_000,
+    )
+    spans = sorted(
+        (window.source_start_index, window.source_end_index)
+        for window in result.windows
+        if window.role == "decoy"
+    )
+    assert len(spans) == 2
+    assert spans[0][1] < spans[1][0]
+
+
 def test_captured_benign_selects_the_highest_directed_deviation_window():
     spec = replace(_spec(), decoys=())
     decoy = HistoryDecoySpec(

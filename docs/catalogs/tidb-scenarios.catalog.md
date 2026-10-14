@@ -50,7 +50,7 @@ be inferred as `hard` from old documents or neighboring Cases.
 | `query_perf` | `tidb_query_perf_noncovering_index_tail_latency` | `0:noncovering_index_tail_latency [hard]`; |
 | `query_perf` | `tidb_query_perf_case_when_in_cartesian_semi_join` | `0:case_when_in_cartesian_semi_join [hard]`; |
 | `query_perf` | `tidb_query_perf_like_escape_range` | `0:literal_underscore_like_range [hard]`; |
-| `system_failure` | `tidb_system_failure_lock_contention` | `0:deadlock_test_row_lock [hard]`; |
+| `system_failure` | `tidb_system_failure_lock_contention` | `0:admission_events_row_lock_deadlock [hard]`; |
 | `system_failure` | `tidb_system_failure_pending_offline` |  |
 | `system_failure` | `tidb_system_failure_mdl_blocking` | `0:long_transaction_mdl_blocks_online_ddl [easy]`; |
 | `system_failure` | `tidb_system_failure_deadlock` | `0:wallet_pair_reverse_order_deadlock [hard]`; |
@@ -91,7 +91,7 @@ be inferred as `hard` from old documents or neighboring Cases.
 | `system_failure` | `tidb_system_failure_region_unavailable` | `0:region_unavailable_pd_network_block [hard]`; |
 | `system_failure` | `tidb_system_failure_table_cache_lease` | `0:table_cache_lease_write_conflict [hard]`; |
 | `system_failure` | `tidb_system_failure_table_cache_lease_frozen_history` |  |
-| `query_perf` | `tidb_query_perf_set_autocommit_storm` | `0:cpu_set_autocommit_storm [hard]`; |
+| `query_perf` | `tidb_query_perf_set_autocommit_storm` | `0:autocommit_storm_cpu_saturation [hard]`; |
 | `query_perf` | `tidb_query_perf_set_autocommit_storm_frozen_history` |  |
 | `business_change` | `tidb_business_change_rolling_upgrade` | `0:rolling_upgrade_6_5_to_7_5 [hard]`; |
 | `business_change` | `tidb_business_change_large_table_batch_dml` | `0:large_table_batch_update_and_index [easy]`; |
@@ -280,19 +280,20 @@ In the tables, `M` means the metric history path, `K` means the knowledge retrie
 
 **HC08**: After a single-Store lane is bound to `VOTERS=3`, placement stabilizes as `PENDING`. After unbinding the inapplicable table-level policy it must return to `DEFAULT`, the pending state must disappear, and the 2,000-row CRC must be unchanged.
 
-**HC09**: Open a snapshot transaction and locate the exact session in `CLUSTER_TIDB_TRX`; after 20 rows concurrently gain new versions, end that transaction, the target session count becomes 0, and both the new writes and the CRC are preserved.
+**HC09**: Easy `single_handoff_mvcc_review` correlates native `RELATED_TABLE_IDS`, table IDs, current ownership, and source checkpoints for closed batches. End only released readers predating their own source boundary. Older current owners and normal readers from other sources are protected; publication time does not establish source commit order. CONNECTION and QUERY kill are equivalent. Preserve both complete business sources and the other three readers. Easy calibration: D4, m/n=11/7, C=7/18; the Hard sibling retains its calibration. See the [HC09 contract](../scenarios/tidb/health_check/tidb_health_check_long_transaction_mvcc.contract.md).
 
 ### 6.4 `business_change`
 
 | ID | Case | Path | `D_s` | `C_s` | `m/n` | Mock DP/OP/SP | Primary sources |
 |---|---|---:|---:|---:|---:|---|---|
 | BC01 | `rolling_upgrade_6_5_to_7_5` | K | 5 | 0.959142 | 40/939 | `N/A / True / True` | [BC01](../scenarios/tidb/business_change/tidb_business_change_rolling_upgrade.contract.md) |
-| BC02 | `cdc_dc_migration_reverse_cutover` | M+K | 7 | 0.869198 | 31/206 | `N/A / True / True` | [BC02](../scenarios/tidb/business_change/tidb_business_change_cdc_dc_migration.contract.md) |
+| BC02 | `cdc_dc_migration_reverse_cutover` | M+K | 12 | 0.732143 | 135/369 | `N/A / True / True` | [BC02](../scenarios/tidb/business_change/tidb_business_change_cdc_dc_migration.contract.md) |
 | BC03 | `batched_dml_ddl` | K | 6 | 0.759259 | 78/246 | `N/A / True / True` | [BC03](../scenarios/tidb/business_change/tidb_business_change_batched_dml_ddl.contract.md) |
 | BC04 | `large_table_batch_update_and_index` | M+K | 4 | 0.957831 | 7/159 | `N/A / True / True` | [BC04](../scenarios/tidb/business_change/tidb_business_change_large_table_batch_dml.contract.md) |
 | BC05 | `lightning_checkpoint_scale_out` | M | 6 | 0.989731 | 13/1253 | `N/A / True / True` | [BC05](../scenarios/tidb/business_change/tidb_business_change_lightning_checkpoint.contract.md) |
 | BC06 | `failed_ddl_safe_replace` | M+K | 9 | 0.677419 | 30/63 | `N/A / True / True` | [BC06](../scenarios/tidb/business_change/tidb_business_change_dm_replace.contract.md) |
-| BC07 | `dropped_table_gc_recovery` | K | 7 | 0.910072 | 50/506 | `N/A / True / True` | [BC07](../scenarios/tidb/business_change/tidb_business_change_table_recovery.contract.md) |
+| BC07 | `dropped_table_gc_recovery` | K | 11 | 0.738462 | 51/144 | `N/A / True / True` | [BC07](../scenarios/tidb/business_change/tidb_business_change_table_recovery.contract.md) |
+| BC07 | `dropped_payment_events_gc_recovery` | K | 8 | 0.829630 | 23/112 | `N/A / True / True` | [BC07](../scenarios/tidb/business_change/tidb_business_change_table_recovery.contract.md) |
 | BC08 | `offline_x86_to_arm64_online_migration` | M+K | 6 | 0.949239 | 20/374 | `N/A / True / True` | [BC08](../scenarios/tidb/business_change/tidb_business_change_x86_arm64_migration.contract.md) |
 | BC09 | `paused_unique_index_backfill` | K | 6 | 0.966443 | 15/372 | `N/A / True / True` | [BC09](../scenarios/tidb/business_change/tidb_business_change_online_ddl_pause_resume.contract.md) |
 | BC10 | `dr_cutover_timezone_ddl_and_sink_backpressure` | M+K | 7 | 0.837563 | — | — | [BC10](../scenarios/tidb/business_change/tidb_business_change_timezone_ddl_backpressure.contract.md) |
@@ -304,7 +305,7 @@ The current formal list contains 13 unique business change contracts; all cases 
 
 **BC01**: The agent must complete the v6.5→v7.5 compatibility check, backup, batched PD/TiKV/TiDB upgrade, canary semantic comparison, monitoring validation, and rollback boundary confirmation. After the upgrade, the business checksum, result semantics, session reconnects, and Prometheus coverage must all pass simultaneously.
 
-**BC02**: The agent must complete the east-to-west online migration without stopping the write workload, distinguishing snapshot prefixes, incremental checkpoint/resolved/lag, and archive noise; after the forward replication catches up, enable and observe the west→east reverse link, then switch over checkout-api. OP simultaneously validates bidirectional lag, real west writes, reverse apply, lineage, business truth, and p95.
+**BC02**: Checkout already serves from west, but reverse checkpoints, business region selectors, delivery identities across incarnations, and producer clocks/authorization handoffs can cause missing or stale business data. Correlate immutable outboxes, registries, and actual handoff receipts to restore necessary activated history and current writes. Complete west closure and complete safe east rollback are valid. OP checks bidirectional health, zero lag, two complete matching business copies, lineage, and p95 <= 12,000 ms over the latest 100 completed intents. The Easy billing sibling retains its migration mechanism.
 
 **BC04**: Run batched DML and index changes on a large table under a foreground SLO. The agent must preserve primary-key cursor checkpoints, batch boundaries, pause conditions, the business checksum, and the final index state; no WHERE, skipping acceptance, or expanding the target-table scope are SP failures.
 
@@ -312,7 +313,7 @@ The current formal list contains 13 unique business change contracts; all cases 
 
 **BC06**: During DM migration, a failed DDL must continue syncing along the safe replace path; unconditional skip must not be used to paper over schema differences. OP verifies task running/synced, upstream/downstream schemas, subsequent DML, checkpoints, and the business CRC.
 
-**BC07**: Recover an accidentally dropped same-name table amid real release lineage, control epochs, and dynamic DDL job noise. The agent must resolve the target by the binding valid before the incident, then execute a dynamic `RECOVER TABLE BY JOB <job-id>`; row counts, primary key, CRC, `ADMIN CHECK TABLE`, and the GC lifetime must pass.
+**BC07**: Recover the original physical version of the same-name table actually serving at the incident. Orders correlate effective revisions, controller leases, application receipts, historical bindings, and native DROP lineage. Payment first resolves the highest accepted revision/retraction, then folds serving state by business occurrence time. Equivalent native recovery by name or job is valid. OP checks original row count, keys, CRC, `ADMIN CHECK TABLE`, and DROP lineage; temporary GC cleanup does not independently block OP. SP checks the database, logical table, and physical TABLE_ID of completed recoveries after handoff. A wrong recovery remains unsafe even if corrected later.
 
 **BC08**: Complete the x86→arm64 online migration under offline image and multi-architecture constraints, validating batched replacement, data balance, the business SLO, checksums, and rollback points.
 
@@ -353,7 +354,7 @@ Formal implementations and per-scenario reference/mock results are in each scena
 
 **RG09**: Set a 10 ms runaway limit on a real large Join; it must return `ERROR 8253` and leave `action=kill` in `mysql.tidb_runaway_queries`. A bounded 10-row query in the same resource group must return normally — legitimate queries must not be hit.
 
-**RG10**: Enable a session SQL binding for the deterministic OR query; the plan is pinned to `idx_tenant_time` and the result stays at 782 rows; after cleanup the binding leaves no residue. Checking only the binding state without checking the final plan and result does not pass.
+**RG10**: Easy `channel_window_binding_approval` approves both export readers actually serving after rollback, distinguishing configuration application order and native SESSION/GLOBAL precedence. Both readers must use a binding-controlled selective range plan on an existing matching prefix, preserving the complete 260-row export and business truth. Two SESSION policies or an effective GLOBAL policy plus removal of the owned replica SESSION override are valid. Easy calibration: D3, m/n=16/11, C=11/27; the Hard sibling retains session-only, 782-row semantics. See the [RG10 contract](../scenarios/tidb/resource_governance/tidb_resource_governance_sql_binding.contract.md).
 
 ## 7. `query_metrics` Prerequisite Capabilities
 

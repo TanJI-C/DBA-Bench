@@ -7,7 +7,7 @@ import pytest
 from src.database.query_results import capture_query_result_truth
 from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbResourceGovernanceRg06Scenario
-from src.scenarios.tidb.runtime import TIDB_V8_1_0
+from src.execution.tidb_runtime import TIDB_V8_1_0
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.resource_governance.rg06_ticdc_checkpoint_lag import (
     TidbResourceGovernanceRg06Injector,

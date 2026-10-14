@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 
 from src.scenarios import ALL_SCENARIOS, POSTGRES_SCENARIO_REGISTRY, SCENARIO_REGISTRY, ScenarioCategory
-from src.scenarios.base import (
+from src.workloads.specs import (
     EMPTY_BACKGROUND_WORKLOAD,
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    FaultPlan,
 )
+from src.scenarios.base import FaultPlan
 from src.scenarios.faults import BaseFaultInjector
 
 

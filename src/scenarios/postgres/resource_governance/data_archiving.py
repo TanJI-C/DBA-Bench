@@ -10,19 +10,14 @@ from src.scenarios.evaluation.postgres.resource_governance import (
 )
 
 from src.workloads.tpcds import get_tpcds_query
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    PostgresCaseRuntime,
-    PostgresScenario,
+from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec, PostgresRuntimeSpec
+from src.scenarios.base import PostgresScenario, DifficultyCalibration, FaultPlan, PostgresScenarioCase
+from src.workloads.specs import (
     BackgroundWorkloadSpec,
     BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
     EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    CaseResourceSpec,
-    PostgresRuntimeSpec,
-    PostgresScenarioCase,
 )
 
 

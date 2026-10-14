@@ -16,7 +16,7 @@ from src.scenarios.evaluation.safety import (
     _split_sql_statements,
     is_read_only_sql,
 )
-from src.scenarios.tidb.runtime import canonical_tidb_version
+from src.execution.tidb_runtime import canonical_tidb_version
 
 from ..base import TidbEvaluator
 

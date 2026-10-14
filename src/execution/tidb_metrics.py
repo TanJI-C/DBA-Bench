@@ -15,7 +15,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from src.execution.deployment import lightning_job_id
+from src.execution.deployments.tidb_support import lightning_job_id
 from src.execution.history.metrics import (
     MetricDefinition,
     MetricFrame,

@@ -1,6 +1,7 @@
 """Run the PG-RG-MF01 PgBouncer connection-budget scenario."""
 
 import argparse
+from dataclasses import replace
 import os
 import sys
 
@@ -10,9 +11,10 @@ sys.path.insert(0, project_root)
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.scenarios.evaluation.base import evaluation_passed
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
-from src.execution.deployment import PGDockerDeployment
-from src.execution.environment import PGEnv
+from src.protocols.report import EMPTY_REPORT
+from src.execution.deployments.postgres import PGDockerDeployment
+from src.execution.environments.postgres import PGEnv
+from src.execution.specs import HostPortLayout
 from src.execution.history.metrics import format_utc_timestamp
 from src.execution.history.records import HistoricalRecordSource
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
@@ -187,6 +189,8 @@ def run_mode(case_id: str, mode: str, args) -> dict:
         os.environ["AIOPS_SEED"] = str(args.seed)
     os.environ["AIOPS_PGBOUNCER_PORT"] = str(args.pgbouncer_port)
     case = scenario.get_case(case_id)
+    case = replace(case, runtime=replace(case.runtime,
+        host_ports=HostPortLayout(offsets=(0, args.pgbouncer_port - args.port))))
     env = build_env(case, args.port, f"{args.container_name}-{case_id}-{mode}")
     if mode == "mock":
         agent = MockLLMAgent(url="mock", api_key="mock", system_prompt="You are a PostgreSQL DBA agent.", use_native_tools=False)
@@ -249,7 +253,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=PGBOUNCER_PORTS["postgres"])
     parser.add_argument("--pgbouncer-port", type=int, default=PGBOUNCER_PORTS["pgbouncer"])
     parser.add_argument("--container-name", default="aiopsbench-pg-rg-pgbouncer")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--reasoning-effort", choices=("low", "medium", "high", "xhigh"), default="xhigh")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=30)

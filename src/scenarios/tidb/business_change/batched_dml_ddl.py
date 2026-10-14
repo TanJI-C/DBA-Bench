@@ -8,19 +8,13 @@ from src.scenarios.evaluation.tidb.business_change.batched_dml_ddl import (
     TidbBusinessChangeBc03EvaluatorCase,
     TidbBusinessChangeBc03SettlementEvaluatorCase,
 )
-from src.scenarios.evaluation.protocol import structured_reference_report
-from src.scenarios.workloads import WorkloadProfile
+from src.protocols.report import structured_reference_report
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    BackgroundWorkloadStartPhase,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
 from ..common import connect_tidb, join_thread
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 
 DATABASE = "benchops"

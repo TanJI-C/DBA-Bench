@@ -198,7 +198,7 @@ CDC 场景不冒称 TiFlash HTAP：下游是独立异步复制系统，必须有
 
 ## 10. 当前能力、实施缺口与并行边界
 
-阅读证据为现有 [TiDB 题库目录](../../../catalogs/tidb-scenarios.catalog.md)、[TiDB runtime 规格](../../../../src/scenarios/tidb/runtime.py)、[工具定义](../../../../src/execution/tidb_tool_definitions.py) 和 [Persistent API](../../../../src/persistent_scenarios/api.py)。目录数量不作为本文承诺，以实际注册代码为准。
+阅读证据为现有 [TiDB 题库目录](../../../catalogs/tidb-scenarios.catalog.md)、[TiDB runtime 规格](../../../../src/execution/tidb_runtime.py)、[工具定义](../../../../src/execution/tidb_tool_definitions.py) 和 [Persistent API](../../../../src/persistent_scenarios/api.py)。目录数量不作为本文承诺，以实际注册代码为准。
 
 已有机制可参考五类题库：query_perf 的 statistics/optimistic conflict，system_failure 的 slow store/MDL/replication，health_check 的 placement/replication trend/MVCC，business_change 的 Lightning/online DDL，resource_governance 的 RU/connection balance/placement。不能把 bounded verifier 的固定对象、动作匹配或题库权限直接搬到长任务。
 

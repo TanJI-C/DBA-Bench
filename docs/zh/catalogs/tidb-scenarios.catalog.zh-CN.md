@@ -50,7 +50,7 @@ Scenario；`basic` demo 不计入正式任务。Case 语义、告警、初始状
 | `query_perf` | `tidb_query_perf_noncovering_index_tail_latency` | `0:noncovering_index_tail_latency [hard]`; |
 | `query_perf` | `tidb_query_perf_case_when_in_cartesian_semi_join` | `0:case_when_in_cartesian_semi_join [hard]`; |
 | `query_perf` | `tidb_query_perf_like_escape_range` | `0:literal_underscore_like_range [hard]`; |
-| `system_failure` | `tidb_system_failure_lock_contention` | `0:deadlock_test_row_lock [hard]`; |
+| `system_failure` | `tidb_system_failure_lock_contention` | `0:admission_events_row_lock_deadlock [hard]`; |
 | `system_failure` | `tidb_system_failure_pending_offline` |  |
 | `system_failure` | `tidb_system_failure_mdl_blocking` | `0:long_transaction_mdl_blocks_online_ddl [easy]`; |
 | `system_failure` | `tidb_system_failure_deadlock` | `0:wallet_pair_reverse_order_deadlock [hard]`; |
@@ -91,7 +91,7 @@ Scenario；`basic` demo 不计入正式任务。Case 语义、告警、初始状
 | `system_failure` | `tidb_system_failure_region_unavailable` | `0:region_unavailable_pd_network_block [hard]`; |
 | `system_failure` | `tidb_system_failure_table_cache_lease` | `0:table_cache_lease_write_conflict [hard]`; |
 | `system_failure` | `tidb_system_failure_table_cache_lease_frozen_history` |  |
-| `query_perf` | `tidb_query_perf_set_autocommit_storm` | `0:cpu_set_autocommit_storm [hard]`; |
+| `query_perf` | `tidb_query_perf_set_autocommit_storm` | `0:autocommit_storm_cpu_saturation [hard]`; |
 | `query_perf` | `tidb_query_perf_set_autocommit_storm_frozen_history` |  |
 | `business_change` | `tidb_business_change_rolling_upgrade` | `0:rolling_upgrade_6_5_to_7_5 [hard]`; |
 | `business_change` | `tidb_business_change_large_table_batch_dml` | `0:large_table_batch_update_and_index [easy]`; |

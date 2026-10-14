@@ -14,7 +14,7 @@ def test_scenario_attribute_registry_has_all_postgresql_cases():
 
     assert {case["_annotation_status"] for case in cases.values()} == {"provisional"}
     assert len(postgres_cases) == 50
-    assert len(tidb_cases) == 60
+    assert len(tidb_cases) == 65
     assert {case["category"] for case in postgres_cases.values()} == {
         "query_perf",
         "system_failure",
@@ -28,6 +28,7 @@ def test_scenario_attribute_registry_has_all_postgresql_cases():
         "resource_governance",
         "system_failure",
         "health_check",
+        "composite_fault",
     }
 
 

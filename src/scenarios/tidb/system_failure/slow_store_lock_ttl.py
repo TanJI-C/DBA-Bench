@@ -22,16 +22,11 @@ from src.scenarios.tidb.common import (
     run_sql_batches,
     validate_sql_identifier,
 )
-from src.scenarios.workloads import BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadStartPhase, WorkloadProfile
 
-from ...base import (
-    BackgroundWorkloadSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    TiDBScenario,
-    TiDBScenarioCase,
-)
-from ..runtime import TIDB_V8_1_0, tidb_runtime
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, TiDBScenario, TiDBScenarioCase
+from src.execution.tidb_runtime import TIDB_V8_1_0, tidb_runtime
 
 SF02_TARGET_RETRY_PAYLOAD = "settled-after-storage-retry"
 

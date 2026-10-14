@@ -4,11 +4,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
+import pytest
 
 from src.execution.tidb_persistent_deployment import (
     PORT_RANGE,
     PersistentTiDBNodePlan,
     TiDBPersistentDeployment,
+    TiDBPersistentDeploymentError,
     build_port_plan,
 )
 from src.persistent_scenarios.model.spec import (
@@ -258,7 +260,7 @@ def test_expand_topology_rejects_beyond_contract_tiflash():
     try:
         expand_topology(environment, release_images=RELEASE_IMAGES, data_dir="/tmp/x")
     except ValueError as exc:
-        assert "TiFlash" in str(exc) and "contract" in str(exc)
+        assert "at most 2 TiFlash nodes" in str(exc)
     else:
         raise AssertionError("topology beyond the contract TiFlash count must fail")
 
@@ -349,3 +351,61 @@ def test_node_cpu_limit_primitive_strict_failures(tmp_path: Path, monkeypatch):
         raise AssertionError("unapplied CPU limit must fail")
     assert len(updates) == 1
     assert deployment.node_cpu_limits["tiflash/tiflash-0"] == 1.0
+
+
+def test_persistent_network_records_allocated_subnet_once(tmp_path, monkeypatch):
+    deployment = _deployment(tmp_path, _contract_topology_environment())
+    calls = []
+
+    def allocate(name, *, env):
+        calls.append((name, env))
+        return "10.252.37.0/24"
+
+    monkeypatch.setattr("src.execution.tidb_persistent_deployment.create_tidb_network", allocate)
+    assert deployment.network_subnet is None
+    deployment._ensure_network()
+    deployment._ensure_network()
+    assert deployment.network_subnet == "10.252.37.0/24"
+    assert deployment._network_created is True
+    assert calls == [(deployment.network_name, deployment._env)]
+
+
+def test_persistent_failed_allocation_does_not_remove_another_network(tmp_path, monkeypatch):
+    deployment = _deployment(tmp_path, _contract_topology_environment())
+    calls = []
+
+    def allocate(name, *, env):
+        raise RuntimeError(f"Docker network identity already exists: network={name!r}")
+
+    monkeypatch.setattr("src.execution.tidb_persistent_deployment.create_tidb_network", allocate)
+    monkeypatch.setattr(deployment, "_run", lambda cmd, **kwargs: calls.append(cmd) or "")
+    with pytest.raises(RuntimeError, match="identity already exists"):
+        deployment._ensure_network()
+    deployment.teardown()
+    assert deployment.network_subnet is None
+    assert deployment._network_created is False
+    assert calls == []
+
+
+def test_persistent_teardown_releases_only_its_owned_network(tmp_path, monkeypatch):
+    deployment = _deployment(tmp_path, _contract_topology_environment())
+    calls = []
+    deployment._network_created = True
+    monkeypatch.setattr(deployment, "_run", lambda cmd, **kwargs: calls.append(cmd) or "")
+    deployment.teardown()
+    deployment.teardown()
+    assert calls == [["docker", "network", "rm", deployment.network_name]]
+    assert deployment._network_created is False
+
+
+def test_persistent_network_removal_failure_is_reported(tmp_path, monkeypatch):
+    deployment = _deployment(tmp_path, _contract_topology_environment())
+    deployment._network_created = True
+
+    def run(cmd, **kwargs):
+        raise TiDBPersistentDeploymentError("network has active endpoints")
+
+    monkeypatch.setattr(deployment, "_run", run)
+    with pytest.raises(TiDBPersistentDeploymentError, match="network removal failed.*active endpoints"):
+        deployment.teardown()
+    assert deployment._network_created is True

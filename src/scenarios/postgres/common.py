@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable, Iterable
 from typing import List
 
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 from src.workloads.tpcds import LIGHT_IDS, MEDIUM_IDS
 
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

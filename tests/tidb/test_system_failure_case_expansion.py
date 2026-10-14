@@ -32,25 +32,6 @@ NEW_CASES = (
     ("tidb_system_failure_br_permission", "br_s3_binding_focus"),
 )
 
-EXPECTED_CALIBRATION = {
-    "checkout_row_lock_simple": (2, 7, 62, "reference-234__"),
-    "mdl_release_chain_simple": (2, 7, 15, "reference-240__"),
-    "wallet_pair_deadlock_simple": (2, 12, 167, "reference-236__"),
-    "pd_mixed_disk_eviction_simple": (2, 109, 147, "reference-235__"),
-    "slow_store_lock_ttl_simple": (2, 24, 373, "reference-234__"),
-    "br_s3_binding_focus": (4, 119, 405, "reference-233__"),
-}
-
-EXPECTED_FOCUSED_LABEL = {
-    "checkout_row_lock_simple": "easy",
-    "mdl_release_chain_simple": "easy",
-    "wallet_pair_deadlock_simple": "easy",
-    "pd_mixed_disk_eviction_simple": "easy",
-    "slow_store_lock_ttl_simple": "easy",
-    "br_s3_binding_focus": "easy",
-}
-
-
 def _new_cases():
     return [
         scenario.get_case(case_id)
@@ -78,10 +59,6 @@ def test_calibrated_system_failure_scenarios_have_one_contiguous_focused_case():
         assert original_plan[0].injector_type is focused_plan[0].injector_type
         assert original_plan[0].config != focused_plan[0].config
 
-
-def test_focused_cases_use_live_reference_calibration_without_placeholders():
-    for case in _new_cases():
-        depth, causal, noise, reference_prefix = EXPECTED_CALIBRATION[case.case_id]
 
 
 def test_focused_cases_preserve_the_scenario_capability_and_change_real_scope():

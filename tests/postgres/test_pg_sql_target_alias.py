@@ -1,6 +1,6 @@
 import json
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 
 
 def make_stub_env():

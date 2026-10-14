@@ -17,19 +17,22 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Mapping
 
-from src.scenarios.base import (
-    BackgroundWorkloadSpec,
-    CaseResourceSpec,
-    DifficultyCalibration,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.execution.specs import CaseResourceSpec, PostgresCaseRuntime, PostgresRuntimeSpec
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.execution.history.metrics import MetricDefinition, MetricFrame, format_utc_timestamp, validate_metric_frame
-from src.execution.history.records import CapturedRecords, HistoricalCoverage, HistoricalPointRecord, HistoricalRecordSource
+from src.execution.history.metrics import (
+    MetricDefinition,
+    MetricFrame,
+    format_utc_timestamp,
+    validate_metric_frame,
+)
+from src.execution.history.records import (
+    CapturedRecords,
+    HistoricalCoverage,
+    HistoricalPointRecord,
+    HistoricalRecordSource,
+)
 from src.execution.postgres_metrics import (
     LivePostgresScenarioMetricProvider,
     POSTGRES_METRIC_CATALOG,
@@ -42,7 +45,7 @@ from src.scenarios.postgres.common import (
     _run_cleanup_steps,
     _validate_sql_identifier,
 )
-from src.scenarios.workloads import BackgroundWorkloadStartPhase, WorkloadProfile
+from src.workloads.specs import BackgroundWorkloadStartPhase, WorkloadProfile
 from src.workloads.tpcds import get_tpcds_query
 
 from src.scenarios.evaluation.postgres.health_check import (

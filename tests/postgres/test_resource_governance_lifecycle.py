@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher
-from src.scenarios.evaluation.protocol import StructuredReport
+from src.protocols.report import StructuredReport
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.postgres.resource_governance.audit_logging import PgResourceGovernanceAuditLoggingInjector
 from src.scenarios.postgres.resource_governance.resource_throttling import PgResourceGovernanceResourceThrottlingInjector

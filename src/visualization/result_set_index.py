@@ -6,6 +6,18 @@ from typing import Any
 
 import yaml
 
+from src.benchmark.result_identity import (
+    analysis_run_filename,
+    result_run_filename,
+    result_run_key,
+    validate_case_tag,
+)
+
+# Persistent-scenario sets declare domain: persistent_scenario and use their own
+# run schema / scenario shards; the /results page renders only the bounded
+# five-category contract, so declared persistent sets are excluded everywhere here.
+PERSISTENT_DOMAIN = "persistent_scenario"
+
 
 class ResultSetIndex:
     def __init__(self, root: str | Path):
@@ -17,6 +29,8 @@ class ResultSetIndex:
         result_sets = []
         for manifest_path in self.root.glob("*/*/result-set.yaml"):
             manifest = self._manifest(manifest_path)
+            if manifest.get("domain") == PERSISTENT_DOMAIN:
+                continue
             result_sets.append({
                 "result_set_id": manifest["result_set_id"],
                 "system": manifest["system"],
@@ -59,12 +73,9 @@ class ResultSetIndex:
         case_keys = {(case["scenario_id"], case["case_id"]) for case in catalog["cases"]}
         if len(case_keys) != len(catalog["cases"]):
             raise ValueError(f"Duplicate ScenarioCase in ResultSet catalog: path={catalog_path}")
-        aliases = [case["alias"] for case in catalog["cases"]]
-        if aliases != list(range(1, len(aliases) + 1)):
-            raise ValueError(
-                f"ResultSet aliases must be contiguous in catalog order: "
-                f"path={catalog_path}, aliases={aliases!r}"
-            )
+        tags = [validate_case_tag(case) for case in catalog["cases"]]
+        if len(tags) != len(set(tags)):
+            raise ValueError(f"Duplicate ResultSet citation tags: path={catalog_path}, tags={tags!r}")
         invalid_difficulties = sorted({
             case.get("difficulty") for case in catalog["cases"]
             if str(case.get("difficulty", "")).lower() not in {"easy", "hard", "unknown"}
@@ -84,7 +95,7 @@ class ResultSetIndex:
                 run = self._json_object(path)
                 required = {
                     "schema_version", "result_set_id", "category_id", "run_key",
-                    "scenario_id", "case_id", "model", "repetition", "seed",
+                    "scenario_id", "case_id", "citation_tag", "model", "repetition", "seed",
                     "execution", "interaction", "tokens", "evaluation", "timing",
                     "fault_snapshot", "provenance",
                 }
@@ -121,6 +132,11 @@ class ResultSetIndex:
                         f"Run repetition is outside the ResultSet: path={path}, "
                         f"repetition={run['repetition']!r}, repetitions={manifest['repetitions']!r}"
                     )
+                tag = validate_case_tag(run)
+                expected_key = result_run_key(tag, agent_id, run["repetition"])
+                expected_name = result_run_filename(tag, run["repetition"])
+                if run["run_key"] != expected_key or path.name != expected_name:
+                    raise ValueError(f"Result Run identity mismatch: path={path}, run_key={run['run_key']!r}, expected_key={expected_key!r}, expected_name={expected_name!r}")
                 runs.append(run)
         run_keys = [run["run_key"] for run in runs]
         if len(run_keys) != len(set(run_keys)):
@@ -143,16 +159,17 @@ class ResultSetIndex:
         category_ids = {item["id"] for item in manifest["categories"]}
         model_ids = {model["id"] for model in manifest["models"]}
         analyses: dict[str, Any] = {}
-        for path in sorted(root.glob("analysis/categories/*/models/*/runs/*.json")):
+        for path in sorted((root / "analysis" / "diagnosis_path_review" / "runs").glob("*.json")):
             record = self._json_object(path)
-            if record.get("schema_version") != "aiopsbench_run_analysis_v1":
+            if record.get("schema_version") != "aiopsbench_run_analysis_v2":
                 raise ValueError(
                     f"Unsupported ResultSet Run analysis schema: path={path}, "
                     f"schema_version={record.get('schema_version')!r}"
                 )
             required = {
-                "result_set_id", "category_id", "run_key", "scenario_id", "case_id",
-                "model", "analyzed_at", "verdict", "dominant_labels", "measurement_artifact",
+                "result_set_id", "category_id", "run_key", "scenario_id", "case_id", "citation_tag",
+                "model", "repetition", "review_pass", "verdict", "dominant_label", "secondary_labels",
+                "measurement_artifact",
             }
             missing = sorted(required - set(record))
             if missing:
@@ -164,37 +181,34 @@ class ResultSetIndex:
                     f"Run analysis ResultSet ID does not match its directory: path={path}, "
                     f"result_set_id={record['result_set_id']!r}"
                 )
-            parts = path.relative_to(root).parts
-            category_id, agent_id = parts[2], parts[4]
-            if (
-                record["category_id"] != category_id
-                or record["model"]["agent_id"] != agent_id
-            ):
-                raise ValueError(
-                    f"Run analysis does not match its shard: path={path}, "
-                    f"category_id={record['category_id']!r}, "
-                    f"agent_id={record['model']['agent_id']!r}"
-                )
             if record["category_id"] not in category_ids:
                 raise ValueError(
                     f"Run analysis references a category outside its ResultSet: path={path}, "
                     f"category_id={record['category_id']!r}"
                 )
-            if record["model"]["agent_id"] not in model_ids:
+            agent_id = record["model"]["agent_id"]
+            if agent_id not in model_ids:
                 raise ValueError(
                     f"Run analysis references a model outside its ResultSet: path={path}, "
-                    f"agent_id={record['model']['agent_id']!r}"
+                    f"agent_id={agent_id!r}"
                 )
+            tag = validate_case_tag(record)
             run_key = record["run_key"]
+            if (run_key != result_run_key(tag, agent_id, record["repetition"])
+                    or path.name != analysis_run_filename(tag, agent_id, record["repetition"])):
+                raise ValueError(f"Analysis citation identity mismatch: path={path}, run_key={run_key!r}")
             if run_key in analyses:
                 raise ValueError(
                     f"Duplicate run_key in ResultSet analysis: "
                     f"result_set_id={result_set_id!r}, run_key={run_key!r}"
                 )
+            dominant_labels = (
+                [record["dominant_label"]] if record["dominant_label"] else []
+            ) + record["secondary_labels"]
             analyses[run_key] = {
-                "analyzed_at": record["analyzed_at"],
+                "review_pass": record["review_pass"],
                 "verdict": record["verdict"],
-                "dominant_labels": record["dominant_labels"],
+                "dominant_labels": dominant_labels,
                 "measurement_artifact": record["measurement_artifact"],
                 "path": str(path.relative_to(root)),
             }
@@ -204,6 +218,8 @@ class ResultSetIndex:
         matches = []
         for manifest_path in self.root.glob("*/*/result-set.yaml"):
             manifest = self._manifest(manifest_path)
+            if manifest.get("domain") == PERSISTENT_DOMAIN:
+                continue
             if manifest["result_set_id"] == result_set_id:
                 matches.append((manifest_path.parent, manifest))
         if not matches:
@@ -217,6 +233,8 @@ class ResultSetIndex:
         manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
             raise ValueError(f"ResultSet manifest must be an object: path={path}")
+        if manifest.get("domain") == PERSISTENT_DOMAIN:
+            return manifest
         required = {
             "result_set_id", "state", "system", "categories", "models", "repetitions", "expected_runs"
         }

@@ -85,3 +85,13 @@ The following fields are the public state boundary exposed by the current Case c
 - Entrypoint: `examples/run_tidb_business_change_rolling_upgrade_scenario.py`
 - Focused tests, reference runs, and traces are evidence, not a second contract.
 - Before changing this document, compare it with the current registry, Case implementation, evaluator, focused tests, and live validation evidence.
+
+## Runtime capabilities and backup tool contract
+
+`RollingUpgradeEnv` in `src/scenarios/tidb/business_change/runtime/rolling_upgrade.py`
+owns the business capabilities; `deployment.rollout` performs generic component upgrades.
+`release/snapshot` returns the recorded checksum and complete `SHOW CREATE TABLE` schema.
+The schema is included in the backup audit and matches the manifest/schema digest. The
+2026-10-13 fix restores the existing tool contract without adding diagnostic hops, repair
+choices, tools, or scoring constraints. Existing catalog and registry D/C values remain;
+parallel MockPath runs provide functional validation, not a new difficulty measurement.

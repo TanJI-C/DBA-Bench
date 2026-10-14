@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.execution.backup_rpo import (
     RPO_ARCHIVE_COMMAND,
     RPO_ARCHIVE_EMERGENCY_COMMAND,
@@ -28,17 +28,10 @@ from src.scenarios.evaluation.postgres.health_check.backup_rpo_certification imp
     PgHealthCheckBackupRpoCertificationEvaluatorCase,
     PgHealthCheckBackupRpoCertificationSimpleEvaluatorCase,
 )
-from src.scenarios.base import (
-    CaseResourceSpec,
-    DifficultyCalibration,
-    EMPTY_BACKGROUND_WORKLOAD,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresRuntimeSpec,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
-from src.scenarios.workloads import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
+from src.execution.specs import HostPortLayout, CaseResourceSpec, PostgresCaseRuntime, PostgresRuntimeSpec
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.workloads.specs import EMPTY_BACKGROUND_WORKLOAD
+from src.workloads.specs import BackgroundWorkloadSpec, BackgroundWorkloadStartPhase, WorkloadProfile
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
 
 
@@ -430,7 +423,7 @@ _HARD_CASE = PgHealthCheckBackupRpoCertificationForThroughputGapScenarioCase(
     background_workload=_RPO_BACKGROUND_WORKLOAD,
     reference_report=_reference_report(),
     frozen_history=_HARD_HISTORY,
-    runtime=PostgresCaseRuntime(resources=RPO_RESOURCES, parameters=RPO_RUNTIME),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1)), resources=RPO_RESOURCES, parameters=RPO_RUNTIME),
     base_image_name="aiopsbench-pg-initialized:latest",
     workload_tag="pgbench",
     rpo_seconds=60,
@@ -489,7 +482,7 @@ _SIMPLE_CASE = PgHealthCheckBackupRpoCertificationForThroughputGapSimpleScenario
     background_workload=_RPO_BACKGROUND_WORKLOAD,
     reference_report=_reference_report(),
     frozen_history=_SIMPLE_HISTORY,
-    runtime=PostgresCaseRuntime(resources=RPO_RESOURCES, parameters=RPO_RUNTIME),
+    runtime=PostgresCaseRuntime(host_ports=HostPortLayout(offsets=(0, 1)), resources=RPO_RESOURCES, parameters=RPO_RUNTIME),
     base_image_name="aiopsbench-pg-initialized:latest",
     workload_tag="pgbench",
     rpo_seconds=60,

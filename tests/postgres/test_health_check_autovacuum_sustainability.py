@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.scenarios.evaluation.diagnosis import SemanticDiagnosisMatcher
-from src.scenarios.evaluation.protocol import EMPTY_REPORT
+from src.protocols.report import EMPTY_REPORT
 from src.scenarios.evaluation.semantic import SemanticConditionJudgment, SemanticJudgment
 from src.execution.history.metrics import MetricQuery
 from src.execution.history.records import HistoricalRecordSource
@@ -22,7 +22,7 @@ from src.scenarios.postgres.health_check.autovacuum_sustainability import (
 )
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.frozen_history import DecoyKind
-from src.scenarios.workloads import BackgroundWorkloadStartPhase
+from src.workloads.specs import BackgroundWorkloadStartPhase
 
 
 SCENARIO_ID = "pg_health_check_autovacuum_sustainability"

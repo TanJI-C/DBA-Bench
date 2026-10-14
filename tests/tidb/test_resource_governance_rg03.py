@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.scenarios.base import BackgroundWorkloadStartPhase, CaseRun
+from src.workloads.specs import BackgroundWorkloadStartPhase
+from src.scenarios.base import CaseRun
 from src.scenarios.tidb import TidbResourceGovernanceBrSloAdaptiveThrottlingScenario
 from src.scenarios.faults import FaultLifecycleContext
 from src.scenarios.tidb.resource_governance.br_slo import (

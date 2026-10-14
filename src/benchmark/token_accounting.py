@@ -298,6 +298,11 @@ def load_token_config(path: Path) -> dict:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     if config["schema_version"] != 1:
         raise ValueError(f"Unsupported token config schema: path={path}")
+    for model, settings in config["models"].items():
+        if settings["protocol"] not in {"openai", "anthropic"}:
+            raise ValueError(
+                f"Unsupported token accounting protocol: path={path}, model={model!r}, protocol={settings['protocol']!r}"
+            )
     return config
 
 
@@ -350,7 +355,8 @@ def _rates(
 @cache
 def _tool_schemas(system: str) -> tuple[list[dict], list[dict]]:
     from src.agents.baselines.dbot.tools import expert_tool_schemas
-    from src.execution.environment import PGEnv, TiDBEnv
+    from src.execution.environments.postgres import PGEnv
+    from src.execution.environments.tidb import TiDBEnv
 
     environments = {
         "postgresql": lambda: PGEnv(tool_profile="general_knowledge"),
@@ -402,7 +408,7 @@ def account_tokens(
         tokenizer_match = "provider_reported"
     else:
         tools, expert_tools = _tool_schemas(trace["metadata"]["system"])
-        protocol = config["models"][model].get("protocol", "openai")
+        protocol = config["models"][model]["protocol"]
         calls = _reconstructed_calls(trace, protocol, tools, expert_tools)
         agent_type = trace["metadata"]["agent_type"]
         cumulative_context = agent_type in {"LLMAgent", "DbaiopsAgent"}

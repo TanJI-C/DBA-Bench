@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.execution.environment import PGEnv
+from src.execution.environments.postgres import PGEnv
 from src.execution.postgres_replica_fleet import PgReplicaFleetEnv
 
 REMOVED_METRICS = (

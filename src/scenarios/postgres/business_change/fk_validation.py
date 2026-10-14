@@ -19,17 +19,11 @@ from src.scenarios.evaluation.postgres.business_change import (
     PgBusinessChangeFkValidationForOrderItemsFkValidateStormEvaluatorCase,
 )
 from src.scenarios.faults import BaseFaultInjector, FaultLifecycleContext
-from src.scenarios.workloads import WorkloadProfile
+from src.workloads.specs import WorkloadProfile
 
-from ...base import (
-    DifficultyCalibration,
-    BackgroundWorkloadSpec,
-    CaseResourceSpec,
-    FaultPlan,
-    PostgresCaseRuntime,
-    PostgresScenario,
-    PostgresScenarioCase,
-)
+from src.scenarios.base import DifficultyCalibration, FaultPlan, PostgresScenario, PostgresScenarioCase
+from src.workloads.specs import BackgroundWorkloadSpec
+from src.execution.specs import CaseResourceSpec, PostgresCaseRuntime
 
 SCENARIO_ID = "pg_business_change_fk_validation"
 

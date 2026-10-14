@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.history.metrics import format_utc_timestamp, parse_utc_timestamp
-from src.execution.environment import TiDBEnv
+from src.execution.environments.tidb import TiDBEnv
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb.health_check import (
     TidbHealthCheckEmptyRegionLeaderSkewFrozenHistoryScenario,
@@ -577,7 +577,7 @@ def main() -> None:
     parser.add_argument("--mode", choices=["mock", "reference", "llm"], default="reference")
     parser.add_argument("--port", type=int, default=28680)
     parser.add_argument("--container-name", default="tidb-frozen-history-hc02")
-    parser.add_argument("--model", required=True, help="LLM model name")
+    parser.add_argument("--model")
     parser.add_argument("--config-path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--seed", type=int, default=20260816)

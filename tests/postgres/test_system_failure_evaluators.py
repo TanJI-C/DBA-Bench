@@ -4,7 +4,8 @@ import pytest
 
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.protocol import EvaluationContext, StructuredReport
+from src.scenarios.evaluation.protocol import EvaluationContext
+from src.protocols.report import StructuredReport
 from src.scenarios.evaluation.outcome import ReportTermsVerifier
 
 
