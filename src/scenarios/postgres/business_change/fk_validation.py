@@ -496,6 +496,7 @@ class PgBusinessChangeFkValidationInjector(BaseFaultInjector):
                 f"convalidated={payload['result'][0][0]!r}"
             )
         print(f"[FaultInjector:{type(self).__name__}] Fault image installed.")
+        self.activate(context)
 
     def activate(self, context: FaultLifecycleContext) -> None:
         self._configure(context.config, context.env)

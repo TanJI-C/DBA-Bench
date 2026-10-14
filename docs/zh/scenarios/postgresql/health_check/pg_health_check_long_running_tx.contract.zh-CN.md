@@ -94,6 +94,8 @@ language: zh-CN
 - 背景画像：未声明
 - 评估器：`src.scenarios.evaluation.postgres.health_check.long_running_tx.PgHealthCheckLongRunningTxForStressIdleTransactionCleanup03EvaluatorCase`
 
+故障启动遵守 bounded Scenario 生命周期。`fault_snapshot=off` 时，`install()` 必须在观测和 Agent 开始前建立持久化现场及运行中的阻塞会话。`save` 在安装后先通过 `quiesce()` 停止会话再保存镜像，之后通过 `activate()` 重建运行时；`use` 从已有现场重建运行时。Persistent Scenario 使用独立 Event 能力，不调用此注入器。
+
 ## 4. Agent 可见的证据
 
 - Agent 接收注册的告警，并在运行时暴露的范围内通过当前工具协议观察环境：`query_metrics`、`execute_sql`、`manage_instance`、`read_log`、`help`、`submit` 与 `exit`。

@@ -88,7 +88,7 @@ responses, or stuff answers into injection evidence.
 
 All five phase signatures are exactly `self, context`:
 
-1. `install`: create the complete persistent fault and base state in the fresh environment;
+1. `install`: create the complete fault in the fresh environment, including persistent state and live runtime symptoms;
 2. `activate`: validate the persistent state and restore runtime symptoms after the fault image
    starts;
 3. `prepare_observability`: make the real evidence visible to the official tools and return the

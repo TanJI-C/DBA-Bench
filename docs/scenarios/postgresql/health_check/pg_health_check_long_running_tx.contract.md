@@ -90,6 +90,8 @@ The following fields are the public state boundary exposed by the current Case c
 - Background profiles: none declared
 - Evaluator: `src.scenarios.evaluation.postgres.health_check.long_running_tx.PgHealthCheckLongRunningTxForStressIdleTransactionCleanup03EvaluatorCase`
 
+Fault startup follows the bounded Scenario lifecycle in every snapshot mode. With `fault_snapshot=off`, `install()` establishes both the persistent fixture and the live blocking sessions before observation or Agent execution. In `save`, installation is followed by `quiesce()` before the image is captured; `activate()` rebuilds runtime sessions after the image starts. In `use`, `activate()` rebuilds them from the saved fixture. The Persistent Scenario domain owns separate Event capabilities and does not use this injector.
+
 ## 4. Agent-visible evidence
 
 - The Agent receives the registered alert and observes the environment through the current tool protocol: `query_metrics`, `execute_sql`, `manage_instance`, `read_log`, `help`, `submit`, and `exit` where the runtime exposes them.

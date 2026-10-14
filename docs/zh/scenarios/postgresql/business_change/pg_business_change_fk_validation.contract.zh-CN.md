@@ -51,6 +51,8 @@ PostgreSQL real semantics (probed on PG16): `VALIDATE CONSTRAINT` takes `ShareUp
 - Difficulty labels and per-case calibration values are maintained in the code registry and the scenario catalogs; see the [difficulty standard](../../../../standards/scenario/difficulty.standard.md). This contract intentionally does not duplicate the measured values.
 
 
+故障启动遵守 bounded Scenario 生命周期。`fault_snapshot=off` 时，`install()` 必须在观测和 Agent 开始前建立持久化现场及运行中的阻塞会话。`save` 在安装后先通过 `quiesce()` 停止会话再保存镜像，之后通过 `activate()` 重建运行时；`use` 从已有现场重建运行时。Persistent Scenario 使用独立 Event 能力，不调用此注入器。
+
 ## 4. Agent-visible evidence
 
 - The Agent receives the registered alert and observes the environment through `query_metrics`, `execute_sql`, `manage_instance`, `read_log`, `help`, `submit`, and `exit`.

@@ -76,7 +76,7 @@ language: zh-CN
 
 五阶段签名都只能是 `self, context`：
 
-1. `install`：在新环境创建完整持久故障和基础状态；
+1. `install`：在新环境创建完整故障，包括持久化现场和运行中的故障症状；
 2. `activate`：校验持久状态，并在 fault image 启动后恢复运行时症状；
 3. `prepare_observability`：让正式工具可见真实证据，并返回 evaluator 所需的 injection evidence；
 4. `quiesce`：保存 fault image 前停止运行时资源，只保留可持久化状态；
