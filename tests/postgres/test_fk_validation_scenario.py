@@ -524,8 +524,7 @@ def test_injector_install_creates_fault_image_and_recovers_cleanly(case_id):
     assert f"ADD CONSTRAINT {CASES[case_id].fk_name}" in installed
     assert "NOT VALID" in installed
 
-    # 生产生命周期中 baseline 由 activate 在停摆建立前捕获。
-    injector._baseline = injector._capture_baseline()
+    assert injector._threads, "fresh install must start the incident sessions"
     evidence = injector.prepare_observability(context)
     assert evidence["baseline"]["order_items_rows"] == 800_000
     assert "pipeline_steps" in evidence
@@ -544,6 +543,8 @@ def test_injector_activate_reaches_storm_stall_and_quiesce_stops_sessions():
     injector._connect = lambda *args, **kwargs: FakeConnection()
 
     injector.install(context)
+    assert injector._threads, "fresh install must start incident sessions"
+    injector.quiesce(context)
     statements_after_install = len(context.env.statements)
     injector.activate(context)
     assert injector._threads, "storm activation must start incident sessions"

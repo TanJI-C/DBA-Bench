@@ -34,6 +34,7 @@ _TPCDS_BACKED_TESTS = frozenset(
     tests/postgres/test_container_cpu_budget.py
     tests/postgres/test_evaluator_followup_regressions.py
     tests/postgres/test_fault_activation_contracts.py
+    tests/postgres/test_fault_install_runtime.py
     tests/postgres/test_fault_injector_runtime_cleanup.py
     tests/postgres/test_fk_validation_scenario.py
     tests/postgres/test_frozen_history_capture_durations.py

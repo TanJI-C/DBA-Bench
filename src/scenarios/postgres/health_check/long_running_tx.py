@@ -439,17 +439,13 @@ class PgHealthCheckLongRunningTxInjector(BaseFaultInjector):
         self._scrub_pg_stat_statements()
         time.sleep(1)
         print(f"[FaultInjector:PgHealthCheckLongRunningTxInjector] Fixture state prepared.")
+        self.activate(context)
 
     def activate(self, context: FaultLifecycleContext):
         env = context.env
         self._configure(context.config, env)
-        # The blocker session opens at Event activation, not at latent setup:
-        # holding customer locks from install would deadlock later fixtures
-        # whose DDL targets the same table. _start_runtime is the observability
-        # authority for the blocker (it blocks on the thread's ready signal and
-        # verifies the session); no second poll happens here because the mock's
-        # inspection plan may legitimately terminate the blocker as soon as the
-        # event's timeline slot begins.
+        # Fresh install and snapshot restoration share the same runtime setup.
+        # _start_runtime waits for and verifies the blocker before returning.
         self._start_runtime()
         with env.metrics_hidden():
             self._start_runtime_noise()
@@ -793,10 +789,9 @@ class PgHealthCheckLongRunningTxInjector(BaseFaultInjector):
         return {}
 
     def quiesce(self, context: FaultLifecycleContext):
-        """Persistent Scenario keeps the idle-transaction fault alive until the
-        final reverse cleanup; stopping the runtime here would remove the very
-        session the Event must keep holding."""
-        print(f"[FaultInjector:PgHealthCheckLongRunningTxInjector] quiesce (keep fault session for persistent scenario)...")
+        """Stop non-persistable sessions before capturing the fault image."""
+        self._configure(context.config, context.env)
+        self._stop_runtime(context)
 
     def recover(self, context: FaultLifecycleContext):
         print(f"[FaultInjector:PgHealthCheckLongRunningTxInjector] Recovering...")

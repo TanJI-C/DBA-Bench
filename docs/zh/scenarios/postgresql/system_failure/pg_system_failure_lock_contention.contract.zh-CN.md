@@ -62,6 +62,8 @@ language: zh-CN
 - 评测器：`src.scenarios.evaluation.postgres.system_failure.lock_contention.PgSystemFailureLockContentionForCustomerProfileLockQueueSimpleEvaluatorCase`
 - 校准证据（工具 m/n）：代码中未声明
 
+故障启动遵守 bounded Scenario 生命周期。`fault_snapshot=off` 时，`install()` 必须在观测和 Agent 开始前建立持久化现场及运行中的阻塞会话。`save` 在安装后先通过 `quiesce()` 停止会话再保存镜像，之后通过 `activate()` 重建运行时；`use` 从已有现场重建运行时。Persistent Scenario 使用独立 Event 能力，不调用此注入器。
+
 ## 4. Agent 可见证据
 
 - Agent 接收注册的题面（alert），并通过当前的工具协议观察环境：`query_metrics`、`execute_sql`、`manage_instance`、`read_log`、`help`、`submit` 与 `exit`（以运行时实际暴露的为准）。

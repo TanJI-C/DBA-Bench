@@ -128,6 +128,7 @@ class PgSystemFailureLockContentionInjector(BaseFaultInjector):
         self._configure(config, env)
         with env.metrics_hidden():
             self._install_persistent_state()
+        self.activate(context)
 
     def _configure(self, config: Mapping[str, object], env) -> None:
         self.env = env
