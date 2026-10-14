@@ -185,7 +185,7 @@ _REFERENCE_DIAGNOSIS = {
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class TidbResourceGovernanceBrSloFrozenHistoryCase(TiDBScenarioCase):
+class TidbResourceGovernanceBrSloFrozenHistoryScenarioCase(TiDBScenarioCase):
     database: str
     business_table: str
     job_table: str
@@ -925,7 +925,7 @@ class TidbResourceGovernanceBrSloFrozenHistoryInjector(TidbResourceGovernanceBrS
         connection.close()
 
 
-_CASE = TidbResourceGovernanceBrSloFrozenHistoryCase(
+_CASE = TidbResourceGovernanceBrSloFrozenHistoryScenarioCase(
     case_id="br_slo_history_calibration",
     case_no=0,
     evaluator=TidbResourceGovernanceBrSloFrozenHistoryEvaluatorCase,
@@ -1158,7 +1158,7 @@ class TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario(TiDBSce
     description = "Frozen-history historical reconstruction of a BR foreground-SLO resource incident."
     cases = (_CASE, _INVESTIGATION_CASE)
 
-    def build_fault_plan(self, case: TidbResourceGovernanceBrSloFrozenHistoryCase) -> tuple[FaultPlan, ...]:
+    def build_fault_plan(self, case: TidbResourceGovernanceBrSloFrozenHistoryScenarioCase) -> tuple[FaultPlan, ...]:
         return (
             FaultPlan(
                 injector_type=TidbResourceGovernanceBrSloFrozenHistoryInjector,
@@ -1185,6 +1185,6 @@ class TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario(TiDBSce
 
 __all__ = (
     "TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario",
-    "TidbResourceGovernanceBrSloFrozenHistoryCase",
+    "TidbResourceGovernanceBrSloFrozenHistoryScenarioCase",
     "TidbResourceGovernanceBrSloFrozenHistoryInjector",
 )

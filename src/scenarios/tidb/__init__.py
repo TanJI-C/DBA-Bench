@@ -146,7 +146,7 @@ from .resource_governance import (
     TidbResourceGovernanceConnectionBalancingCase,
     TidbResourceGovernanceConnectionBalancingScenario,
     TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario,
-    TidbResourceGovernanceBrSloFrozenHistoryCase,
+    TidbResourceGovernanceBrSloFrozenHistoryScenarioCase,
     TidbResourceGovernanceBrSloFrozenHistoryInjector,
     TidbResourceGovernanceLightningBudgetFrozenHistoryForBudgetCalibrationScenarioCase,
     TidbResourceGovernanceLightningBudgetFrozenHistoryInjector,

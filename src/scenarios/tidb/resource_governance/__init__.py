@@ -37,7 +37,7 @@ from .runaway_query import (
 )
 from .br_slo_frozen_history import (
     TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario,
-    TidbResourceGovernanceBrSloFrozenHistoryCase,
+    TidbResourceGovernanceBrSloFrozenHistoryScenarioCase,
     TidbResourceGovernanceBrSloFrozenHistoryInjector,
 )
 from .lightning_budget_frozen_history import (
@@ -74,7 +74,7 @@ __all__ = (
     "TidbResourceGovernanceConnectionBalancingForMultiTidbConnectionBalanceAndDrainScenarioCase",
     "TidbResourceGovernanceConnectionBalancingScenario",
     "TidbResourceGovernanceBrSloAdaptiveThrottlingFrozenHistoryScenario",
-    "TidbResourceGovernanceBrSloFrozenHistoryCase",
+    "TidbResourceGovernanceBrSloFrozenHistoryScenarioCase",
     "TidbResourceGovernanceBrSloFrozenHistoryInjector",
     "TidbResourceGovernanceLightningBudgetFrozenHistoryForBudgetCalibrationScenarioCase",
     "TidbResourceGovernanceLightningBudgetFrozenHistoryInjector",

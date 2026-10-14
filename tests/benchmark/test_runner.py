@@ -1023,9 +1023,12 @@ runtime:
         container_cpu_limit=0.5,
         container_memory_mb=256,
     )
-    assert resources["pg_system_failure_lock_contention"] == resources[
-        "pg_system_failure_oom"
-    ]
+    assert resources["pg_system_failure_lock_contention"] == CaseResourceSpec(
+        worker_physical_cores=1,
+        worker_memory_mb=512,
+        container_cpu_limit=0.5,
+        container_memory_mb=512,
+    )
     assert resources["pg_system_failure_deadlock"] == CaseResourceSpec(
         worker_physical_cores=1,
         worker_memory_mb=512,
@@ -1037,6 +1040,10 @@ runtime:
         memory_mb_per_worker=512,
         numa_policy="separate",
     )
+    assert derive_worker_demand(
+        [spec for spec in specs if spec.scenario_id != "pg_system_failure_deadlock"],
+        manifest.runtime.isolation,
+    ) == demand
 
 
 def test_resource_governance_contracts_and_formal_matrix(tmp_path):
