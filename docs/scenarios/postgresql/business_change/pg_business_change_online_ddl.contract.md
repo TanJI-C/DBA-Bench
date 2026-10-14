@@ -8,6 +8,7 @@ scope: [postgres, business_change, pg_business_change_online_ddl]
 summary: Current code-backed contract snapshot for pg_business_change_online_ddl; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_business_change_online_ddl`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Online schema change on a large hot PostgreSQL order_line table.
-- Alert/symptom: 发布窗口告警：订单写入链路正在上线配送备注能力，应用映射字段为 ol_delivery_note。当前 order-entry 读写延迟 SLO 接近阈值，连接数、事务吞吐和发布预检任务同时升高。请确认应变更的在线业务对象，在不中断下单流量的前提下完成结构变更，并复查变更已生效。
+- Alert/symptom: Release window alert: the order write path is rolling out the delivery-note capability, and the application maps it to the field ol_delivery_note. The current order-entry read/write latency SLO is approaching its threshold, and connection count, transaction throughput, and release precheck jobs are all rising at the same time. Confirm the online business object that should be changed, complete the schema change without interrupting order-placement traffic, and re-check that the change has taken effect.
 - Initial-state fields: `status`, `table`, `target_column`, `workload`
 - Expected-target fields: `required_strategy`, `status`, `table`, `target_column`
 - Background profiles: order_entry_latency_probe, delivery_note_audit_rollup, release_queue_backfill_probe, order_line_sample_count_decoy, release_precheck_lock_probe, missing_delivery_note_cache_log_noise
@@ -50,7 +51,9 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Simplified online nullable-column release on a moderately large hot order table.
-- Alert/symptom: 发布窗口告警：订单链路正在上线礼赠备注能力，当前写入仍在持续，发布预检观察到短暂锁竞争。请确认实际在线对象和缺失结构，使用快速失败并可重试的方式完成变更，随后核验业务结构。
+- Alert/symptom: Release window alert: the order path is rolling out the gift-note capability; writes are still ongoing, and the release precheck observed brief lock contention. Confirm the actual online object and the missing structure, complete the change in a fail-fast and retryable way, and then verify the business structure.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `status`, `target_column`, `workload`
 - Expected-target fields: `required_strategy`, `status`
 - Background profiles: order_entry_latency_probe, delivery_note_audit_rollup

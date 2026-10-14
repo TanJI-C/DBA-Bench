@@ -37,6 +37,10 @@ DBA-Bench 让 Agent 在真实数据库环境里完成运维任务，并由数据
 环境要求与完整准备（Python、Docker、镜像源、LLM 凭证、embedding/judge 模型）见
 [docs/getting-started.md](docs/getting-started.md)。
 
+> 中文文档：`docs/` 下的文档为英文原版；中文版本位于 [docs/zh/](docs/zh/index.md)
+> （子目录结构镜像，文件名带 `.zh-CN.md` 后缀），索引见
+> [docs/zh/index.md](docs/zh/index.md)。
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -U pip && pip install -e .

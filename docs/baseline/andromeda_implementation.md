@@ -1,140 +1,144 @@
-# Andromeda Baseline 实现文档
+---
+language: en
+---
 
-## 1. 论文原始算法
+# Andromeda Baseline Implementation Document
 
-### 1.1 概述
+## 1. Original Paper Algorithm
 
-Andromeda (SIGMOD 2025) 是一个基于检索增强生成（RAG）的 DBMS 配置调试系统。
-给定用户的自然语言问题描述，系统自动诊断配置不当的 knobs 并生成修复建议。
+### 1.1 Overview
 
-**论文信息：**
-- 标题：Automatic Database Configuration Debugging using Retrieval-Augmented Language Models
-- 作者：Sibei Chen, Ju Fan, Bin Wu, Nan Tang 等
-- 单位：中国人民大学 + 阿里巴巴
-- 发表：SIGMOD 2025 (DOI: 10.1145/3709663)
-- arXiv：2412.07548
+Andromeda (SIGMOD 2025) is a retrieval-augmented generation (RAG)-based DBMS configuration debugging system.
+Given a natural-language problem description from the user, the system automatically diagnoses misconfigured knobs and generates remediation suggestions.
 
-### 1.2 系统架构（两阶段）
+**Paper information:**
+- Title: Automatic Database Configuration Debugging using Retrieval-Augmented Language Models
+- Authors: Sibei Chen, Ju Fan, Bin Wu, Nan Tang, et al.
+- Affiliation: Renmin University of China + Alibaba
+- Published: SIGMOD 2025 (DOI: 10.1145/3709663)
+- arXiv: 2412.07548
 
-#### Offline Stage（离线阶段）
+### 1.2 System Architecture (Two Stages)
 
-**1. 异构文档统一嵌入学习**
+#### Offline Stage
 
-论文训练了一个对比学习编码器，将三类异构文档映射到统一向量空间：
-- 历史问题（StackOverflow, MySQL Forum）：描述"什么出了问题"
-- 故障排除手册（MySQL/PostgreSQL Manual）：描述"如何修复"
-- 配置 knob 文档：描述参数含义和取值范围
+**1. Unified Embedding Learning for Heterogeneous Documents**
 
-对比学习目标：
+The paper trains a contrastive-learning encoder that maps three types of heterogeneous documents into a unified vector space:
+- Historical questions (StackOverflow, MySQL Forum): describe "what went wrong"
+- Troubleshooting manuals (MySQL/PostgreSQL Manual): describe "how to fix it"
+- Configuration knob documentation: describes parameter meanings and valid value ranges
+
+Contrastive learning objective:
 ```
 L = -log(exp(sim(q, d+)/τ) / Σ exp(sim(q, d-)/τ))
 ```
-其中 q 为用户问题编码，d+ 为正样本文档，d- 为负样本文档，τ 为温度参数。
+where q is the encoded user question, d+ is a positive sample document, d- is a negative sample document, and τ is the temperature parameter.
 
-**2. 逻辑链数据合成（Logic-Chain-Based Task Decomposition）**
+**2. Logic-Chain Data Synthesis (Logic-Chain-Based Task Decomposition)**
 
-为解决标注数据不足问题，论文设计了逻辑链合成策略：
+To address the lack of annotated data, the paper designs a logic-chain synthesis strategy:
 ```
-触发行为 → 导致问题的行为 → 解决问题的功能 → 对应的证据
+Triggering action → Problem-causing behavior → Problem-solving functionality → Corresponding evidence
 ```
-反向遍历此逻辑链，利用 GPT-4 生成多样化的训练样本。
+By traversing this logic chain in reverse, GPT-4 is used to generate diverse training samples.
 
-**3. LLM 微调**
+**3. LLM Fine-Tuning**
 
-基于 Qwen2-7B 进行：
-- Continual Pre-Training (CPT)：注入数据库领域知识（DBMS 手册、SQL 文档、StackOverflow Q&A）
-- Supervised Fine-Tuning (SFT)：训练证据推理能力（使用逻辑链合成的标注数据）
+Based on Qwen2-7B:
+- Continual Pre-Training (CPT): injects database domain knowledge (DBMS manuals, SQL documentation, StackOverflow Q&A)
+- Supervised Fine-Tuning (SFT): trains evidence reasoning capability (using logic-chain-synthesized annotated data)
 
-#### Online Stage（在线阶段）
+#### Online Stage
 
-论文的在线推理是一个 **single-shot pipeline**，包含三个步骤：
+The paper's online inference is a **single-shot pipeline** consisting of three steps:
 
-**Step 1: Multi-Source Evidence Retrieval（多源证据检索）**
-
-```
-输入: 用户自然语言问题 Q
-输出: top-k 相关文档集合 D = {d1, d2, ..., dk}
-
-算法:
-1. 用训练好的编码器 E 将 Q 编码为向量: v_q = E(Q)
-2. 异构文档检索:
-   a. 历史问题检索: 对所有历史问题 {h_i} 计算 sim(v_q, E(h_i))，取 top-5
-   b. 手册段落检索: 对所有手册段落 {m_j} 计算 sim(v_q, E(m_j))，取 top-5
-3. 合并结果: D = top-5(历史问题) ∪ top-5(手册段落)
-```
-
-关键点：编码器通过对比学习对齐了"问题描述"和"解决方案"的语义空间，
-使得描述问题的 query 能检索到描述解决方案的手册段落。
-
-**Step 2: Troublesome Telemetry Retrieval（异常遥测检索）**
+**Step 1: Multi-Source Evidence Retrieval**
 
 ```
-输入: 557 个性能指标的时间序列数据（Prometheus, 1s 采样）
-输出: top-k 相关异常描述 T = {t1, t2, ..., tk}
+Input: user natural-language question Q
+Output: set of top-k relevant documents D = {d1, d2, ..., dk}
 
-算法:
-1. Anomalous Telemetry Detection（异常检测）:
-   对每个指标 m_i 的时间序列 X_i:
-   a. STL 分解: X_i = Trend_i + Seasonal_i + Residual_i
-      - 使用 LOESS (Locally Estimated Scatterplot Smoothing)
-      - period 根据采样频率设定
-   b. 异常判定: 若 |Residual_i[t]| > threshold × σ(Residual_i)
-      则标记 (m_i, t) 为异常点
-
-2. Telemetry-to-Text Transformation（文本化）:
-   对每个异常点生成自然语言描述:
-   t_j = "指标 {name} 在 {timestamp} 出现异常，
-          观测值 {value}，偏离正常范围 {deviation}"
-
-3. Relevant Telemetry Selection（相关性排序）:
-   a. 用同一编码器 E 编码异常描述: v_t = E(t_j)
-   b. 计算与用户问题的相似度: score_j = sim(v_q, v_t)
-   c. 取 top-k 最相关的异常描述
+Algorithm:
+1. Encode Q into a vector with the trained encoder E: v_q = E(Q)
+2. Heterogeneous document retrieval:
+   a. Historical question retrieval: compute sim(v_q, E(h_i)) for all historical questions {h_i}, take top-5
+   b. Manual passage retrieval: compute sim(v_q, E(m_j)) for all manual passages {m_j}, take top-5
+3. Merge results: D = top-5(historical questions) ∪ top-5(manual passages)
 ```
 
-**Step 3: Configuration Reasoning（配置推理）**
+Key point: the encoder aligns the semantic spaces of "problem descriptions" and "solutions" through contrastive learning,
+so that a query describing a problem can retrieve manual passages describing solutions.
+
+**Step 2: Troublesome Telemetry Retrieval**
 
 ```
-输入: 用户问题 Q, 检索文档 D, 异常描述 T
-输出: 配置修改建议 R = {(knob, value, rationale)}
+Input: time series data of 557 performance metrics (Prometheus, 1s sampling)
+Output: top-k relevant anomaly descriptions T = {t1, t2, ..., tk}
 
-算法（两阶段 prompting）:
+Algorithm:
+1. Anomalous Telemetry Detection (anomaly detection):
+   For the time series X_i of each metric m_i:
+   a. STL decomposition: X_i = Trend_i + Seasonal_i + Residual_i
+      - Uses LOESS (Locally Estimated Scatterplot Smoothing)
+      - period is set according to the sampling frequency
+   b. Anomaly decision: if |Residual_i[t]| > threshold × σ(Residual_i),
+      mark (m_i, t) as an anomaly point
+
+2. Telemetry-to-Text Transformation (textualization):
+   Generate a natural-language description for each anomaly point:
+   t_j = "Metric {name} is anomalous at {timestamp},
+          observed value {value}, deviates from the normal range by {deviation}"
+
+3. Relevant Telemetry Selection (relevance ranking):
+   a. Encode the anomaly descriptions with the same encoder E: v_t = E(t_j)
+   b. Compute similarity to the user question: score_j = sim(v_q, v_t)
+   c. Take the top-k most relevant anomaly descriptions
+```
+
+**Step 3: Configuration Reasoning**
+
+```
+Input: user question Q, retrieved documents D, anomaly descriptions T
+Output: configuration change recommendations R = {(knob, value, rationale)}
+
+Algorithm (two-stage prompting):
 
 Phase 1 — Knob Identification:
-  prompt = "给定以下证据 [Q + D + T]，识别与问题相关的配置 knobs"
+  prompt = "Given the following evidence [Q + D + T], identify the configuration knobs relevant to the problem"
   knobs = LLM(prompt)  → ["shared_buffers", "work_mem", ...]
 
 Phase 2 — Value Recommendation:
-  prompt = "对于 knobs={knobs}，当前值={current}，
-           基于证据 [D + T] 推荐具体配置值"
+  prompt = "For knobs={knobs} with current values={current},
+           recommend specific configuration values based on evidence [D + T]"
   recommendations = LLM(prompt)  → [{knob, value, rationale}, ...]
 ```
 
-**Interactive and Adaptive Debugging（交互式调试）**
+**Interactive and Adaptive Debugging**
 
-论文还训练了一个判断模型，决定是否需要向用户请求更多信息：
-- 输入：用户问题 + 当前可用证据
-- 输出：(需要更多信息?, 具体收集步骤)
-- 训练数据来源：StackOverflow 中回答者要求提问者补充信息的交互
+The paper also trains a decision model that determines whether more information needs to be requested from the user:
+- Input: user question + currently available evidence
+- Output: (need more information?, specific collection steps)
+- Training data source: StackOverflow interactions in which answerers ask questioners to provide more information
 
-### 1.3 评估结果
+### 1.3 Evaluation Results
 
-| 数据集 | 指标 | Andromeda | Best Baseline |
+| Dataset | Metric | Andromeda | Best Baseline |
 |--------|------|-----------|---------------|
 | MySQL SO (174) | F1 | 0.441 | 0.332 |
 | MySQL Forum (49) | F1 | 0.398 | 0.301 |
 | PostgreSQL SO (57) | F1 | 0.425 | 0.310 |
 | MySQL Runnable (100) | SuccessRate | 0.79 | 0.57 |
 
-端到端运行时间：~5-7 秒/问题
+End-to-end runtime: ~5-7 seconds per question
 
 ---
 
-## 2. 我们的实现逻辑
+## 2. Our Implementation Logic
 
-### 2.1 整体架构
+### 2.1 Overall Architecture
 
-将 Andromeda 的 single-shot pipeline 适配为 DBA-Bench 的交互式 Agent：
+Adapts Andromeda's single-shot pipeline into DBA-Bench's interactive Agent:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -148,7 +152,8 @@ Phase 2 — Value Recommendation:
 │                               │                          │
 │                    ┌──────────▼─────────┐               │
 │                    │ ANALYZE_AND_REASON │               │
-│                    │ (内部执行完整pipeline)│               │
+│                    │ (runs full pipeline│               │
+│                    │  internally)       │               │
 │                    └──────────┬─────────┘               │
 │                               │                          │
 │                    ┌──────────▼─────────┐               │
@@ -156,17 +161,17 @@ Phase 2 — Value Recommendation:
 │                    └────────────────────┘               │
 │                                                          │
 │  Components:                                             │
-│  ├── AndromedaTelemetry  (STL 异常检测)                  │
+│  ├── AndromedaTelemetry  (STL anomaly detection)         │
 │  ├── AndromedaRetriever  (Dense Retrieval)               │
-│  └── LLMAgent            (两阶段推理)                    │
+│  └── LLMAgent            (two-stage reasoning)           │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 状态机各阶段
+### 2.2 State Machine Stages
 
 **Turn 1: COLLECT_TELEMETRY**
 ```python
-# 发出 7 个 query_metrics 调用
+# Issue 7 query_metrics calls
 actions = [
     {"api": "query_metrics", "args": {"metric_type": "cpu"}},
     {"api": "query_metrics", "args": {"metric_type": "memory"}},
@@ -176,7 +181,7 @@ actions = [
     {"api": "query_metrics", "args": {"metric_type": "qps"}},
     {"api": "query_metrics", "args": {"metric_type": "active_connections"}},
 ]
-# 结果通过 _pending_metric_queue 按顺序关联到对应 metric_type
+# Results are associated with the corresponding metric_type in order via _pending_metric_queue
 ```
 
 **Turn 2: COLLECT_LOGS_CONFIG**
@@ -187,27 +192,27 @@ actions = [
 ]
 ```
 
-**Turn 3: ANALYZE_AND_REASON（核心，内部执行完整 pipeline）**
+**Turn 3: ANALYZE_AND_REASON (core; runs the full pipeline internally)**
 ```python
 def _do_analyze_and_reason(self):
-    # Step 1: STL 异常检测
+    # Step 1: STL anomaly detection
     anomalies = self._telemetry.detect_anomalies()
 
     # Step 2: Telemetry-to-Text
     anomaly_texts = self._telemetry.get_anomaly_texts()
 
-    # Step 3: 按语义相似度排序异常描述
+    # Step 3: Rank anomaly descriptions by semantic similarity
     ranked_texts = self._retriever.rank_telemetry_texts(alert, anomaly_texts)
 
-    # Step 4: 文档检索 (历史 Q&A + 手册)
+    # Step 4: Document retrieval (historical Q&A + manual)
     qa_docs = self._retriever.retrieve_by_type(alert, "historical_qa")
     manual_docs = self._retriever.retrieve_by_type(alert, "manual")
 
-    # Step 5: Phase 1 LLM — 识别相关 knobs
+    # Step 5: Phase 1 LLM — identify relevant knobs
     phase1_result = self._call_llm(PHASE1_PROMPT.format(...))
     knobs = parse_knobs(phase1_result)
 
-    # Step 6: Phase 2 LLM — 推荐具体值
+    # Step 6: Phase 2 LLM — recommend specific values
     phase2_result = self._call_llm(PHASE2_PROMPT.format(...))
     diagnosis = parse_diagnosis(phase2_result)
 ```
@@ -217,210 +222,210 @@ def _do_analyze_and_reason(self):
 actions = [{"api": "submit", "args": {"diagnosis": diagnosis_text}}]
 ```
 
-### 2.3 STL 异常检测实现
+### 2.3 STL Anomaly Detection Implementation
 
 ```python
 class AndromedaTelemetry:
     def _stl_anomaly_detection(self, metric_type, values, timestamps):
-        # 使用 statsmodels.tsa.seasonal.STL（与论文相同的算法）
+        # Uses statsmodels.tsa.seasonal.STL (the same algorithm as the paper)
         stl = STL(values, period=self.period, robust=True)
         result = stl.fit()
         residuals = result.resid
 
-        # 异常判定：残差超过 ±threshold × σ
+        # Anomaly decision: residual exceeds ±threshold × σ
         std = np.std(residuals)
         mean = np.mean(residuals)
         for i, r in enumerate(residuals):
             severity = abs(r - mean) / std
-            if severity >= self.anomaly_threshold:  # 默认 2.0
-                # 标记为异常
+            if severity >= self.anomaly_threshold:  # default 2.0
+                # mark as anomalous
                 ...
 ```
 
-降级策略：
-- 时间序列长度 < 2×period → 退化为简单 z-score 检测
-- 标量指标（非时间序列）→ 与已知健康阈值比较
-- statsmodels 不可用 → 退化为 z-score 检测
+Fallback strategy:
+- Time series length < 2×period → falls back to simple z-score detection
+- Scalar metrics (non-time-series) → compared against known health thresholds
+- statsmodels unavailable → falls back to z-score detection
 
-### 2.4 文档检索实现
+### 2.4 Document Retrieval Implementation
 
 ```python
 class AndromedaRetriever:
     def retrieve(self, query):
-        # 使用 sentence-transformers 编码 query
+        # Encode the query with sentence-transformers
         query_emb = model.encode([query], normalize_embeddings=True)
 
-        # 计算与所有文档的 cosine 相似度
+        # Compute cosine similarity against all documents
         scores = np.dot(self._embeddings, query_emb.T).flatten()
 
-        # 返回 top-k
+        # Return top-k
         top_indices = np.argsort(scores)[::-1][:self.top_k]
         return [self._documents[i] for i in top_indices]
 
     def rank_telemetry_texts(self, alert, telemetry_texts):
-        # 对异常描述按与 alert 的语义相似度排序
+        # Rank anomaly descriptions by semantic similarity to the alert
         alert_emb = model.encode([alert], normalize_embeddings=True)
         text_embs = model.encode(telemetry_texts, normalize_embeddings=True)
         scores = np.dot(text_embs, alert_emb.T).flatten()
         return [telemetry_texts[i] for i in np.argsort(scores)[::-1]]
 ```
 
-降级策略：
-- sentence-transformers 不可用 → 退化为关键词匹配
+Fallback strategy:
+- sentence-transformers unavailable → falls back to keyword matching
 
-### 2.5 文件结构
+### 2.5 File Structure
 
 ```
 src/control/baselines/
-    andromeda_agent.py       # 主 Agent 状态机
-    andromeda_telemetry.py   # STL 异常检测 + Telemetry-to-Text
+    andromeda_agent.py       # Main Agent state machine
+    andromeda_telemetry.py   # STL anomaly detection + Telemetry-to-Text
     andromeda_retriever.py   # Dense Retrieval (sentence-transformers)
-    andromeda_prompts.py     # 两阶段推理 Prompt 模板
-    andromeda_types.py       # 数据类型定义
+    andromeda_prompts.py     # Two-stage reasoning prompt templates
+    andromeda_types.py       # Data type definitions
 
 knowledge/andromeda/
-    pg_manual/               # PostgreSQL 手册段落
-    historical_qa/           # 历史 Q&A 对
+    pg_manual/               # PostgreSQL manual passages
+    historical_qa/           # Historical Q&A pairs
 ```
 
 ---
 
-## 3. 与原始论文的差异
+## 3. Differences from the Original Paper
 
-### 3.1 差异总览
+### 3.1 Difference Overview
 
-| 组件 | 论文实现 | 我们的实现 | 差异类型 | 影响 |
+| Component | Paper implementation | Our implementation | Difference type | Impact |
 |------|---------|-----------|---------|------|
-| 文档编码器 | 对比学习训练的统一嵌入模型 | sentence-transformers (bge-base-en-v1.5) | **必要替换** | 检索质量可能下降 |
-| 推理 LLM | Qwen2-7B (CPT + SFT) | 通用 LLM (GPT-4/Claude) | **必要替换** | 推理能力不同 |
-| STL 异常检测 | STL (LOESS) | statsmodels.tsa.seasonal.STL | **忠实复现** | 无 |
-| 异常指标排序 | 对比学习编码器 + cosine | sentence-transformers + cosine | **近似替换** | 排序质量可能略有差异 |
-| 知识库来源 | StackOverflow + MySQL Forum + MySQL Manual | PostgreSQL Manual + 构造的配置 Q&A | **环境适配** | 覆盖范围不同 |
-| 交互式调试 | 微调模型判断是否需要更多信息 | 固定收集策略（总是收集所有指标） | **简化** | 失去自适应能力 |
-| 执行模式 | Single-shot pipeline | 多轮状态机 | **必要适配** | 增加了 turn 开销 |
-| 逻辑链数据合成 | GPT-4 生成训练数据 | 不实现（无微调） | **省略** | 与推理 LLM 替换相关 |
-| Continual Pre-Training | 在 DBMS 文档上继续预训练 | 不实现 | **省略** | 与推理 LLM 替换相关 |
+| Document encoder | Contrastively trained unified embedding model | sentence-transformers (bge-base-en-v1.5) | **Necessary substitution** | Retrieval quality may degrade |
+| Reasoning LLM | Qwen2-7B (CPT + SFT) | General-purpose LLM (GPT-4/Claude) | **Necessary substitution** | Different reasoning capability |
+| STL anomaly detection | STL (LOESS) | statsmodels.tsa.seasonal.STL | **Faithful reproduction** | None |
+| Anomalous metric ranking | Contrastive-learning encoder + cosine | sentence-transformers + cosine | **Approximate substitution** | Ranking quality may differ slightly |
+| Knowledge base source | StackOverflow + MySQL Forum + MySQL Manual | PostgreSQL Manual + constructed configuration Q&A | **Environment adaptation** | Different coverage |
+| Interactive debugging | Fine-tuned model decides whether more information is needed | Fixed collection strategy (always collects all metrics) | **Simplification** | Loss of adaptivity |
+| Execution mode | Single-shot pipeline | Multi-turn state machine | **Necessary adaptation** | Added turn overhead |
+| Logic-chain data synthesis | GPT-4 generates training data | Not implemented (no fine-tuning) | **Omission** | Related to the reasoning LLM substitution |
+| Continual Pre-Training | Continued pre-training on DBMS documents | Not implemented | **Omission** | Related to the reasoning LLM substitution |
 
-### 3.2 详细差异分析
+### 3.2 Detailed Difference Analysis
 
-#### 差异 1: 文档编码器（必要替换）
+#### Difference 1: Document Encoder (Necessary Substitution)
 
-**论文方法：**
-- 训练对比学习编码器，显式对齐"问题描述"和"解决方案"的语义空间
-- 使用 InfoNCE loss，正样本为 (问题, 对应解决方案)，负样本为 batch 内其他文档
-- 编码器能理解"INSERT 很慢"和"增大 wal_buffers"之间的语义关联
+**Paper approach:**
+- Trains a contrastive-learning encoder that explicitly aligns the semantic spaces of "problem descriptions" and "solutions"
+- Uses InfoNCE loss, with (question, corresponding solution) as positive pairs and other documents in the batch as negatives
+- The encoder understands the semantic association between "INSERT is slow" and "increase wal_buffers"
 
-**我们的实现：**
-- 使用预训练的 bge-base-zh-v1.5（通用中文语义检索模型）
-- 未针对 DBMS 配置调试任务做微调
-- 依赖模型的通用语义理解能力
+**Our implementation:**
+- Uses the pre-trained bge-base-en-v1.5 (a general-purpose semantic retrieval model, matching `BAAI/bge-base-en-v1.5` in `src/agents/baselines/andromeda/`)
+- Not fine-tuned for the DBMS configuration debugging task
+- Relies on the model's general semantic understanding capability
 
-**替换理由：**
-论文的 GitHub 仓库不可访问（404），无法获取预训练的编码器权重。
-bge-base 是当前最接近的替代——同为 dense retrieval 模型，支持语义检索。
+**Reason for substitution:**
+The paper's GitHub repository is inaccessible (404), so the pre-trained encoder weights cannot be obtained.
+bge-base is currently the closest substitute — also a dense retrieval model supporting semantic retrieval.
 
-**影响评估：**
-- 跨类型检索能力下降：论文编码器能将"问题"映射到"解决方案"附近，
-  通用模型只能做字面语义相似度匹配
-- 对于描述明确的问题（如"shared_buffers 太小"）影响较小
-- 对于隐含性问题（如"查询很慢"→ 需要检索 work_mem 相关文档）影响较大
+**Impact assessment:**
+- Cross-type retrieval capability degrades: the paper's encoder can map a "problem" near its "solution",
+  whereas a general-purpose model can only perform literal semantic similarity matching
+- For explicitly described problems (e.g. "shared_buffers is too small"), the impact is small
+- For implicit problems (e.g. "queries are slow" → work_mem-related documents need to be retrieved), the impact is larger
 
-#### 差异 2: 推理 LLM（必要替换）
+#### Difference 2: Reasoning LLM (Necessary Substitution)
 
-**论文方法：**
-- 基于 Qwen2-7B 做 Continual Pre-Training + Supervised Fine-Tuning
-- CPT 数据：DBMS 手册、SQL 文档、StackOverflow Q&A
-- SFT 数据：逻辑链合成的 (问题, 证据, 推荐) 三元组
-- 模型学会了"给定证据 → 输出结构化推荐"的映射
+**Paper approach:**
+- Performs Continual Pre-Training + Supervised Fine-Tuning on Qwen2-7B
+- CPT data: DBMS manuals, SQL documentation, StackOverflow Q&A
+- SFT data: logic-chain-synthesized (question, evidence, recommendation) triples
+- The model learns the mapping "given evidence → output structured recommendations"
 
-**我们的实现：**
-- 使用通用 LLM（GPT-4 或 Claude）
-- 通过 prompt engineering 模拟两阶段推理结构
-- 依赖 LLM 的通用推理能力和预训练知识
+**Our implementation:**
+- Uses a general-purpose LLM (GPT-4 or Claude)
+- Emulates the two-stage reasoning structure via prompt engineering
+- Relies on the LLM's general reasoning capability and pre-trained knowledge
 
-**替换理由：**
-无法获取论文的训练数据和训练代码。逻辑链数据合成需要大量人工标注的种子数据。
+**Reason for substitution:**
+The paper's training data and training code are unavailable. Logic-chain data synthesis requires a large amount of manually annotated seed data.
 
-**影响评估：**
-- 通用 LLM（GPT-4）的推理能力可能强于微调的 Qwen2-7B
-- 但缺乏针对性训练，对 DBMS 配置的专业知识可能不如微调模型精确
-- 输出格式的稳定性可能不如微调模型（需要更强的 prompt 约束）
+**Impact assessment:**
+- A general-purpose LLM (GPT-4) may reason better than the fine-tuned Qwen2-7B
+- But lacking targeted training, its specialized knowledge of DBMS configuration may be less precise than the fine-tuned model
+- Output format stability may be worse than the fine-tuned model (requiring stronger prompt constraints)
 
-#### 差异 3: 执行模式（必要适配）
+#### Difference 3: Execution Mode (Necessary Adaptation)
 
-**论文方法：**
-- Single-shot：接收问题 → 一次性输出诊断和建议
-- 延迟 5-7 秒
-- 不与数据库交互
+**Paper approach:**
+- Single-shot: receives the question → outputs the diagnosis and recommendations in one pass
+- Latency of 5-7 seconds
+- Does not interact with the database
 
-**我们的实现：**
-- 多轮状态机：4 个 turn 完成完整 pipeline
-- Turn 1: 收集遥测数据（与数据库交互）
-- Turn 2: 收集日志和配置
-- Turn 3: 内部执行分析和推理
-- Turn 4: 提交诊断
+**Our implementation:**
+- Multi-turn state machine: the full pipeline completes in 4 turns
+- Turn 1: collect telemetry data (interacts with the database)
+- Turn 2: collect logs and configuration
+- Turn 3: perform analysis and reasoning internally
+- Turn 4: submit the diagnosis
 
-**适配理由：**
-DBA-Bench 的 Orchestrator 要求 Agent 通过 `get_next_input()` → `dispatch()` →
-`add_tool_result()` 循环与环境交互。Andromeda 的 pipeline 必须拆分为多个 turn。
+**Reason for adaptation:**
+DBA-Bench's Orchestrator requires the Agent to interact with the environment through the `get_next_input()` → `dispatch()` →
+`add_tool_result()` loop. Andromeda's pipeline must be split into multiple turns.
 
-**影响评估：**
-- 增加了 turn 开销，但不影响诊断质量
-- 实际上增强了论文方法：论文假设遥测数据已经可用，
-  我们的实现主动从环境收集数据，更接近真实场景
+**Impact assessment:**
+- Adds turn overhead, but does not affect diagnosis quality
+- Actually strengthens the paper's approach: the paper assumes telemetry data is already available,
+  while our implementation actively collects data from the environment, which is closer to a real scenario
 
-#### 差异 4: 交互式调试（简化）
+#### Difference 4: Interactive Debugging (Simplification)
 
-**论文方法：**
-- 训练一个判断模型，决定是否需要向用户请求更多信息
-- 如果信息不足，生成具体的数据收集指令（如"请执行 SHOW INDEX..."）
-- 基于 StackOverflow 交互数据训练
+**Paper approach:**
+- Trains a decision model to determine whether more information must be requested from the user
+- If information is insufficient, generates concrete data collection instructions (e.g. "please run SHOW INDEX...")
+- Trained on StackOverflow interaction data
 
-**我们的实现：**
-- 固定收集策略：总是收集所有可用指标、日志和配置
-- 不做"是否需要更多信息"的判断
+**Our implementation:**
+- Fixed collection strategy: always collects all available metrics, logs, and configuration
+- Does not decide "whether more information is needed"
 
-**简化理由：**
-1. 无训练数据
-2. DBA-Bench 环境中所有指标都可直接获取，不需要"请求用户"
-3. 固定收集策略在 benchmark 场景中更公平（不依赖判断模型质量）
+**Reason for simplification:**
+1. No training data
+2. In the DBA-Bench environment all metrics are directly accessible, so there is no need to "ask the user"
+3. A fixed collection strategy is fairer in a benchmark scenario (does not depend on decision-model quality)
 
-#### 差异 5: 知识库（环境适配）
+#### Difference 5: Knowledge Base (Environment Adaptation)
 
-**论文方法：**
-- 174 条 MySQL StackOverflow 问题
-- 49 条 MySQL Forum 问题
-- 57 条 PostgreSQL StackOverflow 问题
-- MySQL/PostgreSQL 完整手册分句
+**Paper approach:**
+- 174 MySQL StackOverflow questions
+- 49 MySQL Forum questions
+- 57 PostgreSQL StackOverflow questions
+- Sentence-split complete MySQL/PostgreSQL manuals
 
-**我们的实现：**
-- PostgreSQL 配置手册摘要
-- 构造的常见配置问题 Q&A
+**Our implementation:**
+- PostgreSQL configuration manual excerpts
+- Constructed Q&A for common configuration problems
 
-**适配理由：**
-DBA-Bench 主要使用 PostgreSQL 环境，知识库需要匹配目标数据库。
-论文的完整知识库未公开。
+**Reason for adaptation:**
+DBA-Bench primarily uses PostgreSQL environments, so the knowledge base must match the target database.
+The paper's complete knowledge base has not been released.
 
-### 3.3 保留的核心方法论
+### 3.3 Core Methodology Retained
 
-以下论文核心方法论被忠实保留：
+The following core methodology from the paper is faithfully retained:
 
-1. **STL 季节性分解检测异常** — 使用相同的 statsmodels STL 算法
-2. **Telemetry-to-Text 转换** — 将异常转为自然语言描述供 LLM 推理
-3. **语义相似度排序异常** — 按与问题的相关性选择 top-k 异常
-4. **两阶段推理结构** — Phase 1 识别 knobs → Phase 2 推荐值
-5. **多源证据融合** — 历史 Q&A + 手册 + 遥测数据三路证据输入 LLM
-6. **Dense Retrieval 检索** — 语义向量检索（虽然编码器不同）
+1. **STL seasonal decomposition for anomaly detection** — uses the same statsmodels STL algorithm
+2. **Telemetry-to-Text transformation** — converts anomalies into natural-language descriptions for LLM reasoning
+3. **Semantic similarity ranking of anomalies** — selects the top-k anomalies by relevance to the question
+4. **Two-stage reasoning structure** — Phase 1 identifies knobs → Phase 2 recommends values
+5. **Multi-source evidence fusion** — historical Q&A + manual + telemetry data, three evidence streams fed into the LLM
+6. **Dense Retrieval** — semantic vector retrieval (albeit with a different encoder)
 
-### 3.4 对评估结果的预期影响
+### 3.4 Expected Impact on Evaluation Results
 
-| 因素 | 预期影响方向 | 原因 |
+| Factor | Expected impact direction | Reason |
 |------|------------|------|
-| 通用 LLM 替代微调模型 | ↑ 或 → | GPT-4 推理能力强，但缺乏专业微调 |
-| 通用编码器替代对比学习 | ↓ | 跨类型检索能力下降 |
-| 主动收集遥测数据 | ↑ | 论文假设数据已有，我们主动获取 |
-| 固定收集策略 | → | benchmark 中信息总是可获取的 |
-| 知识库规模较小 | ↓ | 检索命中率可能下降 |
+| General-purpose LLM replaces the fine-tuned model | ↑ or → | GPT-4 reasons strongly, but lacks specialized fine-tuning |
+| General-purpose encoder replaces contrastive learning | ↓ | Cross-type retrieval capability degrades |
+| Actively collecting telemetry data | ↑ | The paper assumes the data already exists; we actively obtain it |
+| Fixed collection strategy | → | Information is always accessible in the benchmark |
+| Smaller knowledge base | ↓ | Retrieval hit rate may drop |
 
-**总体预期：** 在配置调试类场景上，性能应接近论文报告水平，
-但在需要精确跨类型检索的场景中可能有所下降。
+**Overall expectation:** On configuration debugging scenarios, performance should approach the level reported in the paper,
+but it may drop on scenarios requiring precise cross-type retrieval.

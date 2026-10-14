@@ -8,6 +8,7 @@ scope: [tidb, query_perf, tidb_query_perf_index_order_correlation]
 summary: Current code-backed contract snapshot for tidb_query_perf_index_order_correlation; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_query_perf_index_order_correlation`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Object-listing latency degradation across customer and tenant-admin query families.
-- Alert/symptom: [CRITICAL] object listing API 的 P95 延迟从基线约 5 ms 升到 150 ms 以上。相同查询模板只因 bucket 参数不同就出现数量级差异：bucket_b 只需返回 100 行，但请求明显慢于其他 bucket；TiDB 集群和其他业务查询仍然健康。同一接口的 customer-list 与 tenant-admin-list 两个真实查询族也都变慢；TopSQL 中还存在版本化 policy lookup、相似列表、版本读取和校验指纹。请从指标、指纹、执行计划、索引定义、元数据分布和业务真值中定位三条相互耦合的退化路径，恢复所有选择性访问并记录端到端延迟样本，保持返回结果和双表业务 CRC，不得修改业务数据。
+- Alert/symptom: [CRITICAL] The P95 latency of the object listing API has risen from a baseline of about 5 ms to over 150 ms. The same query template shows order-of-magnitude differences solely because of different bucket parameters: bucket_b only needs to return 100 rows, but requests to it are clearly slower than to other buckets; the TiDB cluster and other business queries remain healthy. Both real query families of the same interface, customer-list and tenant-admin-list, have also slowed down; TopSQL also contains versioned policy lookup, similar listings, version reads, and checksum fingerprints. Locate the three mutually coupled degradation paths from metrics, fingerprints, execution plans, index definitions, metadata distribution, and business truth, restore all selective accesses and record end-to-end latency samples, keep the returned results and the two-table business CRC, and do not modify business data.
 - Initial-state fields: `admin_scan`, `plan`, `policy_lookup`, `query`, `scan`, `status`
 - Expected-target fields: `admin_plan`, `business_crc`, `latency`, `plan`, `policy_plan`, `result_rows`, `status`
 - Background profiles: qp01_bucket_a_listing_noise, qp01_bucket_c_listing_noise, qp01_catalog_crc_noise, qp01_bucket_b_archive_listing_decoy, qp01_policy_tenant_b_scan_decoy, qp01_same_bucket_count_decoy, qp01_tenant_a_policy_scan_decoy, qp01_bucket_b_version_listing_decoy, qp01_tenant_b_admin_listing_causal
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Object-listing latency degradation across customer and tenant-admin query families.
-- Alert/symptom: [CRITICAL] object listing API 的 P95 延迟从基线约 5 ms 升到 150 ms 以上。相同查询模板只因 bucket 参数不同就出现数量级差异：bucket_b 只需返回 100 行，但请求明显慢于其他 bucket；TiDB 集群和其他业务查询仍然健康。同一接口的 customer-list 与 tenant-admin-list 两个真实查询族也都变慢；TopSQL 中还存在版本化 policy lookup、相似列表、版本读取和校验指纹。请从指标、指纹、执行计划、索引定义、元数据分布和业务真值中定位相互耦合的退化路径，恢复所有选择性访问并记录端到端延迟样本，保持返回结果和双表业务 CRC，不得修改业务数据。
+- Alert/symptom: [CRITICAL] The P95 latency of the object listing API has risen from a baseline of about 5 ms to over 150 ms. The same query template shows order-of-magnitude differences solely because of different bucket parameters: bucket_b only needs to return 100 rows, but requests to it are clearly slower than to other buckets; the TiDB cluster and other business queries remain healthy. Both real query families of the same interface, customer-list and tenant-admin-list, have also slowed down; TopSQL also contains versioned policy lookup, similar listings, version reads, and checksum fingerprints. Locate the mutually coupled degradation paths from metrics, fingerprints, execution plans, index definitions, metadata distribution, and business truth, restore all selective accesses and record end-to-end latency samples, keep the returned results and the two-table business CRC, and do not modify business data.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `admin_scan`, `plan`, `policy_lookup`, `query`, `scan`, `status`
 - Expected-target fields: `admin_plan`, `business_crc`, `latency`, `plan`, `policy_plan`, `result_rows`, `status`
 - Background profiles: qp01_bucket_a_listing_noise, qp01_bucket_c_listing_noise, qp01_catalog_crc_noise, qp01_bucket_b_archive_listing_decoy, qp01_policy_tenant_b_scan_decoy, qp01_same_bucket_count_decoy, qp01_tenant_a_policy_scan_decoy, qp01_bucket_b_version_listing_decoy, qp01_tenant_b_admin_listing_causal

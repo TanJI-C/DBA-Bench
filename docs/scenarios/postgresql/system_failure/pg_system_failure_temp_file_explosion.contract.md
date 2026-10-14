@@ -8,6 +8,7 @@ scope: [postgres, system_failure, pg_system_failure_temp_file_explosion]
 summary: Current code-backed contract snapshot for pg_system_failure_temp_file_explosion; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_system_failure_temp_file_explosion`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates write failures caused by one reporting batch spilling temp files amid normal production noise.
-- Alert/symptom: Alert: PostgreSQLWriteFailuresHigh. Order writes and several scheduled jobs are intermittently failing with storage-related errors, while OLTP reads and monitoring probes still connect normally. Several BI/reporting queries and routine collectors are active on the primary. Identify the production source of the write failures, restore write availability, and prevent the same batch from immediately exhausting scratch s
+- Alert/symptom: Alert: PostgreSQLWriteFailuresHigh. Order writes and several scheduled jobs are intermittently failing with storage-related errors, while OLTP reads and monitoring probes still connect normally. Several BI/reporting queries and routine collectors are active on the primary. Identify the production source of the write failures, restore write availability, and prevent the same batch from immediately exhausting scratch space again.
 - Initial-state fields: `noise`, `status`, `symptom`
 - Expected-target fields: `culprit_application`, `culprit_job`, `culprit_role`, `required_temp_file_limit`, `status`
 - Background profiles: none declared
@@ -55,7 +56,7 @@ The following fields are the public state boundary exposed by the current Case c
 - Expected-target fields: `culprit_application`, `culprit_job`, `culprit_role`, `required_temp_file_limit`, `status`
 - Background profiles: date_health_probe
 - Evaluator: `src.scenarios.evaluation.postgres.system_failure.temp_file_explosion.PgSystemFailureTempFileExplosionForDailySalesTempExhaustionSimpleEvaluatorCase`
-- Calibration ledger: maintained by the Case registry and the [难度标准](../../../standards/scenario/difficulty.standard.md).
+- Calibration ledger: maintained by the Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md).
 
 ## 4. Agent-visible evidence
 

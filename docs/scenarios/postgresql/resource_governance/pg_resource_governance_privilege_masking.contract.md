@@ -8,6 +8,7 @@ scope: [postgres, resource_governance, pg_resource_governance_privilege_masking]
 summary: Current code-backed contract snapshot for pg_resource_governance_privilege_masking; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_resource_governance_privilege_masking`
@@ -56,8 +57,10 @@ The following fields are the public state boundary exposed by the current Case c
 - Alert/symptom: P2 security review alert: customer-support lookup behavior in a sandbox no longer matches the approved access policy. Review the account and object boundaries, preserve the production application path, and restore the approved support workflow without changing unrelated data.
 - Initial-state fields: `base_table_privilege`, `masking_path`, `status`
 - Expected-target fields: `application_reads`, `base_table_privilege`, `masking_path` (`complete_masked_view`), `status`
-- Agent-visible business artifact: `public.support_access_policy`（统一策略表，含 `sensitive_field_policy` CHECK 枚举：`support_dev_user` 为 review_required/masked_last4，`support_app_user` 为 approved/cleartext，`support_analytics_user`/`support_analyst_group` 为 approved/cleartext 近邻，`support_contractor_user` 为 review_required/masked_last4）
-- Additional accounts: `support_contractor_user`（同属 `support_readonly_group` 的第二个沙箱账号，同受策略约束）；`support_analytics_user` + `support_analyst_group`（经策略批准的明文近邻，必须保持不动）
+- Agent-visible business artifact: `public.support_access_policy` (unified policy table with a `sensitive_field_policy` CHECK enum: `support_dev_user` is review_required/masked_last4, `support_app_user` is approved/cleartext, `support_analytics_user`/`support_analyst_group` are approved/cleartext near neighbors, and `support_contractor_user` is review_required/masked_last4)
+- Additional accounts: `support_contractor_user` (a second sandbox account in the same `support_readonly_group`, subject to the same policy); `support_analytics_user` + `support_analyst_group` (policy-approved clear-text near neighbors that must remain untouched)
+
+> Note: the alert/case-prompt text above is an English rendering for readability; the verbatim runtime alert text is defined in the scenario code under src/scenarios/.
 - Background profiles: customer_export_preview_rollup, masked_preview_latency_probe, customer_contact_quality_scan, policy_cache_refresh_probe, dev_preview_touch_probe, analytics_access_review_probe
 - Evaluator: `src.scenarios.evaluation.postgres.resource_governance.privilege_masking.PgResourceGovernancePrivilegeMaskingForCustomerSupportMaskingSimpleEvaluatorCase`
 - Calibration evidence (tool m/n): execute_sql.role_privileges=4/2; execute_sql.access_policy_lookup=1/0; execute_sql.default_acl_probe=1/0; execute_sql.masked_view_probe=1/0; query_metrics.workload_activity=0/5

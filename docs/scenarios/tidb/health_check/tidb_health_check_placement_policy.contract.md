@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_placement_policy]
 summary: Current code-backed contract snapshot for tidb_health_check_placement_policy; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_placement_policy`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Routine fleet-control review across checkout, customer, fulfillment, archive, and monitoring traffic.
-- Alert/symptom: [Routine TiDB Fleet Review] One live control-plane review remains open after this lane moved to its compact operating profile. User-facing latency, writes, and component health remain below paging thresholds. Identify the exact live review scope from current metadata, distinguish it from approved and historical nearby records, apply the smallest service-owned correction consistent with the fixed-version guidance, and
+- Alert/symptom: [Routine TiDB Fleet Review] One live control-plane review remains open after this lane moved to its compact operating profile. User-facing latency, writes, and component health remain below paging thresholds. Identify the exact live review scope from current metadata, distinguish it from approved and historical nearby records, apply the smallest service-owned correction consistent with the fixed-version guidance, and close only that review. Do not change business rows, centrally owned definitions, or healthy components.
 - Initial-state fields: `business_traffic`, `queue`, `status`
 - Expected-target fields: `business_crc`, `placement_status`, `status`, `target_partition_policy`, `target_table_policy`
 - Background profiles: hc08_checkout_order_lookup, hc08_merchant_status_rollup, hc08_fulfillment_event_join, hc08_customer_segment_dashboard, hc08_archive_reconciliation, hc08_risk_audit_top_orders, hc08_review_queue_probe, hc08_service_catalog_refresh, hc08_event_window_reconcile
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A TiDB placement review for a table-level policy that blocks inherited placement convergence.
-- Alert/symptom: 例行 placement review：服务目录把当前 open review 映射到一个 table-level custom policy，compact lane 无法收敛。请关联 service-to-table 目录、policy catalog、SHOW PLACEMENT 和健康近邻，确认只存在 table-level override。只把目标 table 恢复为 DEFAULT，保留分区继承、其它对象和业务数据，不重启组件或修改中心 policy 定义。
+- Alert/symptom: Routine placement review: the service catalog maps the current open review to a table-level custom policy, and the compact lane cannot converge. Correlate the service-to-table catalog, the policy catalog, SHOW PLACEMENT, and the healthy neighbors, and confirm that only a table-level override exists. Restore only the target table to DEFAULT, preserve partition inheritance, other objects, and business data, and do not restart components or modify the central policy definition.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business_traffic`, `queue`, `status`
 - Expected-target fields: `business_crc`, `partition_policy`, `placement_status`, `status`, `target_table_policy`
 - Background profiles: hc08_checkout_order_lookup, hc08_merchant_status_rollup, hc08_fulfillment_event_join, hc08_customer_segment_dashboard, hc08_archive_reconciliation, hc08_risk_audit_top_orders, hc08_review_queue_probe, hc08_service_catalog_refresh, hc08_event_window_reconcile

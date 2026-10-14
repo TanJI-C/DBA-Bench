@@ -5,82 +5,83 @@ status: canonical
 audience: [authoring, reviewer, runtime_agent, maintainer]
 exposure: public
 scope: [shared]
-summary: DBAIOps baseline 的当前实现契约：两阶段图演化、ADF 时序采样、异常方程确认、结构化诊断报告与框架适配差异。
+summary: Current implementation contract of the DBAIOps baseline: two-stage graph evolution, ADF time-series sampling, anomaly equation confirmation, structured diagnosis report, and framework adaptation differences.
 source_of_truth: code
 related: [docs.index.public]
+language: en
 ---
 
-# DBAIOps Baseline 实现文档
+# DBAIOps Baseline Implementation Document
 
-本文档描述 DBAIOps (VLDB 2026) 论文 baseline 的当前实现。DBAIOps 原始系统的 GitHub 仓库仅包含浏览器扩展前端，核心后端未开源；本实现基于论文 Section 3-6 的算法描述复现，并适配到 DBA-Bench 的交互式 Agent 框架。论文原文见 `paper/related_paper/DBAIOps.md`。
+This document describes the current implementation of the DBAIOps (VLDB 2026) paper baseline. The GitHub repository of the original DBAIOps system contains only the browser-extension frontend; the core backend was not open-sourced. This implementation is reproduced from the algorithm descriptions in Sections 3-6 of the paper and adapted to DBA-Bench's interactive Agent framework. The original paper text is at `paper/related_paper/DBAIOps.md`.
 
-### 1.1 论文核心架构
+### 1.1 Paper Core Architecture
 
 ```
-Alert → AnomalyModel (检测方程) → ExperienceGraph (知识图谱遍历)
-     → Two-Stage Graph Evolution (图演化) → RootCauseAnalyser (LLM推理)
+Alert → AnomalyModel (detection equations) → ExperienceGraph (knowledge graph traversal)
+     → Two-Stage Graph Evolution (graph evolution) → RootCauseAnalyser (LLM reasoning)
      → Diagnosis Report
 ```
 
-### 1.2 我们的实现架构
+### 1.2 Our Implementation Architecture
 
 ```
-Alert → Trigger 匹配 (关键词) → ExperienceRetriever 两阶段图演化
-     → 每轮: 收集路径上 Metric/Tool 节点 + 重采样 SQL 快照指标
-     → ADF 时序评估 + 触发器检测方程 M/N 频率确认
-     → LLM 修复循环 (native tool calling)
-     → RootCauseAnalyser 结构化诊断报告 (⟨Sa,Sl,Sm,Se,So⟩) → submit
+Alert → Trigger matching (keywords) → ExperienceRetriever two-stage graph evolution
+     → Each round: collect Metric/Tool nodes along the path + resample SQL snapshot metrics
+     → ADF time-series evaluation + M/N frequency confirmation of the trigger detection equations
+     → LLM remediation loop (native tool calling)
+     → RootCauseAnalyser structured diagnosis report (⟨Sa,Sl,Sm,Se,So⟩) → submit
 ```
 
 ---
 
-## 2. Adaptive Detector Function (ADF) — 论文 Section 6.1
+## 2. Adaptive Detector Function (ADF) — Paper Section 6.1
 
-### 2.1 论文算法
+### 2.1 Paper Algorithm
 
-论文定义了一个 5 步自适应异常检测函数，用于判断指标序列是否异常：
+The paper defines a 5-step adaptive anomaly detection function used to decide whether a metric series is anomalous:
 
-**Step 1: 波动性计算** — σ（样本标准差）与 CV（波动自相关 ρV / 随机基准 ρR）。
+**Step 1: Volatility computation** — σ (sample standard deviation) and CV (volatility autocorrelation ρV / random baseline ρR).
 
-**Step 2: 动态基线 Bt 与偏差 D** — D = |x_t − B_t|；论文按小时更新基线。
+**Step 2: Dynamic baseline Bt and deviation D** — D = |x_t − B_t|; the paper updates the baseline hourly.
 
-**Step 3: 状态函数 F_state**
+**Step 3: State function F_state**
 
 ```
-F_state = 1 − D/σ   (x_t 接近 B_t, D ≤ σ)
-F_state = D/σ       (x_t 远离 B_t, D > σ)
+F_state = 1 − D/σ   (x_t close to B_t, D ≤ σ)
+F_state = D/σ       (x_t far from B_t, D > σ)
 ```
 
-**Step 4: 权重** — w1 = σ/(σ+θ)，w2 = 1−w1（θ 默认 10.0，可配置）。
+**Step 4: Weights** — w1 = σ/(σ+θ), w2 = 1−w1 (θ defaults to 10.0, configurable).
 
-**Step 5: 加权评分** — S = w1·σ + w2·F_state；S 超过阈值判为异常。
+**Step 5: Weighted score** — S = w1·σ + w2·F_state; S above the threshold is judged anomalous.
 
-### 2.2 我们的实现
+### 2.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/adf.py`，公式与论文逐步一致。
+File: `src/agents/baselines/dbaiops/adf.py`; the formulas match the paper step by step.
 
-关键数学性质（决定阈值取值）：F_state 在指标**正常**时接近 1（D 小 → 1−D/σ 大），在偏离时大于 1（D/σ）。因此：
+Key mathematical property (which determines the threshold value): when a metric is **normal**, F_state is close to 1 (small D → large 1−D/σ), and when it deviates, F_state is greater than 1 (D/σ). Therefore:
 
-- `score_threshold=1.2`（默认）是正确标尺：S ≤ ~1 视为正常，S > 1.2 判异常。
-- 取 0.7 会把正常指标判为异常，导致演化永不提前终止。禁止回退到 0.7。
+- `score_threshold=1.2` (default) is the correct yardstick: S ≤ ~1 is treated as normal, and S > 1.2 is judged anomalous.
+- Using 0.7 would flag normal metrics as anomalous, so evolution would never terminate early. Never fall back to 0.7.
 
-实现细节（论文未公开部分的自选）：
+Implementation details (our own choices for parts the paper does not disclose):
 
-| 细节 | 论文描述 | 我们的选择 |
+| Detail | Paper description | Our choice |
 |------|---------|-----------|
-| Bt 计算 | "按小时更新" | 截尾均值（去掉序列末端最新值后上下 25%） |
-| CV 的 ρV 输入 | "波动序列自相关" | 相邻差绝对值序列的 lag-1 自相关 |
-| CV 的 ρR 基准 | "随机序列自相关" | 1/√n（白噪声渐近值） |
+| Bt computation | "updated hourly" | Trimmed mean (after dropping the newest value at the end of the series, trim the top and bottom 25%) |
+| ρV input for CV | "autocorrelation of the volatility series" | Lag-1 autocorrelation of the series of absolute successive differences |
+| ρR baseline for CV | "autocorrelation of a random series" | 1/√n (white-noise asymptotic value) |
 
-### 2.3 采样要求
+### 2.3 Sampling Requirements
 
-ADF 需要时间序列输入。2 个样本时 σ = D/√2 < D 恒成立，任何差异都判异常；因此 `retriever.ADF_MIN_SAMPLES = 3`，样本数不足 3 的指标序列跳过评估。指标序列的来源见第 5 节。
+ADF requires time-series input. With 2 samples, σ = D/√2 < D always holds, so any difference is judged anomalous; therefore `retriever.ADF_MIN_SAMPLES = 3`, and metric series with fewer than 3 samples skip evaluation. Where the metric series come from is described in Section 5.
 
 ---
 
-## 3. AnomalyModel — 论文 Section 5.1
+## 3. AnomalyModel — Paper Section 5.1
 
-### 3.1 论文算法
+### 3.1 Paper Algorithm
 
 ```
 Is_Anomaly = METRIC_raw > threshold₁
@@ -88,182 +89,182 @@ Is_Anomaly = METRIC_raw > threshold₁
 trend ∈ {0(stable), 1(sharp_decline), 2(slow_decline), 3(sharp_rise), 4(slow_rise), 5(fluctuating)}
 ```
 
-M/N 频率控制：最近 N 次评估中 M 次为 True 才确认异常，防止瞬时抖动。
+M/N frequency control: an anomaly is confirmed only when M of the last N evaluations are True, preventing transient jitter.
 
-### 3.2 我们的实现
+### 3.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/anomaly_model.py`
+File: `src/agents/baselines/dbaiops/anomaly_model.py`
 
 ```python
 class AnomalyModel:
-    def __init__(self, model_id, trigger_vertex_id, equations)  # M/N 从 equations 派生（取最严格值）
-    def evaluate(self, metric_values) -> bool        # 方程评估 + M/N 频率控制
-    def evaluate_raw(self, metric_values) -> bool    # 仅方程评估，不累计频率历史
+    def __init__(self, model_id, trigger_vertex_id, equations)  # M/N derived from equations (taking the strictest value)
+    def evaluate(self, metric_values) -> bool        # Equation evaluation + M/N frequency control
+    def evaluate_raw(self, metric_values) -> bool    # Equation evaluation only, no frequency history accumulation
 
 def compute_trend(values, sharp_threshold=0.3, slow_threshold=0.1, fluctuation_cv=0.5) -> int
 ```
 
-接入方式（`DbaiopsAgent._record_trigger_anomaly_evaluation`）：
+Integration point (`DbaiopsAgent._record_trigger_anomaly_evaluation`):
 
-1. 每个演化轮次对匹配 Trigger 的检测方程评估一次；
-2. `METRIC_raw` 取该指标累积序列的最新值（`_resolve_metric_series` 负责名称映射）；
-3. `METRIC_composite` 由 `METRIC_raw` 自身序列经 `compute_trend` 派生，键名为 `{metric_raw}#trend`（图谱 Trigger 属性不携带 composite 顶点，论文中 composite 即 raw 的 10 分钟窗口趋势）；
-4. 每轮评估结果（原始判定 + M/N 确认判定）记录在 `_anomaly_evaluations`，随 trace 导出并写入诊断 prompt 的 Anomaly Detection Verdict 一节。
+1. Each evolution round evaluates the detection equations of the matched Trigger once;
+2. `METRIC_raw` takes the latest value of the metric's accumulated series (`_resolve_metric_series` handles name mapping);
+3. `METRIC_composite` is derived from the `METRIC_raw` series itself via `compute_trend`, keyed as `{metric_raw}#trend` (the graph's Trigger attributes do not carry composite vertices; in the paper, composite is the 10-minute window trend of raw);
+4. Each round's evaluation results (raw verdict + M/N confirmed verdict) are recorded in `_anomaly_evaluations`, exported with the trace and written into the Anomaly Detection Verdict section of the diagnosis prompt.
 
-初始触发匹配仍是关键词匹配（见 7.3）：交互式入口没有指标可评估，方程用于演化过程中**确认**触发器，而非发现触发器。
+Initial trigger matching is still keyword matching (see 7.3): the interactive entry point has no metrics to evaluate, so the equations are used to **confirm** triggers during evolution, not to discover them.
 
-### 3.3 与论文的差异
+### 3.3 Differences from the Paper
 
-| 方面 | 论文 | 我们的实现 | 原因 |
+| Aspect | Paper | Our implementation | Reason |
 |------|------|-----------|------|
-| 趋势分析算法 | "10分钟窗口波动性分析" | 前后半对比 + 变化率计算 | 论文未给出具体算法 |
-| METRIC_composite 来源 | 监控系统持续计算 | 按需对累积序列调用 compute_trend() | 适配交互式采样 |
-| 阈值方向 | 仅 ">" | 支持 inverted（"<"，如 cache_hit_ratio） | 图谱含反向指标 |
-| 触发器发现 | 方程评估（数据驱动） | 关键词匹配（文本驱动）+ 方程确认 | Agent 入口无指标历史 |
+| Trend analysis algorithm | "10-minute window volatility analysis" | First-half vs second-half comparison + change-rate computation | The paper gives no concrete algorithm |
+| METRIC_composite source | Continuously computed by the monitoring system | compute_trend() called on demand over the accumulated series | Adapts to interactive sampling |
+| Threshold direction | Only ">" | Supports inverted ("<", e.g. cache_hit_ratio) | The graph contains inverse metrics |
+| Trigger discovery | Equation evaluation (data-driven) | Keyword matching (text-driven) + equation confirmation | The Agent entry point has no metric history |
 
 ---
 
-## 4. ExperienceGraph — 论文 Section 4
+## 4. ExperienceGraph — Paper Section 4
 
-### 4.1 论文算法
+### 4.1 Paper Algorithm
 
-6 种顶点（Trigger / Experience / Tool / Metric / Tag / Auxiliary）+ 4 种边（Containment / Relevance / Diagnosis / Synonym）构成的异构有向图；诊断路径是图上的遍历路径。
+A heterogeneous directed graph of 6 vertex types (Trigger / Experience / Tool / Metric / Tag / Auxiliary) + 4 edge types (Containment / Relevance / Diagnosis / Synonym); a diagnosis path is a traversal path on the graph.
 
-### 4.2 我们的实现
+### 4.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/graph.py`
+File: `src/agents/baselines/dbaiops/graph.py`
 
 ```python
 class ExperienceGraph:
-    def __init__(self, graph_path)                 # 加载 JSON 图谱
+    def __init__(self, graph_path)                 # Load the JSON graph
     def get_trigger_vertices(self) -> List[GraphNode]
     def get_neighbors(self, node_id, edge_type=None)
     def get_incoming_neighbors(self, node_id)
-    def find_overlapping_models(self, trigger_id)   # Proximity Discovery 的重叠模型发现
+    def find_overlapping_models(self, trigger_id)   # Overlapping-model discovery for Proximity Discovery
     def create_cross_edge(self, source_id, target_id, edge_type)
-    def get_diagnosis_paths(self, trigger_id, max_depth)  # BFS 限深
+    def get_diagnosis_paths(self, trigger_id, max_depth)  # Depth-limited BFS
 ```
 
-知识图谱数据: `data/knowledge_graph/pg_experience_graph.json`（56 节点 / 87 边，12 Trigger）。该文件的 sha256 由 factory 的 `_verify_artifact` 校验，改动图谱必须同步更新实验 manifest 的 `graph_sha256`。
+Knowledge graph data: `data/knowledge_graph/pg_experience_graph.json` (56 nodes / 87 edges, 12 Triggers). The file's sha256 is verified by the factory's `_verify_artifact`; any change to the graph must also update `graph_sha256` in the experiment manifest.
 
-### 4.3 与论文的差异
+### 4.3 Differences from the Paper
 
-| 方面 | 论文 | 我们的实现 | 原因 |
+| Aspect | Paper | Our implementation | Reason |
 |------|------|-----------|------|
-| 图谱规模 | 生产级（数十万边） | 56 节点 | 覆盖 DBA-Bench 已有场景即可 |
-| 图存储 | 图数据库 | JSON + 内存邻接表 | 场景规模不需要图数据库 |
-| Cross-Edge | 运行时持久化 | 仅当前会话内有效 | Agent 每次运行独立加载图谱 |
+| Graph scale | Production grade (hundreds of thousands of edges) | 56 nodes | Covering DBA-Bench's existing scenarios is sufficient |
+| Graph storage | Graph database | JSON + in-memory adjacency lists | The scenario scale does not require a graph database |
+| Cross-Edge | Persisted at runtime | Valid only within the current session | The Agent loads the graph independently on each run |
 
 ---
 
-## 5. Two-Stage Graph Evolution — 论文 Section 6.1
+## 5. Two-Stage Graph Evolution — Paper Section 6.1
 
-### 5.1 论文算法
+### 5.1 Paper Algorithm
 
 ```
 repeat:
-    Stage 1: Proximity Discovery → 扩展图 → 收集演化路径上的所有 Metrics
-    Stage 2: ADF(指标序列) → 存在异常? 扩展 : 终止
-until: 终止 or max_depth
+    Stage 1: Proximity Discovery → expand the graph → collect all Metrics on the evolution path
+    Stage 2: ADF(metric series) → anomalies present? expand : terminate
+until: terminated or max_depth
 ```
 
-### 5.2 我们的实现
+### 5.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/retriever.py`
+File: `src/agents/baselines/dbaiops/retriever.py`
 
 ```python
 class ExperienceRetriever:
     def __init__(self, graph, adf, max_depth=4, top_k=5, exclude_metric_types=None)
     def initialize(self, trigger_id) -> EvolutionState
-    def take_pending_actions(self) -> List[(GraphNode, action)]      # 收集路径上所有未查 Metric/Tool 节点
-    def take_snapshot_resample_actions(self) -> List[(GraphNode, action)]  # 重采样 SQL 快照指标
-    def evolve(self) -> EvolutionState                                # ADF 裁剪 + 扩展决策（无参数）
+    def take_pending_actions(self) -> List[(GraphNode, action)]      # Collect all unqueried Metric/Tool nodes on the path
+    def take_snapshot_resample_actions(self) -> List[(GraphNode, action)]  # Resample SQL snapshot metrics
+    def evolve(self) -> EvolutionState                                # ADF pruning + expansion decision (no arguments)
     def should_terminate(self) -> bool
     def get_experience_evidence(self) -> List[str]
 ```
 
-**每个演化轮次（`DbaiopsAgent.solve` 主循环）:**
+**Each evolution round (the `DbaiopsAgent.solve` main loop):**
 
-1. `take_pending_actions()`：收集扩展路径上全部未查询的 Metric/Tool 节点并执行（论文 Stage 1 的"收集演化路径上的指标"）；
-2. `take_snapshot_resample_actions()`：重查询已查过的 SQL 快照指标（`SQL_BACKED_METRIC_QUERIES` 中的 slow_queries / topsql / dead_tuples，经 `execute_sql` 获取）。快照型指标每轮只新增一个样本，重采样使其序列随轮次增长；query_metrics 类指标自带完整时间序列（series 结果整体替换存储），无需重采样；
-3. `_record_trigger_anomaly_evaluation()`：AnomalyModel 检测方程确认（第 3 节）；
-4. `evolve()`：对累积序列中长度 ≥ `ADF_MIN_SAMPLES`(3) 的指标运行 ADF；存在异常且未达 max_depth → 从异常指标关联的 Trigger 扩展路径，否则终止。
+1. `take_pending_actions()`: collects and executes all unqueried Metric/Tool nodes on the expansion path (the paper's Stage 1 "collect metrics on the evolution path");
+2. `take_snapshot_resample_actions()`: re-queries SQL snapshot metrics that have already been queried (slow_queries / topsql / dead_tuples from `SQL_BACKED_METRIC_QUERIES`, fetched via `execute_sql`). Snapshot-style metrics add only one sample per round; resampling lets their series grow with each round. query_metrics-style metrics already carry complete time series (series results replace the stored series wholesale) and need no resampling;
+3. `_record_trigger_anomaly_evaluation()`: AnomalyModel detection-equation confirmation (Section 3);
+4. `evolve()`: runs ADF on accumulated series of length ≥ `ADF_MIN_SAMPLES` (3); if anomalies exist and max_depth has not been reached → expand the path from the Triggers associated with the anomalous metrics, otherwise terminate.
 
-**指标样本提取（`_extract_metrics_from_result`，按结果 kind 分派）:**
+**Metric sample extraction (`_extract_metrics_from_result`, dispatched by result kind):**
 
-| 结果类型 | 提取规则 | 累积键 |
+| Result type | Extraction rule | Accumulation key |
 |---------|---------|--------|
-| series (query_metrics) | 整条序列替换 | `{metric_type}[{target}].{field}` |
-| records / rows | 行数 + 声明的 value 列求和 | `{metric_type}.row_count`、`{metric_type}.{value_column}` |
-| snapshot | 数值字段逐个追加 | `{metric_type}.{field}` |
+| series (query_metrics) | The whole series replaces the stored one | `{metric_type}[{target}].{field}` |
+| records / rows | Row count + sum of the declared value column | `{metric_type}.row_count`, `{metric_type}.{value_column}` |
+| snapshot | Numeric fields appended one by one | `{metric_type}.{field}` |
 
-`SQL_BACKED_METRIC_QUERIES` 中 value_column 语义：slow_queries/topsql 为 None（触发阈值按计数定义，取行数），dead_tuples 为 `n_dead_tup`（各表死元组合计，阈值 10000 按总量定义）。
+Semantics of value_column in `SQL_BACKED_METRIC_QUERIES`: None for slow_queries/topsql (the trigger threshold is defined on counts, so row count is taken), and `n_dead_tup` for dead_tuples (sum of dead tuples across tables; the threshold of 10000 is defined on the total).
 
-### 5.3 与论文的差异
+### 5.3 Differences from the Paper
 
-| 方面 | 论文 | 我们的实现 | 原因 |
+| Aspect | Paper | Our implementation | Reason |
 |------|------|-----------|------|
-| 演化触发 | 持续监控系统自动触发 | Agent 演化循环逐轮驱动 | 交互式评估框架 |
-| Metric 收集 | 直接访问监控系统 | query_metrics / execute_sql API | DBA-Bench 工具面限制；SQL 细节不入 query_metrics 面 |
-| 指标时间序列 | 监控系统历史窗口 | series 直接可用；快照指标按演化轮次重采样累积 | 交互模式下无独立采集通道 |
-| 终止条件 | ADF 全部正常 OR 超时 | ADF 全部正常 OR max_depth OR turn 预算耗尽 | 无实时超时概念 |
-| 不支持指标 | — | `exclude_metric_types` 在选节点时跳过并标记已查 | TiDB 面无 cache_hit_ratio 等 |
+| Evolution trigger | Automatically triggered by a continuously running monitoring system | Driven round by round by the Agent evolution loop | Interactive evaluation framework |
+| Metric collection | Direct access to the monitoring system | query_metrics / execute_sql APIs | DBA-Bench tool-surface limits; SQL details are not part of the query_metrics surface |
+| Metric time series | Monitoring system's historical window | series directly available; snapshot metrics accumulated via per-round resampling | No independent collection channel in interactive mode |
+| Termination condition | All ADF normal OR timeout | All ADF normal OR max_depth OR turn budget exhausted | No real-time timeout concept |
+| Unsupported metrics | — | `exclude_metric_types` skips them when selecting nodes and marks them as queried | The TiDB surface lacks cache_hit_ratio etc. |
 
 ---
 
-## 6. 结构化 Prompt — 论文 Section 6.2
+## 6. Structured Prompt — Paper Section 6.2
 
-### 6.1 论文算法
+### 6.1 Paper Algorithm
 
-prompt = ⟨Sa, Sl, Sm, Se, So⟩：Sa 症状描述、Sl 检测条件、Sm 指标关键统计、Se 图经验、So 报告组件（Anomaly Validation / Root Cause Analysis ≤5 / Recovery Solution / Summary / SQL Context）。
+prompt = ⟨Sa, Sl, Sm, Se, So⟩: Sa symptom description, Sl detection conditions, Sm key metric statistics, Se graph experience, So report components (Anomaly Validation / Root Cause Analysis ≤5 / Recovery Solution / Summary / SQL Context).
 
-### 6.2 我们的实现
+### 6.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/prompts.py`
+File: `src/agents/baselines/dbaiops/prompts.py`
 
 ```python
-DBAIOPS_SYSTEM_PROMPT       # LLM 角色设定
-DBAIOPS_DIAGNOSIS_PROMPT    # ⟨Sa, Sl, Sm, Se, So⟩ 结构化诊断报告 Prompt（RootCauseAnalyser 终局生成）
-DBAIOPS_REMEDIATION_PROMPT  # 修复循环入口 Prompt（含检测方程判定 + ADF 证据）
-DBAIOPS_FALLBACK_PROMPT     # 无图谱路径时的 LLM Prompt（工具契约由 native tool schema 提供）
+DBAIOPS_SYSTEM_PROMPT       # LLM role definition
+DBAIOPS_DIAGNOSIS_PROMPT    # Structured ⟨Sa, Sl, Sm, Se, So⟩ diagnosis report prompt (final generation by RootCauseAnalyser)
+DBAIOPS_REMEDIATION_PROMPT  # Remediation loop entry prompt (includes detection-equation verdicts + ADF evidence)
+DBAIOPS_FALLBACK_PROMPT     # LLM prompt when no graph path exists (tool contract provided by the native tool schema)
 ```
 
-**修复循环入口（`_build_diagnosis_prompt`）填充:**
+**Remediation loop entry (`_build_diagnosis_prompt`) fill-ins:**
 
-| 组件 | 来源 |
+| Component | Source |
 |------|------|
 | Anomaly Description | `self._alert` |
-| Detection Condition | `_get_detection_condition()`（Trigger 属性构建） |
-| Anomaly Detection Verdict | `_format_anomaly_verdict()`（M/N 频率确认结果 + 最新评估值） |
-| Metric Statistics & ADF Evidence | `_format_metric_evidence()`（每个累积指标的 n/latest/mean/min/max + ADF score/σ/baseline/abnormal） |
-| Collected Observations | `_format_observations()`（最近 10 条原始结果，各截断 200 字符） |
+| Detection Condition | `_get_detection_condition()` (built from Trigger attributes) |
+| Anomaly Detection Verdict | `_format_anomaly_verdict()` (M/N frequency confirmation results + latest evaluation values) |
+| Metric Statistics & ADF Evidence | `_format_metric_evidence()` (n/latest/mean/min/max per accumulated metric + ADF score/σ/baseline/abnormal) |
+| Collected Observations | `_format_observations()` (the last 10 raw results, each truncated to 200 characters) |
 | O&M Experience | `retriever.get_experience_evidence()` |
 
-**终局报告（`_finalize_submission`）**: 所有终止路径（纯文本回复 / LLM submit / final-turn 强制提交）统一调用 `call_text(DBAIOPS_DIAGNOSIS_PROMPT…)` 生成论文式五段报告，作为 `structured_submission` 的 factor 与 summary 提交；`outcome.changes` 取 `_executed_changes`（修复循环中实际执行的非只读动作，SQL 按 SELECT/EXPLAIN/SHOW 前缀判只读，manage_instance 按 set_config/restart 判定），无修复时明确标注 "No explicit remediation was reported"。
+**Final report (`_finalize_submission`)**: every termination path (plain-text reply / LLM submit / final-turn forced submission) uniformly calls `call_text(DBAIOPS_DIAGNOSIS_PROMPT…)` to generate the paper-style five-part report, which is submitted as the factor and summary of `structured_submission`; `outcome.changes` comes from `_executed_changes` (non-read-only actions actually executed during the remediation loop; SQL is judged read-only by SELECT/EXPLAIN/SHOW prefixes, manage_instance by set_config/restart), and when no remediation occurred it is explicitly labeled "No explicit remediation was reported".
 
-### 6.3 与论文的差异
+### 6.3 Differences from the Paper
 
-| 方面 | 论文 | 我们的实现 | 原因 |
+| Aspect | Paper | Our implementation | Reason |
 |------|------|-----------|------|
-| Sm 内容 | 指标名+时间范围+阈值 | 每指标关键统计 + ADF 判定（原始观测另附截断样本） | 交互模式无统一时间范围概念 |
-| 报告后处理 | 结构化解析 + 存储 | `structured_submission` 结构化提交 | DBA-Bench 评估接口 |
-| 修复执行 | 论文仅产出报告 | 修复循环实际执行变更后再生成报告 | DBA-Bench Outcome 评估要求真实修复 |
+| Sm content | Metric names + time range + thresholds | Key statistics per metric + ADF verdicts (truncated raw observation samples attached separately) | Interactive mode has no unified time-range concept |
+| Report post-processing | Structured parsing + storage | Structured submission via `structured_submission` | DBA-Bench evaluation interface |
+| Remediation execution | The paper only produces a report | The remediation loop actually executes changes before the report is generated | DBA-Bench Outcome evaluation requires real remediation |
 
 ---
 
-## 7. 主 Agent 集成 — 论文 Section 3 整体流程
+## 7. Main Agent Integration — Paper Section 3 Overall Flow
 
-### 7.1 论文流程
+### 7.1 Paper Flow
 
 ```
-1. Alert 输入 → AnomalyModel 评估 → 匹配 Trigger Vertex
-2. Two-Stage Graph Evolution 循环
-3. RootCauseAnalyser (LLM) 生成诊断报告
+1. Alert input → AnomalyModel evaluation → match Trigger Vertex
+2. Two-Stage Graph Evolution loop
+3. RootCauseAnalyser (LLM) generates the diagnosis report
 ```
 
-### 7.2 我们的实现
+### 7.2 Our Implementation
 
-文件: `src/agents/baselines/dbaiops/agent.py`
+File: `src/agents/baselines/dbaiops/agent.py`
 
 ```python
 class DbaiopsAgent(BaseAgent):
@@ -271,119 +272,119 @@ class DbaiopsAgent(BaseAgent):
     mode = "dbaiops"
 
     def solve(self):
-        # 1. _ensure_initialized: 加载图谱 + 构建 ADF/Retriever/AnomalyModels
-        # 2. TiDB: 预取 query_history 契约窗口 + 排除不支持指标
-        # 3. _match_trigger_by_keywords; 无匹配 → _run_llm_loop(fallback prompt)
-        # 4. 演化主循环（第 5 节）
-        # 5. _run_llm_loop(修复 prompt) → 修复 + 终局报告 → structured submission
+        # 1. _ensure_initialized: load the graph + build ADF/Retriever/AnomalyModels
+        # 2. TiDB: prefetch the query_history contract window + exclude unsupported metrics
+        # 3. _match_trigger_by_keywords; no match → _run_llm_loop(fallback prompt)
+        # 4. Evolution main loop (Section 5)
+        # 5. _run_llm_loop(remediation prompt) → remediation + final report → structured submission
 ```
 
-内部 LLM 通过 `LLMAgent` 复用 native tool calling 与 token 记账（`_next_llm_actions` / `_feed_tool_result` / `_next_final_submission` / `call_text`）；终止路径统一走 `_finalize_submission`。`exit` 动作抛 `RuntimeError`（与 LLMAgent 行为一致，不静默吞掉）。
+The internal LLM reuses native tool calling and token accounting through `LLMAgent` (`_next_llm_actions` / `_feed_tool_result` / `_next_final_submission` / `call_text`); all termination paths go through `_finalize_submission`. The `exit` action raises `RuntimeError` (consistent with LLMAgent behavior; not silently swallowed).
 
-### 7.3 与论文的差异
+### 7.3 Differences from the Paper
 
-| 方面 | 论文 | 我们的实现 | 原因 |
+| Aspect | Paper | Our implementation | Reason |
 |------|------|-----------|------|
-| 执行模式 | 管道式一次性执行 | 交互式多轮 Agent 循环 | DBA-Bench BaseAgent 接口 |
-| Trigger 匹配 | AnomalyModel 方程评估 | 关键词匹配入口 + 方程每轮确认 | Agent 首轮无指标历史 |
-| 修复 | 仅产出报告 | LLM 修复循环实际执行变更 | Outcome 评估要求 |
-| 无图谱匹配 | 未提及 | Fallback prompt（工具契约来自 native schema） | 鲁棒性 |
-| TiDB 适配 | 论文面向多数据库产品 | query_history 窗口重写 + 指标面排除 | 复用 PG 经验图谱 |
+| Execution mode | One-shot pipeline execution | Interactive multi-turn Agent loop | DBA-Bench BaseAgent interface |
+| Trigger matching | AnomalyModel equation evaluation | Keyword-matching entry + per-round equation confirmation | The Agent's first turn has no metric history |
+| Remediation | Only produces a report | The LLM remediation loop actually executes changes | Outcome evaluation requirement |
+| No graph match | Not mentioned | Fallback prompt (tool contract from the native schema) | Robustness |
+| TiDB adaptation | The paper targets multiple database products | query_history window rewriting + metric-surface exclusion | Reuses the PG experience graph |
 
 ---
 
-## 8. 总体差异总结
+## 8. Overall Difference Summary
 
-### 8.1 架构层面的适配
+### 8.1 Architecture-Level Adaptations
 
-论文 DBAIOps 是持续运行的监控系统，DBA-Bench 是离散 Agent 评估框架：持续监控 → 离散查询；管道执行 → 交互循环；实时数据 → API 调用。此外论文系统只产出诊断报告，DBA-Bench 要求真实修复，故在报告生成前插入 LLM 修复循环。
+The paper's DBAIOps is a continuously running monitoring system, while DBA-Bench is a discrete Agent evaluation framework: continuous monitoring → discrete queries; pipeline execution → interactive loops; real-time data → API calls. In addition, the paper's system only produces a diagnosis report, whereas DBA-Bench requires real remediation, so an LLM remediation loop is inserted before report generation.
 
-### 8.2 算法层面的忠实度
+### 8.2 Algorithm-Level Fidelity
 
-| 组件 | 忠实度 | 说明 |
+| Component | Fidelity | Notes |
 |------|--------|------|
-| ADF 5步算法 | ★★★★★ | 公式逐步一致；≥3 样本才评估；threshold=1.2 由 F_state 数学行为推导 |
-| AnomalyModel 检测方程 | ★★★★☆ | 方程 + M/N 频率控制 + 趋势派生已接入演化循环；入口匹配仍是关键词 |
-| ExperienceGraph 结构 | ★★★★★ | 6 顶点 + 4 边类型一致 |
-| Two-Stage Evolution | ★★★★☆ | 批量收集 + ADF 裁剪 + 异常扩展一致；快照指标按轮重采样近似时序 |
-| 结构化 Prompt | ★★★★★ | ⟨Sa, Sl, Sm, Se, So⟩ 用于终局报告；Sm 为关键统计 + ADF 证据 |
-| Proximity Discovery | ★★★★☆ | 逻辑一致，Cross-Edge 仅会话内有效 |
+| ADF 5-step algorithm | ★★★★★ | Formulas match step by step; evaluation only with ≥3 samples; threshold=1.2 derived from the mathematical behavior of F_state |
+| AnomalyModel detection equations | ★★★★☆ | Equations + M/N frequency control + trend derivation wired into the evolution loop; entry matching is still keyword-based |
+| ExperienceGraph structure | ★★★★★ | 6 vertex types + 4 edge types match |
+| Two-Stage Evolution | ★★★★☆ | Batch collection + ADF pruning + anomaly-driven expansion match; snapshot metrics approximate time series via per-round resampling |
+| Structured Prompt | ★★★★★ | ⟨Sa, Sl, Sm, Se, So⟩ used for the final report; Sm is key statistics + ADF evidence |
+| Proximity Discovery | ★★★★☆ | Logic matches; Cross-Edges are valid only within a session |
 
-### 8.3 论文未公开的实现细节（需自行选择）
+### 8.3 Implementation Details Not Disclosed by the Paper (Our Own Choices)
 
-| 细节 | 论文描述 | 我们的选择 |
+| Detail | Paper description | Our choice |
 |------|---------|-----------|
-| θ (波动性阈值) | 未给出 | 10.0 (可配置) |
-| score_threshold | 未给出 | 1.2 (可配置；由 F_state 数学行为推导，勿改 0.7) |
-| Bt 计算方法 | "按小时更新" | trimmed mean（去除上下 25%） |
-| CV 的 ρV 输入 | "波动序列自相关" | 相邻差绝对值序列 lag-1 自相关 |
-| CV 的 ρR 基准 | "随机序列自相关" | 1/√n（白噪声渐近值） |
-| 趋势分析算法/阈值 | 未给出 | 前后半对比 + 变化率；sharp=0.3, slow=0.1, cv=0.5 (可配置) |
-| 路径数量限制 | 未提及 | top_k=5，重叠模型取 2 条 (可配置) |
+| θ (volatility threshold) | Not given | 10.0 (configurable) |
+| score_threshold | Not given | 1.2 (configurable; derived from the mathematical behavior of F_state — do not change it to 0.7) |
+| Bt computation method | "updated hourly" | Trimmed mean (drop the top and bottom 25%) |
+| ρV input for CV | "autocorrelation of the volatility series" | Lag-1 autocorrelation of the series of absolute successive differences |
+| ρR baseline for CV | "autocorrelation of a random series" | 1/√n (white-noise asymptotic value) |
+| Trend analysis algorithm/thresholds | Not given | First-half vs second-half comparison + change rate; sharp=0.3, slow=0.1, cv=0.5 (configurable) |
+| Path count limit | Not mentioned | top_k=5; 2 paths for overlapping models (configurable) |
 
-### 8.4 框架适配（非论文内容的必要补充）
+### 8.4 Framework Adaptations (Necessary Additions beyond the Paper)
 
-| 补充机制 | 原因 |
+| Added mechanism | Reason |
 |---------|------|
-| Keyword-based trigger matching | Agent 首轮无指标历史，方程在演化轮次中确认 |
-| LLM fallback prompt | 图谱无法匹配告警时的路径 |
-| 指标样本提取（series/records/snapshot 分派） | 适配 DBA-Bench 工具结果格式 |
-| excluded metric types | 图谱指标可能不在目标系统工具面上 |
-| outcome.changes 跟踪 | DBA-Bench Outcome 评估需要真实修复记录 |
+| Keyword-based trigger matching | The Agent's first turn has no metric history; equations confirm during the evolution rounds |
+| LLM fallback prompt | The path taken when the graph cannot match the alert |
+| Metric sample extraction (series/records/snapshot dispatch) | Adapts to DBA-Bench tool result formats |
+| Excluded metric types | Graph metrics may not be on the target system's tool surface |
+| outcome.changes tracking | DBA-Bench Outcome evaluation requires records of real remediation |
 
-### 8.5 已知局限
+### 8.5 Known Limitations
 
-1. **无历史基线**: 论文的 Bt 基于小时级历史数据；我们用当前序列统计量近似
-2. **图谱规模有限**: 仅覆盖 DBA-Bench 已有场景
-3. **快照指标时序为近似**: 每演化轮次一个样本，序列长度受演化深度与 turn 预算限制
-4. **无持续学习**: 图谱静态，Cross-Edge 不跨运行持久化
-5. **TiDB 复用 PG 图谱**: 经验知识未按系统拆分
+1. **No historical baseline**: the paper's Bt is based on hourly historical data; we approximate it with statistics of the current series
+2. **Limited graph scale**: covers only DBA-Bench's existing scenarios
+3. **Snapshot metric time series are approximate**: one sample per evolution round; series length is limited by evolution depth and the turn budget
+4. **No continuous learning**: the graph is static, and Cross-Edges do not persist across runs
+5. **TiDB reuses the PG graph**: experience knowledge is not split by system
 
 ---
 
-## 9. 文件清单
+## 9. File Inventory
 
 ```
 src/agents/baselines/dbaiops/
 ├── types.py            # GraphNode, GraphEdge, AnomalyEquation, ADFResult, DiagnosticPath, EvolutionState
-├── adf.py              # ADF 5 步算法
-├── anomaly_model.py    # AnomalyModel（方程 + M/N 频率控制）+ compute_trend
-├── graph.py            # ExperienceGraph 异构图
-├── retriever.py        # ExperienceRetriever 两阶段图演化 + SQL_BACKED_METRIC_QUERIES
-├── prompts.py          # SYSTEM / DIAGNOSIS / REMEDIATION / FALLBACK Prompt
-├── agent.py            # DbaiopsAgent 主类 + MockDbaiopsAgent
-└── __init__.py         # 导出 DbaiopsAgent, MockDbaiopsAgent
+├── adf.py              # ADF 5-step algorithm
+├── anomaly_model.py    # AnomalyModel (equations + M/N frequency control) + compute_trend
+├── graph.py            # ExperienceGraph heterogeneous graph
+├── retriever.py        # ExperienceRetriever two-stage graph evolution + SQL_BACKED_METRIC_QUERIES
+├── prompts.py          # SYSTEM / DIAGNOSIS / REMEDIATION / FALLBACK prompts
+├── agent.py            # DbaiopsAgent main class + MockDbaiopsAgent
+└── __init__.py         # Exports DbaiopsAgent, MockDbaiopsAgent
 
 data/knowledge_graph/
-└── pg_experience_graph.json   # PostgreSQL 经验图谱（sha256 由 factory 校验）
+└── pg_experience_graph.json   # PostgreSQL experience graph (sha256 verified by the factory)
 
 tests/
-└── test_dbaiops_agent.py      # 单元/集成测试（全 mock，不调用真实 LLM）
+└── test_dbaiops_agent.py      # Unit/integration tests (fully mocked, no real LLM calls)
 
 examples/
-├── run_dbaiops_baseline.py             # PG 场景入口脚本
-└── run_mock_baseline_agents_trace.py   # MockDbaiopsAgent trace 导出冒烟脚本
+├── run_dbaiops_baseline.py             # PG scenario entry script
+└── run_mock_baseline_agents_trace.py   # MockDbaiopsAgent trace export smoke script
 ```
 
-factory 注册: `src/agents/factory.py` 的 `DBAIOPS_SETTING_KEYS`（adf_score_threshold / adf_theta / frequency_m / frequency_n / graph_path / graph_sha256 / max_evolution_depth / top_k），settings 为精确键集合。
+Factory registration: `DBAIOPS_SETTING_KEYS` in `src/agents/factory.py` (adf_score_threshold / adf_theta / frequency_m / frequency_n / graph_path / graph_sha256 / max_evolution_depth / top_k); settings is an exact key set.
 
 ---
 
-## 10. TiDB 知识图谱
+## 10. TiDB Knowledge Graph
 
-`data/knowledge_graph/tidb_experience_graph.json`（sha256 `249ce41f…`）由 TiDB 8.1 官方文档语料
-（`knowledge/tidb`，3518 篇）与场景定向语料（`knowledge/tidb/curated`，34 篇）统一构建：语料经
-`tidb_unified` 中间层一视同仁处理，最终图谱对 Agent 不暴露任何来源身份；chunk 级溯源在
-`data/knowledge_graph/tidb_graph_provenance.jsonl`（sidecar，仅审计用）。
+`data/knowledge_graph/tidb_experience_graph.json` (sha256 `249ce41f…`) is built uniformly from the TiDB 8.1 official documentation corpus
+(`knowledge/tidb`, 3518 documents) plus scenario-targeted corpus (`knowledge/tidb/curated`, 34 documents): the corpus is processed uniformly through
+the `tidb_unified` intermediate layer, and the final graph exposes no source identity to the Agent; chunk-level provenance lives in
+`data/knowledge_graph/tidb_graph_provenance.jsonl` (a sidecar, for auditing only).
 
-构成：trigger 210 / experience 564 / tool 114 / metric 22（恰好覆盖 TiDB 指标目录全集，
-`src/execution/tidb_metrics.py`）/ tag 32 / auxiliary 25；边 2067（containment 902 /
-diagnosis 931 / relevance 234）。构建纪律：只收录故障类级别知识（机制 + 鉴别诊断 + 修复族），
-不收录 case 实例解法；阈值仅在语料给出明确数值时写入（当前 16/210 个 trigger 带完整检测方程，
-其余待场景 hardening/rerun 校准）。
+Composition: 210 triggers / 564 experiences / 114 tools / 22 metrics (exactly covering the full TiDB metric catalog,
+`src/execution/tidb_metrics.py`) / 32 tags / 25 auxiliaries; 2067 edges (902 containment /
+931 diagnosis / 234 relevance). Build discipline: only fault-class-level knowledge is included (mechanisms + differential diagnosis + remediation families);
+case-instance solutions are not included. Thresholds are written only when the corpus gives an explicit value (currently 16 of 210 triggers carry complete
+detection equations; the rest await scenario hardening/rerun calibration).
 
-选择规则：`DbaiopsAgent._ensure_initialized` 按 `set_tools` 检测到的目标系统选图——TiDB 工具面
-（含 `query_history` + `manage_cluster`）加载 TiDB 图，其余加载 `graph_path` 指定的 PG 图；
-factory 实验配置用 `graph_path`/`graph_sha256` 显式 pin 目标图。TiDB 上快照指标不做重采样
-（query_history 为有界冻结窗口，重采样无意义），ADF 仅对 series 型指标生效。已知缺口：跨分片
-锚点 trigger（如 `trigger_slow_query`）的部分路径尚未挂 metric/tool 叶子，留待增补。
+Selection rule: `DbaiopsAgent._ensure_initialized` picks the graph based on the target system detected via `set_tools` — a TiDB tool surface
+(including `query_history` + `manage_cluster`) loads the TiDB graph; everything else loads the PG graph specified by `graph_path`;
+the factory experiment configuration pins the target graph explicitly via `graph_path`/`graph_sha256`. On TiDB, snapshot metrics are not resampled
+(query_history is a bounded frozen window, so resampling is meaningless), and ADF applies only to series-type metrics. Known gap: some paths of the
+cross-shard anchor triggers (e.g. `trigger_slow_query`) do not yet have metric/tool leaves attached, pending additions.

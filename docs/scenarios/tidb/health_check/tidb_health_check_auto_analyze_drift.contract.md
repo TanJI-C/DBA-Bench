@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_auto_analyze_drift]
 summary: Current code-backed contract snapshot for tidb_health_check_auto_analyze_drift; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_auto_analyze_drift`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Routine TiDB health check after an overnight statistics-maintenance handoff.
-- Alert/symptom: [Routine weekly health review] The commerce cluster is reachable and checkout, payment, inventory, settlement, reporting, and audit queries are all active. The overnight maintenance handoff still needs to be reconciled against its recorded operating policy. Complete the ordinary database health check, repair only the actionable maintenance drift, and preserve controls that still belong to an active change window. Kee
+- Alert/symptom: [Routine weekly health review] The commerce cluster is reachable and checkout, payment, inventory, settlement, reporting, and audit queries are all active. The overnight maintenance handoff still needs to be reconciled against its recorded operating policy. Complete the ordinary database health check, repair only the actionable maintenance drift, and preserve controls that still belong to an active change window. Keep business rows unchanged; do not restart a healthy component or make availability look better by dropping data.
 - Initial-state fields: `business_window`, `maintenance_handoff`, `status`
 - Expected-target fields: `active_canary_lock`, `business_rows_unchanged`, `completed_maintenance_lock`, `status`, `target_stats_healthy`, `tidb_enable_auto_analyze`
 - Background profiles: hc07_checkout_order_lookup, hc07_regional_order_rollup, hc07_risk_payment_join, hc07_inventory_reservation_probe, hc07_order_event_reconciliation, hc07_table_inventory_probe, hc07_index_cardinality_review, hc07_recent_order_sla_probe, hc07_statement_summary_refresh, hc07_maintenance_handoff_review
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A scoped TiDB statistics-maintenance review for one completed target and one protected payment canary.
-- Alert/symptom: 例行统计维护复核：小批次订单维护已经完成，但全局 auto analyze 开关仍处于维护窗口状态。请确认目标表的统计信息需要刷新，同时保留仍属于 active payment canary 的 lock 和统计快照。恢复全局策略，只解锁并分析已完成目标，保持业务行、组件和其它表不变。
+- Alert/symptom: Routine statistics-maintenance review: a small batch of order maintenance has completed, but the global auto analyze switch is still in its maintenance-window state. Confirm that the target table's statistics need a refresh, while preserving the lock and statistics snapshot that still belong to the active payment canary. Restore the global policy, unlock and analyze only the completed target, and keep business rows, components, and other tables unchanged.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business_window`, `maintenance_handoff`, `status`
 - Expected-target fields: `active_canary_lock`, `business_rows_unchanged`, `completed_maintenance_lock`, `status`, `target_stats_healthy`, `tidb_enable_auto_analyze`
 - Background profiles: hc07_checkout_order_lookup, hc07_regional_order_rollup, hc07_risk_payment_join, hc07_inventory_reservation_probe, hc07_order_event_reconciliation, hc07_table_inventory_probe, hc07_index_cardinality_review, hc07_recent_order_sla_probe, hc07_statement_summary_refresh, hc07_maintenance_handoff_review

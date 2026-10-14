@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_long_transaction_mvcc]
 summary: Current code-backed contract snapshot for tidb_health_check_long_transaction_mvcc; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_long_transaction_mvcc`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Routine health review of retained MVCC versions and worker handoffs.
-- Alert/symptom: 例行 TiDB 集群健康检查：订单业务查询和 QPS 仍在正常范围，但历史版本保留窗口在扩大。请把集群事务、进程列表和业务运行时的交接记录关联起来复核。会话名称很相似，其中既有当前服务读取，也有换岗后的旧读取和历史审计连接。请识别真正影响版本回收的对象，只做最小范围处理，并保持当前服务和已提交业务数据不变。
+- Alert/symptom: Routine TiDB cluster health check: order business queries and QPS are still within the normal range, but the historical-version retention window keeps growing. Cross-check the cluster transactions, the processlist, and the business runtime's handoff records. The session names look very similar; among them are current serving reads, stale reads left over from shift handoffs, and historical audit connections. Identify the objects that actually block version reclamation, take only minimal-scope action, and keep current serving and committed business data unchanged.
 - Initial-state fields: `checkpoint_rows`, `historical_processlist_connections`, `new_versions`, `snapshot_transactions`, `status`, `worker_lease_registry_rows`, `worker_session_history_rows`
 - Expected-target fields: `business_integrity`, `checkpoint_rows`, `current_worker_sessions`, `historical_processlist_connections`, `new_versions`, `post_write_abandoned_sessions`, `pre_write_abandoned_session`
 - Background profiles: checkout_order_point_lookup, customer_order_history_rollup, order_status_dashboard, recent_order_feed, reconciliation_crc_sample, order_audit_recent_rollup, fulfillment_status_preview, worker_supervisor_health, handoff_audit_sample, reconciliation_progress_sample, transaction_health_sample
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A focused TiDB MVCC review for one stale worker handoff boundary.
-- Alert/symptom: 例行 MVCC 健康复核：订单服务有一个 abandoned worker session 的 snapshot 早于交接写入边界。请关联当前 worker lease、handoff history、worker-specific checkpoint 和 live TxnStart，区分唯一 stale session、当前 worker 与 post-write retry。只结束该 session，保留其它连接、checkpoint 和已提交业务数据。
+- Alert/symptom: Routine MVCC health review: the order service has an abandoned worker session whose snapshot predates the handoff write boundary. Correlate the current worker lease, handoff history, worker-specific checkpoint, and live TxnStart to distinguish the single stale session, the current worker, and post-write retries. Kill only that session and keep all other connections, checkpoints, and committed business data intact.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `checkpoint_rows`, `historical_processlist_connections`, `new_versions`, `snapshot_transactions`, `status`, `worker_session_history_rows`
 - Expected-target fields: `business_integrity`, `checkpoint_rows`, `current_worker_sessions`, `historical_processlist_connections`, `new_versions`, `post_write_abandoned_sessions`, `pre_write_abandoned_session`
 - Background profiles: checkout_order_point_lookup, customer_order_history_rollup, order_status_dashboard, recent_order_feed, reconciliation_crc_sample, order_audit_recent_rollup, fulfillment_status_preview, worker_supervisor_health, handoff_audit_sample, reconciliation_progress_sample, transaction_health_sample

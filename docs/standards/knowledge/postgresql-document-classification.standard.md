@@ -20,7 +20,7 @@ official documentation into `configuration`, `guide`, `solution`, and `fact`.
 Only this directory can be used as source:
 
 ```text
-`knowledge/pg_src/pg16-docs-md`（上游 PostgreSQL 16 文档的本地镜像，不随仓库分发）
+`knowledge/pg_src/pg16-docs-md` (a local mirror of the upstream PostgreSQL 16 documentation; not distributed with the repo)
 ```
 
 Do not reuse existing `knowledge/pg` content as source text.

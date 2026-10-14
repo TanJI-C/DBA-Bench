@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_ticdc_gc_safepoint]
 summary: Current code-backed contract for the TiCDC OOM, MVCC lock, and abandoned service safepoint composite fault.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.knowledge.tidb-knowledge-usage, standard.knowledge.tidb-knowledge-construction, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_ticdc_gc_safepoint`
@@ -32,7 +33,7 @@ main outcome to pass.
 
 | case_no | case_id | title | target label |
 | ---: | --- | --- | --- |
-| 0 | `ticdc_oom_leftover_lock_and_service_safepoint` | TiCDC OOM 后遗留 Region lock 与 abandoned service GC safepoint 复合故障 | `hard` |
+| 0 | `ticdc_oom_leftover_lock_and_service_safepoint` | Compound fault of a leftover Region lock after TiCDC OOM and an abandoned service GC safepoint | `hard` |
 
 The calibrated live reference is `tidb-k02-kb06-mock-kb-r31`; the measurement method is part of
 this contract.

@@ -8,18 +8,18 @@ scope: [shared, scenario, persistent-scenario]
 summary: Describes the exact and semantic DP matcher configuration, validation protocol, and non-fallback behavior.
 source_of_truth: code
 related: [standard.evaluation.dp-op-sp]
+language: en
 ---
 
-# DP 语义匹配指南
+# DP Semantic Matching Guide
 
-本文是 semantic matcher 的实现说明。DP 的总体设计、精确/语义两条路径共用的条件协议，以及
-DP 与 OP/SP 的边界，统一以 [DP、OP、SP 设计原则](../../standards/evaluation/dp-op-sp.standard.md) 为准。
+This document describes the implementation of the semantic matcher. The overall DP design, the condition protocol shared by the exact and semantic paths, and the boundary between DP and OP/SP are governed by the [DP, OP, and SP design principles](../../standards/evaluation/dp-op-sp.standard.md).
 
-DP 默认使用 `exact` matcher，继续按场景 evaluator 声明的 alias 精确匹配。需要评估开放表达时，将 `OrchestratorRunConfig.diagnosis_match_mode` 设为 `semantic`；语义模式不改变 Agent 的提交 schema，也不把候选根因类别暴露给 Agent。
+DP uses the `exact` matcher by default, continuing to match exactly against the aliases declared by the scenario evaluator. To evaluate open-ended expressions, set `OrchestratorRunConfig.diagnosis_match_mode` to `semantic`; semantic mode does not change the Agent's submission schema, nor does it expose candidate root-cause categories to the Agent.
 
-## 使用方式
+## Usage
 
-程序化运行时显式设置：
+Set it explicitly for programmatic runs:
 
 ```python
 run_config = OrchestratorRunConfig(
@@ -29,7 +29,7 @@ run_config = OrchestratorRunConfig(
 )
 ```
 
-所有现有场景入口也可以通过环境变量切换，不需要逐个修改入口脚本：
+All existing scenario entry points can also be switched via environment variables, without modifying each entry script individually:
 
 ```bash
 export AIOPS_DP_MATCH_MODE=semantic
@@ -39,7 +39,7 @@ conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.p
   --mode mock --case branch_order_distribution_shift
 ```
 
-`AIOPS_DP_MATCH_MODE` 只能是 `exact` 或 `semantic`。未设置时为 `exact`。语义模式选择模型后，配置文件必须存在对应的 OpenAI-compatible 配置：
+`AIOPS_DP_MATCH_MODE` must be either `exact` or `semantic`; when unset it is `exact`. Once a model is selected for semantic mode, the config file must contain a corresponding OpenAI-compatible configuration:
 
 ```json
 {
@@ -51,11 +51,11 @@ conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.p
 }
 ```
 
-不要把真实凭证提交到仓库。`url` 可以指向 vLLM 或其他兼容 `/chat/completions` 的服务。
+Do not commit real credentials to the repository. The `url` can point to vLLM or any other service compatible with `/chat/completions`.
 
-## 启动小模型
+## Start the small model
 
-启动脚本位于 [`scripts/start_dp_semantic_model.py`](../../../scripts/start_dp_semantic_model.py)，默认启动 Qwen3-4B 的 FP16 vLLM 服务：
+The startup script is located at [`scripts/start_dp_semantic_model.py`](../../../scripts/start_dp_semantic_model.py) and by default starts an FP16 vLLM service for Qwen3-4B:
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
@@ -64,7 +64,7 @@ conda run -n aiops python scripts/start_dp_semantic_model.py \
   --port 8000
 ```
 
-脚本默认使用 `max_model_len=4096`、`gpu_memory_utilization=0.90`、单卡张量并行。当前 11GB 显存的单卡 GPU 如果 FP16 显存不足，可在模型服务确认支持的前提下改用量化 checkpoint：
+By default the script uses `max_model_len=4096`, `gpu_memory_utilization=0.90`, and single-GPU tensor parallelism. On current single-GPU cards with 11GB of VRAM, if FP16 does not fit in memory, you can switch to a quantized checkpoint provided the model service confirms support:
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
@@ -72,34 +72,34 @@ conda run -n aiops python scripts/start_dp_semantic_model.py \
   --quantization awq
 ```
 
-使用 `--detach` 可后台启动，日志默认写入 `logs/dp_semantic_model.log`：
+Use `--detach` to start it in the background; logs are written to `logs/dp_semantic_model.log` by default:
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
   --model Qwen/Qwen3-4B-Instruct-2507 --detach
 ```
 
-状态检查：
+Status check:
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
   --status --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port 8000
 ```
 
-语义 judge 每次请求前都会调用 `GET /v1/models` 检查 endpoint 和模型 ID。模型未启动、端口不可达、鉴权失败或服务未加载目标模型时，评估会直接抛出包含上述启动命令和 status 命令的 warning；不会静默使用 exact matcher。
+Before every request the semantic judge calls `GET /v1/models` to check the endpoint and model ID. When the model is not started, the port is unreachable, authentication fails, or the service has not loaded the target model, evaluation raises a warning containing the startup and status commands above; it never silently uses the exact matcher.
 
-## 判定协议
+## Judgment protocol
 
-语义 judge 收到场景 evaluator 的隐藏 `ExpectedCondition` 和 Agent 提交的 `diagnosis.conditions`，对每个隐藏检查点返回：
+The semantic judge receives the scenario evaluator's hidden `ExpectedCondition` items and the Agent-submitted `diagnosis.conditions`, and returns for each hidden checkpoint:
 
-- `entailed_by`：支持该检查点的 submitted condition 下标；
-- `contradicted_by`：与该检查点矛盾的 submitted condition 下标；
-- `reason`：一句简短理由。
+- `entailed_by`: the indices of the submitted conditions that entail the checkpoint;
+- `contradicted_by`: the indices of the submitted conditions that contradict the checkpoint;
+- `reason`: a brief one-sentence rationale.
 
-judge 必须一次返回全部隐藏检查点。返回缺字段、重复 ID、非法下标、空内容或 API 错误都会直接抛错；不会退回 `exact` matcher。
+The judge must return all hidden checkpoints in one response. Missing fields, duplicate IDs, invalid indices, empty content, or API errors all raise an error immediately; there is no fallback to the `exact` matcher.
 
-语义模式只替换 DP。OP 仍通过环境重新验证，SP 仍读取规范化 trace。
+Semantic mode only replaces DP. OP is still re-verified through the environment, and SP still reads the normalized trace.
 
-## 当前限制
+## Current limitations
 
-本阶段只完成接口和离线契约测试；模型服务联调后还需要用同义、症状冒充根因、因果方向相反和噪声根因样本进行校准。
+At this stage only the interface and offline contract tests are complete; after the model service is integrated, calibration is still needed using samples covering paraphrases, symptoms masquerading as root causes, reversed causal direction, and noisy root causes.

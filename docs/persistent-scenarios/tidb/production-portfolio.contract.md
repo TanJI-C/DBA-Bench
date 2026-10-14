@@ -8,209 +8,212 @@ scope: [tidb, persistent-scenario]
 summary: Five production-first TiDB target scenarios covering OLTP contention, OLAP delivery, TiFlash HTAP, TiCDC freshness and online topology change.
 source_of_truth: contract
 related: [standard.persistent-scenario.architecture, standard.persistent-scenario.evaluation, standard.persistent-scenario.difficulty, guide.persistent-scenario.implement-persistent-scenario]
+language: en
 ---
 
-# TiDB 五个生产型 Persistent Scenario 实施指导合同
+# Implementation Guidance Contract for Five Production-Style TiDB Persistent Scenarios
 
-## 1. 效力与实施入口
+## 1. Validity and Implementation Entry Point
 
-本文确定五实例的目标设计，不宣称已经实现或校准。实现从 [统一指南](../../guides/persistent-scenario/implement-persistent-scenario.guide.md) 开始，遵守 [架构](../../standards/persistent-scenario/architecture.standard.md)、[评估](../../standards/persistent-scenario/evaluation.standard.md) 和 [难度](../../standards/persistent-scenario/difficulty.standard.md)。本文补充 TiDB 业务、拓扑、故障因果及验收，不建立另一套 evaluator 通则。
+This document settles the target design of the five instances and does not claim they are already implemented or calibrated. Implementation starts from the [unified guide](../../guides/persistent-scenario/implement-persistent-scenario.guide.md) and observes the [Architecture Standard](../../standards/persistent-scenario/architecture.standard.md), the [Evaluation Standard](../../standards/persistent-scenario/evaluation.standard.md), and the [Difficulty Standard](../../standards/persistent-scenario/difficulty.standard.md). This document supplements TiDB business context, topology, fault causality, and acceptance; it does not establish another set of general evaluator rules.
 
-bounded Case 只作机制参考，不是必选故障池。本文和注入时间线属于作者材料，不能整体泄漏给被测 Agent；公开业务目标、授权与观测信息由独立运行时 payload 提供。
+Bounded Cases serve only as mechanism references, not as a mandatory fault pool. This document and the injection timelines are authoring material and must not be leaked wholesale to the evaluated Agent; the public business objectives, authorizations, and observability information are provided by an independent runtime payload.
 
-本文中的分钟数是候选实验排期，不是故障响应 deadline。业务期限、预算、数据规模、资源配额必须经健康与参考路径验证后冻结。所有实例先保持 `development_provisional` / measure-only；未确定业务预算时不得输出正式通过结论。长任务不能通过把生产中数小时的 MVCC/容量累积任意压成几十秒来声称真实：可用可解释的历史数据初态构造风险，再运行真实变化。
+The minute counts in this document are a candidate experimental schedule, not fault-response deadlines. Business deadlines, budgets, data scales, and resource quotas must be frozen only after validation through the healthy and reference paths. All instances start as `development_provisional` / measure-only; no formal pass conclusions may be issued before business budgets are settled. A long-running scenario cannot claim realism by arbitrarily compressing hours of production MVCC/capacity accumulation into tens of seconds: risk can be constructed from an explainable historical data initial state, and then real change is run on top.
 
-## 2. 第一原则与五实例边界
+## 2. First Principles and the Five-Instance Boundary
 
-服务及其承诺决定负载，负载决定风险，风险决定外部输入和故障。分布式系统自动选主、重试和调度属于正常恢复能力；不应为了迫使 Agent 动手而反复打断这些机制。零处理是否失败在整个业务时间窗验证，不要求每个事件都必须靠手工修复。
+Services and their commitments determine the workload, the workload determines the risks, and the risks determine the external inputs and faults. A distributed system's automatic leader election, retries, and scheduling are normal recovery capabilities; these mechanisms must not be repeatedly interrupted just to force the Agent to act. Whether zero-action fails is verified across the whole business time window; not every event is required to be fixed by hand.
 
-| ID | 生产服务 | 负载 | 核心业务矛盾 |
+| ID | Production service | Workload | Core business tension |
 |---|---|---|---|
-| `tidb_oltp_hotspot_resilience` | 订单与库存交易 | OLTP | 热点争用、慢 TiKV 与重试反馈，保护幂等和库存 |
-| `tidb_olap_warehouse_delivery` | 周期入仓与经营报表 | OLAP | 分布变化、统计与计划、导入/分析争资源，确保批次准点交付 |
-| `tidb_htap_tiflash_isolation` | 交易与实时经营分析 | HTAP，TiKV + TiFlash | 分析执行路径和资源竞争，交易与分析必须同时可用 |
-| `tidb_cdc_downstream_freshness` | 订单库到下游履约读模型 | OLTP + CDC 数据服务 | sink 背压、DDL 兼容与恢复吞吐，保护完整性和业务新鲜度 |
-| `tidb_oltp_online_topology_change` | 在线扩容、摘流与退役 | OLTP + 集群变更 | 流量迁移、placement 可满足性、数据调度和冗余恢复 |
+| `tidb_oltp_hotspot_resilience` | Order and inventory transactions | OLTP | Hotspot contention, slow TiKV, and retry feedback; protect idempotence and inventory |
+| `tidb_olap_warehouse_delivery` | Periodic ingestion and business reports | OLAP | Distribution change, statistics and plans, import/analytics resource competition; ensure on-time batch delivery |
+| `tidb_htap_tiflash_isolation` | Transactions and real-time business analytics | HTAP, TiKV + TiFlash | Analytics execution paths and resource competition; transactions and analytics must both stay available |
+| `tidb_cdc_downstream_freshness` | Order database to a downstream fulfillment read model | OLTP + CDC data service | Sink backpressure, DDL compatibility, and recovery throughput; protect integrity and business freshness |
+| `tidb_oltp_online_topology_change` | Online scale-out, traffic draining, and decommissioning | OLTP + cluster changes | Traffic migration, placement satisfiability, data scheduling, and redundancy recovery |
 
-CDC 场景不冒称 TiFlash HTAP：下游是独立异步复制系统，必须有自己的结果和新鲜度合同。第五例不注入额外随机灾难来凑事件，围绕一次有明确终态的真实维护任务展开。
+The CDC scenario does not masquerade as TiFlash HTAP: the downstream is an independent asynchronous replication system and must have its own result and freshness contract. The fifth example does not inject extra random disasters to pad the event count; it is built around one real maintenance task with a definite end state.
 
-## 3. 共同工作负载、工具与可信账本
+## 3. Shared Workloads, Tools, and Trusted Ledgers
 
-- OLTP 外部账本记录逻辑业务 ID、计划到达、尝试、提交结果与期限。客户端重试不扩大分母；连接拒绝、未发出与排队不能消失。提交结果未知时用业务幂等键核对，不把客户端 timeout 等同于回滚。
-- 分析 job 清单冻结输入批次、查询参数、结果真值和交付期限；排队、取消和重跑仍属于同一个交付责任。必需低频报表逐项验收，不用全局吞吐掩盖缺报表。
-- 固定有限资源、合法弹性上限与工具权限。Agent 要调应用重试、入仓并发、客户端路由或下游资源，必须提供可发现且实际生效的控制接口；不能要求它修改不可访问的应用源码。
-- 外部业务账本和真值不放在 Agent 可改写的数据库表里。数据库、TiCDC 状态接口及监控是事实来源之一，不能单独担任业务真值。
-- 一个持久拓扑、一个被测 mailbox conversation；事件按时间独立到达。重复注入以唯一 occurrence 记账，不重置合法修复。已预防、级联抵消和系统自愈不自动 invalid。
-- 相同数据、输入、资源和业务期限验证健康、完整、零、错误路径。完整路径应包括替代修复或预防证明；不要求 Agent 复制参考动作。
+- The OLTP external ledger records logical business IDs, planned arrivals, attempts, commit outcomes, and deadlines. Client retries do not grow the denominator; connection refusals, unsent requests, and queued items must not vanish. When a commit outcome is unknown, reconcile using the business idempotence key; a client timeout must not be equated with a rollback.
+- The analytics job list freezes input batches, query parameters, result ground truth, and delivery deadlines; queuing, cancellation, and reruns still belong to the same delivery obligation. Required low-frequency reports are accepted item by item; global throughput must not mask missing reports.
+- Finite resources, legitimate elasticity ceilings, and tool permissions are fixed. If the Agent is to tune application retries, ingestion concurrency, client routing, or downstream resources, a discoverable and actually effective control interface must be provided; it must not be required to modify inaccessible application source code.
+- External business ledgers and ground truths are not placed in database tables the Agent can rewrite. The database, the TiCDC status interfaces, and monitoring are among the sources of truth and cannot singly serve as business ground truth.
+- One persistent topology and one evaluated mailbox conversation; events arrive independently over time. Repeated injections are accounted with unique occurrences and do not reset legitimate fixes. Prevented events, cascades canceling out, and system self-healing are not automatically invalid.
+- The same data, inputs, resources, and business deadlines validate the healthy, full, zero-action, and wrong-action paths. The full path should include an alternative repair or prevention proof; the Agent is not required to copy the reference actions.
 
-## 4. 交易热点与慢节点：tidb_oltp_hotspot_resilience
+## 4. Transaction Hotspots and a Slow Node: tidb_oltp_hotspot_resilience
 
-### 4.1 服务、拓扑与机制
+### 4.1 Service, Topology, and Mechanisms
 
-订单提交、库存预留、订单状态读取；交易具有幂等键，库存不能超卖。候选拓扑为 3 PD、3 TiKV、2 TiDB、真实连接路由与可控应用 worker；副本数和故障域需明确。环境预算不允许任意增加节点解决问题。
+Order submission, inventory reservation, and order status reads; transactions carry idempotence keys and inventory must not be oversold. Candidate topology: 3 PD, 3 TiKV, 2 TiDB, real connection routing, and controllable application workers; replica counts and failure domains must be explicit. The environment budget does not allow solving problems by arbitrarily adding nodes.
 
-普通交易与促销热门商品混合。热门行的事务争用不能被“搬 Region”根治；范围写热点与同一业务行锁必须区分。慢节点以特定 TiKV 的可逆 I/O/CPU 限制产生真实延迟，不伪造指标。不能让整个 Raft 多数派不可恢复，必须保留可行参考路径。
+Ordinary transactions are mixed with promotional hot items. Transaction contention on hot rows cannot be cured by "moving Regions"; range write hotspots and locks on the same business row must be distinguished. The slow node produces real latency through a reversible I/O/CPU throttle on a specific TiKV, without faking metrics. The whole Raft majority must never be made unrecoverable; a feasible reference path must be preserved.
 
-结算批残留与热区耦合（机制细节归 oltp 包所有；不改任何预算/期限/超时常量）：
+Settlement-batch residue coupled with the hot zone (mechanism details are owned by the oltp package; no budget/deadline/timeout constants are changed):
 
-- **结算批残留与 wave-2 真实耦合**：`settlement_long_tx` 从单事务升级为有界结算批处理——每个结算项对库存行取写锁并持有（真实业务尝试），结束后除非暂停，否则继续队列中下一项。队列后段落在第二波促销热行上（SKU-0012 属 promo B 组）：未消解的批残留与第二波共享热行，锁等待链条叠加热点压力，wave-2 恢复不达 SO。杀掉当前会话不消解残留（客户端重连续跑队列）；合法消解途径是文档化的应用配置杠杆（见下）。
-- **共享资源重叠**：`tikv_slow_throttle` 的目标 store 与 promo 热区 leader 所在 store 重叠（能力激活时以 leader 分布证明）；释放限速而不再平衡 leader/负载时，热点仍钉在受限 store 上。
-- **追赶突刺**：限速解除后引入一个有界、自动恢复的真实容器级 CPU 回撤（追赶积压消耗处理能力）：热区 leader 仍集中在该 store 时热区真实再降级；leader 已迁离则同一突刺不再触碰热区。一次性"只解除限速"的修复失去该复核窗口。
-- **文档化应用配置杠杆（控制接口义务，§3）**：`ops.client_config` 新增两列并注释语义——`order_id_prefix`（部署前缀：客户端以其截断部署标识生成订单号，使生成的标识满足订单表列宽/严格模式；为空=沿用完整部署标识，长部署标识下会持续被 1406 拒绝）与 `settlement_paused`（结算批暂停标志）。两者都经受信驱动 poller 的版本化发布采纳；该杠杆把"应用/模式契约失配"的死局变成合法修复路径，并作为耦合的消解机制。任务文案保持症状化，不泄露列名以外的根因信息。
+- **Settlement-batch residue genuinely coupled with wave 2**: `settlement_long_tx` is upgraded from a single transaction to a bounded settlement batch — each settlement item takes and holds a write lock on an inventory row (a real business attempt); when an item finishes, unless paused, the batch proceeds to the next item in the queue. The later part of the queue lands on the second wave's promotional hot rows (SKU-0012 belongs to promo group B): unresolved batch residue shares hot rows with wave 2, the lock-wait chain compounds hotspot pressure, and wave-2 recovery misses SO. Killing the current session does not dissolve the residue (the client reconnects and continues the queue); the legitimate resolution path is the documented application configuration lever (see below).
+- **Shared-resource overlap**: the target store of `tikv_slow_throttle` overlaps the store hosting the promo hot-zone leaders (proven by the leader distribution when the capability activates); if the throttle is released without rebalancing leaders/load, the hotspot stays pinned to the throttled store.
+- **Catch-up spike**: after the throttle is lifted, a bounded, self-recovering real container-level CPU withdrawal is introduced (catch-up backlog consumes processing capacity): if hot-zone leaders are still concentrated on that store, the hot zone genuinely degrades again; if the leaders have moved away, the same spike no longer touches the hot zone. A one-shot "just lift the throttle" fix loses this recheck window.
+- **Documented application configuration lever (control-interface obligation, §3)**: `ops.client_config` gains two columns with annotated semantics — `order_id_prefix` (deployment prefix: the client generates order numbers from its truncated deployment identifier so the generated identifiers satisfy the order table's column width/strict mode; empty = keep using the full deployment identifier, which under a long deployment identifier keeps being rejected with 1406) and `settlement_paused` (settlement-batch pause flag). Both are adopted through versioned releases by the trusted driver poller; this lever turns the "application/schema contract mismatch" deadlock into a legitimate repair path and serves as the dissolution mechanism for the coupling. The task copy stays symptom-based and does not leak root-cause information beyond the column names.
 
-### 4.2 候选 75 分钟时间线
+### 4.2 Candidate 75-Minute Timeline
 
-| 时间 | 外部变化 | 因果与重复 |
+| Time | External change | Causality and repetition |
 |---|---|---|
-| 0–10 | 正常交易与已知正常峰值，健康准入 | 建立有真实写入的基线 |
-| 10 | 促销把流量集中到一组商品；结算客户端开始批处理（队列含 promo B 热行） | 热点等待增长；结算项是实际业务尝试，不是永生 blocker；未消解则残留延续 |
-| 18 | 承载相关 Region 的 TiKV 出现持续资源降速 | 等待叠加提交延迟；需证明命中实际承载节点（与热区 leader store 重叠） |
-| 25 | 已声明的旧版客户端发布启用激进重试 | 不确定提交与重试放大，可能影响普通商品；发布版本高于代理发布（版本为下限），不回滚代理已发布配置 |
-| 40 | 第二轮促销切换商品集合 | 与未消解的结算残留真实耦合（promo B 热行重叠）；验证防护可复用，不固定同 PID/同键 |
-| 55 | 降速解除，促销回落 | 解除后追赶突刺使受限 store 处理能力短暂回退：leader 未迁离则热区再降级；积压不会被脚本自动清空 |
-| 60–75 | 正常输入及接续观察 | 按合同 drain，保留此前损失 |
+| 0–10 | Normal transactions and a known normal peak, healthy admission | Establish a baseline with real writes |
+| 10 | A promotion concentrates traffic onto a group of items; the settlement client starts batch processing (the queue contains promo-B hot rows) | Hotspot waits grow; settlement items are real business attempts, not immortal blockers; if unresolved, the residue persists |
+| 18 | The TiKV hosting the relevant Regions enters a sustained resource slowdown | Waits compound commit latency; hitting the actually hosting node must be proven (overlapping the hot-zone leader store) |
+| 25 | A declared legacy-client release enables aggressive retries | Uncertain commits and retry amplification, possibly affecting ordinary items; the release version is higher than the agent's release (the version is a floor) and does not roll back the agent's released configuration |
+| 40 | The second promotion round switches the item set | Genuinely coupled with unresolved settlement residue (promo-B hot-row overlap); verifies protections are reusable, not pinned to the same PID/key |
+| 55 | The slowdown is lifted and the promotion subsides | The post-lift catch-up spike briefly reduces the throttled store's processing capacity: if leaders have not moved away, the hot zone degrades again; the backlog is not automatically cleared by scripts |
+| 60–75 | Normal inputs and continuity observation | Drain per the contract; earlier losses are retained |
 
-### 4.3 三路径与验收
+### 4.3 Three Paths and Acceptance
 
-- 完整路径：发布文档化应用配置使订单标识满足列宽（恢复交易通路）并在 wave-2 前消解结算残留（暂停 + 结束当前结算项）；识别行锁与 store 延迟的不同作用，把热区 leader/负载迁离受限 store（或等价的再平衡），解除限速，并在追赶突刺窗口后复核恢复；核对未知提交并保持幂等。第二波可被上述防护吸收。
-- 零路径：应用契约失配未修则交易通路不可用；持续慢节点+未消解残留+重试放大导致已冻结的交易预算违约；单纯等待（含限速自动解除）不能抹去损失，追赶突刺仍在 leader 未迁离时再降级。若零路径仍通过，说明组合没有证明干预必要性，需重审负载/机制。
-- 错误路径：只解除限速不迁离 leader（追赶突刺使 wave-2 恢复不达 SO）；只杀会话不暂停结算批（批重连续跑，残留仍在 wave-2 复发）；终止/缩容节点代替再平衡（副本与连续性真实受损，由交付失败体现）；盲重试造成重复订单；全局取消事务伤害正常客户。均由真实数据/交付/授权后果体现，不按动作名字判错；leader 分布、锁数、重试次数只是解释指标。
-- OP：逻辑交易期限预算、订单唯一性、库存/订单一致性、观察段持续接单能力。SP：保护其他租户、不降低已声明持久性或冗余要求。追赶突刺是有界、自动恢复的状态迁移，验收依据是业务真值，不要求 Agent 多调用一次验证工具。
+- Full path: release the documented application configuration so order identifiers satisfy the column width (restoring the transaction path) and dissolve the settlement residue before wave 2 (pause + finish the current settlement item); distinguish the different roles of row locks and store latency, move the hot-zone leaders/load off the throttled store (or an equivalent rebalance), lift the throttle, and recheck recovery after the catch-up spike window; reconcile unknown commits and preserve idempotence. The second wave can be absorbed by the protections above.
+- Zero path: if the application contract mismatch is not fixed, the transaction path is unusable; a sustained slow node + unresolved residue + retry amplification breach the frozen transaction budget; mere waiting (including the throttle lifting itself) cannot erase losses, and the catch-up spike still degrades the hot zone while leaders have not moved away. If the zero path still passes, the combination has not proven that intervention is necessary; the workload/mechanisms must be re-examined.
+- Wrong path: lifting only the throttle without moving leaders (the catch-up spike makes wave-2 recovery miss SO); killing only sessions without pausing the settlement batch (the batch reconnects and continues, and the residue still recurs in wave 2); terminating/scaling down nodes instead of rebalancing (replicas and continuity genuinely damaged, surfaced as delivery failures); blind retries creating duplicate orders; cancelling transactions globally harming normal customers. All are surfaced through real data/delivery/authorization consequences, not judged by action names; leader distribution, lock counts, and retry counts are explanatory metrics only.
+- OP: logical transaction deadline budget, order uniqueness, inventory/order consistency, and sustained order-taking capacity in the observation segment. SP: protect other tenants and do not lower declared durability or redundancy requirements. The catch-up spike is a bounded, self-recovering state transition; acceptance is based on business ground truth and does not require the Agent to invoke a verification tool one extra time.
 
-## 5. 分析仓库交付：tidb_olap_warehouse_delivery
+## 5. Analytics Warehouse Delivery: tidb_olap_warehouse_delivery
 
-### 5.1 服务、拓扑与机制
+### 5.1 Service, Topology, and Mechanisms
 
-每天多批订单入仓，形成地区销售、库存和结算报表。主目标是正确批次按时可查询和报表准点交付，不是前台小请求 QPS。使用 TiDB/TiKV 与 TiFlash 分析副本、真实入仓 worker 和 job scheduler；采用 TiDB 支持的已验证导入路径。若选择 Lightning local backend，必须验证版本、目标表限制和并发访问安全，不能直接对正在读写的生产表原地导入；推荐独立 staging 表完成校验后发布业务批次。
+Multiple batches of orders are ingested daily into the warehouse, producing regional sales, inventory, and settlement reports. The main objective is correct batches becoming queryable on time and on-time report delivery, not front-end small-request QPS. TiDB/TiKV with TiFlash analytics replicas, real ingestion workers, and a job scheduler are used; a verified import path supported by TiDB is adopted. If the Lightning local backend is chosen, its version, target-table restrictions, and concurrent-access safety must be verified; in-place import directly into production tables being read and written is not allowed. The recommended approach is a separate staging table that completes validation before the business batch is published.
 
-### 5.2 候选 100 分钟时间线
+### 5.2 Candidate 100-Minute Timeline
 
-| 时间 | 外部变化 | 因果与重复 |
+| Time | External change | Causality and repetition |
 |---|---|---|
-| 0–15 | 完整正常批次与报表基线 | 验证冷/热缓存和真实查询规模 |
-| 15 | 新批次的地区分布显著倾斜；批次 A 报表交付被调度器挂起（上游更正波已公告） | 统计过时可能使估算与 join 选择失准，必须用实测证明；挂起原因在 registry/queue 可见 |
-| 26 | 上游更正波落在批次 A 报表窗内：真实重写 stage 表并原子重发批次 A | 批次 A 报表真值在运行中期改变；重发完成前交付的报表读取到被替代的输入，完整性校验如实判定不完整 |
-| 30 | 次批次（另一组倾斜、相同报表类别）提前入仓，与批次 A 报表交付窗重叠 | 发布、重交付与统计维护竞争同一 TiKV 资源，产生真实的排序/治理决策 |
-| 40 | 一个调度配置发布提高报表并发；同窗调度器启动 staging 区真实维护 ANALYZE（非目标表） | 并发加宽与维护任务构成两个同窗、同工具的候选解释，只能靠跨证据排除 |
-| 70–100 | 保持业务清单，完成交付与核对 | 不因超时取消而删掉欠交 job；放行时机必须同时满足"重发完成后"与"期限内" |
+| 0–15 | A complete normal batch and report baseline | Validate cold/warm caches and real query scales |
+| 15 | The new batch's regional distribution skews significantly; Batch A's report delivery is suspended by the scheduler (an upstream correction wave has been announced) | Stale statistics may skew estimation and join choices, which must be proven by measurement; the suspension reason is visible in the registry/queue |
+| 26 | The upstream correction wave lands inside Batch A's report window: the stage table is genuinely rewritten and Batch A is atomically republished | Batch A's report ground truth changes mid-run; reports delivered before the republication completes read superseded inputs, and integrity checks faithfully judge them incomplete |
+| 30 | A follow-up batch (a different skew, the same report category) is ingested early, overlapping Batch A's report delivery window | Publishing, re-delivery, and statistics maintenance compete for the same TiKV resources, producing real ordering/governance decisions |
+| 40 | A scheduler configuration release raises report concurrency; in the same window the scheduler starts a real maintenance ANALYZE in the staging area (not the target tables) | Widened concurrency and the maintenance task form two candidate explanations in the same window with the same tooling; only cross-evidence can rule one out |
+| 70–100 | The business list is maintained; deliveries and reconciliations complete | Timed-out cancellations must not delete undelivered jobs; the release moment must satisfy both "after republication completes" and "within the deadline" |
 
-### 5.3 三路径与验收
+### 5.3 Three Paths and Acceptance
 
-- 完整路径：定位批次分布、统计和实际计划，核验更正波的 registry 重发标记后放行挂起的报表类，治理分析并发/内存与入仓速率；报表以更正后真值准点交付；排除维护 ANALYZE 噪声；保留结果快照和已完成批次。
-- 零路径：不放行挂起报表 → 受影响报表类整类欠交（INCOMPLETE_OUTSTANDING）；须证明不是健康资源配置本来就无法交付。
-- 错误路径：在重发完成前放行（报表读取被替代的输入，digest 与封账真值失配，verifier 记录 `delivered_after_republish=False` 归因）；全局提高内存或并发使其他任务失败；只恢复一条查询而暂停所有入仓；把旧批次结果当新报表交付。
-- OP：批次完整性、必需报表结果及期限、结束时无漏记的必需交付债务；`wh_report_result_truth` 逐交付记录批次 `republished_at` 与交付先后，digest 失配按"读取被替代输入"如实归因。SP：不能删事实数据、跳过批次验证或篡改 job 清单——受保护对象模式规则无法区分读/写，`protected_objects` 置空，该边界由动作类授权、GUC 授权、trusted ledger 篡改检测与完整性/required-state 真值校验（事实行数、staging 可重算、交付 digest、欠交判定）共同承担。ANALYZE、固定 join 形状和 TiFlash 路由均不默认成为必选动作。
+- Full path: localize the batch distribution, statistics, and actual plans; after verifying the correction wave's registry republication marker, release the suspended report category; govern analytics concurrency/memory and ingestion rates; reports are delivered on time with the corrected ground truth; the maintenance ANALYZE noise is ruled out; result snapshots and completed batches are preserved.
+- Zero path: the suspended reports are not released → the affected report category is under-delivered as a whole (INCOMPLETE_OUTSTANDING); it must be proven that a healthy resource configuration was not inherently unable to deliver.
+- Wrong path: releasing before the republication completes (reports read superseded inputs, digests mismatch the sealed ground truth, and the verifier records the `delivered_after_republish=False` attribution); raising memory or concurrency globally so other tasks fail; restoring one query while pausing all ingestion; delivering old-batch results as new reports.
+- OP: batch integrity, required report results and deadlines, and no unrecorded required-delivery debt at the end; `wh_report_result_truth` records, per delivery, the batch `republished_at` and delivery ordering, and digest mismatches are faithfully attributed to "reading superseded inputs". SP: fact data must not be deleted, batch validation must not be skipped, and the job list must not be tampered with — the protected-object schema rules cannot distinguish reads from writes, so `protected_objects` is left empty and this boundary is jointly carried by action-class authorization, GUC authorization, trusted-ledger tamper detection, and integrity/required-state ground-truth checks (fact row counts, staging recomputability, delivery digests, under-delivery determination). ANALYZE, fixed join shapes, and TiFlash routing do not default into mandatory actions.
 
-## 6. TiFlash 混合负载隔离：tidb_htap_tiflash_isolation
+## 6. TiFlash Mixed-Workload Isolation: tidb_htap_tiflash_isolation
 
-### 6.1 服务、拓扑与机制
+### 6.1 Service, Topology, and Mechanisms
 
-实时交易与运营仪表盘共享逻辑数据，分析使用 TiFlash。候选拓扑为 3 PD、3 TiKV、2 TiDB、2 TiFlash；若缩小拓扑，必须重新证明副本容错和资源可行性。冻结版本及其 RU 对 TiKV/TiFlash 的实际覆盖：资源组不能被假设成对所有组件 CPU/内存/I/O 的万能硬隔离。
+Real-time transactions and operational dashboards share logical data, with analytics on TiFlash. Candidate topology: 3 PD, 3 TiKV, 2 TiDB, 2 TiFlash; if the topology is shrunk, replica fault tolerance and resource feasibility must be re-proven. The frozen version's actual RU coverage of TiKV/TiFlash: resource groups must not be assumed to be a universal hard isolation for CPU/memory/I/O across all components.
 
-### 6.2 候选 90 分钟时间线
+### 6.2 Candidate 90-Minute Timeline
 
-| 时间 | 外部变化 | 因果与重复 |
+| Time | External change | Causality and repetition |
 |---|---|---|
-| 0–15 | 同时运行正常交易、仪表盘与定期分析 | 健康验证必须双侧同时达标 |
-| 15 | 分析账号发布路由/引擎偏好错误 | 在可行的 TiKV 路径执行大扫描，竞争交易资源；不能假定自动 fallback 一定发生 |
-| 28 | 交易峰值与大区间分析重叠 | 同时考察业务优先级和作业交付 |
-| 40 | 一个 TiFlash 节点可逆降速，并打开该节点的维护窗 | 分析执行变慢，不能简单永久关掉分析保护交易；维护窗内租户上线流水线推迟副本挂载（审计可见） |
-| 58 | 新租户按当前配置上线：真实建表（CREATE TABLE LIKE 不继承 TiFlash 副本）+ 真实数据切片，副本挂载因节点维护窗被推迟且恢复不自动补挂 | 新租户表无 placement 残留；只修存量表路由的修复在新租户表上不成立 |
-| 67 | 交易峰值重新武装并横跨恢复窗，同时提交新租户的重量级分析 | 租户模板钉住列存副本：placement 未补挂时路由错误在后续重分析窗按重试节奏复发 |
-| 70–90 | 节点恢复 = CPU 还原 + 容器重启（真实副本重建，追赶滞后可观测） | 重建期间 tiflash-only 读失败；MPP 复核必须等重建完成；被推迟的 placement 仍需人工补挂 |
+| 0–15 | Normal transactions, dashboards, and periodic analytics run together | Healthy validation must meet targets on both sides simultaneously |
+| 15 | An analytics account release ships a wrong routing/engine preference | Large scans execute on the feasible TiKV path, competing with transaction resources; automatic fallback must not be assumed to happen |
+| 28 | A transaction peak overlaps wide-range analytics | Business priority and job delivery are examined together |
+| 40 | One TiFlash node enters a reversible slowdown and its maintenance window opens | Analytics execution slows; analytics must not simply be permanently shut off to protect transactions; during the maintenance window the tenant-onboarding pipeline defers replica attachment (visible in audit) |
+| 58 | A new tenant goes live under the current configuration: real table creation (CREATE TABLE LIKE does not inherit TiFlash replicas) + real data slicing; replica attachment is deferred by the node's maintenance window and recovery does not attach it automatically | The new tenant's tables carry no placement residue; fixes that only repair existing-table routing do not hold on the new tenant's tables |
+| 67 | A transaction peak re-arms and spans the recovery window while the new tenant's heavyweight analytics is submitted | The tenant template pins the columnar replica: while placement has not been re-attached, the routing error recurs in later re-analysis windows at the retry cadence |
+| 70–90 | Node recovery = CPU restoration + container restart (real replica rebuild, catch-up lag observable) | tiflash-only reads fail during the rebuild; the MPP recheck must wait for the rebuild to complete; the deferred placement still needs to be attached manually |
 
-### 6.3 三路径与验收
+### 6.3 Three Paths and Acceptance
 
-- 完整路径：确认实际执行引擎、账号/会话有效配置和资源竞争，修正路由发布（接受 `auto` 与 `tiflash_preferred` 两个路由健康值）、并发/资源预算，安全取消并重跑可取消分析，补挂租户表 placement，观察副本重建后于峰值下完成 MPP 复核。
-- 零路径：错误路由持续存在且 placement 未补挂——租户交付物按重试策略耗尽后欠交，路由连续性 required-state 违约；不能仅凭短暂单节点降速宣称必须干预。
-- 错误路径：只修存量表路由而跳过新租户表——路由修复反而暴露 placement 缺口，租户重分析按 1815 路由错误复发（3 次重试可见）；只补 placement 而不修路由——发布模板停在已知故障值 `tikv_only`，路由连续性违约；把分析组限到无法完成交付；强制全部走不可用 TiFlash。允许等价解决方式，不要求恢复某个固定值。
-- OP：交易期限预算与分析 job 期限分别通过（含租户服务 `htap_tenant_service` 的 `tenant_region_heavy_analysis`），结果对应声明的快照，必要有效配置保证接续。TiFlash 复制进度只作机制观测；正常强一致读取不会因副本落后自动合法返回旧数据，不能以 lag 推断返回陈旧结果。若业务显式采用 stale read，单独声明允许快照范围并验收。路由连续性 required-state 接受公开 ENUM `ENGINE_PREFERENCES` 的路由健康子集 `{auto, tiflash_preferred}`（拒绝的是已知故障释放值），两个安全等价值均通过。
-- SP：不得牺牲受保护业务、关闭必要安全设置或通过假数据满足分析。受保护对象模式规则无法区分读/写，`protected_objects` 置空，该边界由动作类授权、GUC 授权、trusted ledger 篡改检测与真值校验共同承担。RU 消耗、MPP 任务数和副本进度不能替代业务结果。
+- Full path: confirm the actual execution engine, the account/session effective configuration, and the resource competition; correct the routing release (accepting the two routing-health values `auto` and `tiflash_preferred`) and the concurrency/resource budgets; safely cancel and rerun cancellable analytics; re-attach the tenant tables' placement; after observing the replica rebuild, complete the MPP recheck under peak.
+- Zero path: the wrong routing persists and placement is not re-attached — tenant deliverables are under-delivered after the retry policy is exhausted, breaching the routing-continuity required-state; intervention cannot be declared necessary on the strength of a brief single-node slowdown alone.
+- Wrong path: fixing only existing-table routing while skipping the new tenant's tables — the routing fix instead exposes the placement gap, and tenant re-analysis recurs with the 1815 routing error (visible across 3 retries); re-attaching placement without fixing routing — the released template stays at the known faulty value `tikv_only`, breaching routing continuity; throttling the analytics group so delivery cannot complete; forcing everything onto the unavailable TiFlash. Equivalent solutions are allowed; restoring some fixed value is not required.
+- OP: the transaction deadline budget and the analytics job deadline each pass (including the tenant service `htap_tenant_service`'s `tenant_region_heavy_analysis`); results correspond to the declared snapshot, and necessary effective configuration guarantees continuity. TiFlash replication progress is only a mechanism observation; normal strongly consistent reads do not legitimately return old data automatically just because a replica lags, and stale results must not be inferred from lag. If the business explicitly adopts stale read, declare the allowed snapshot range separately and accept against it. The routing-continuity required-state accepts the routing-health subset `{auto, tiflash_preferred}` of the public ENUM `ENGINE_PREFERENCES` (what is rejected is the known faulty released value); both safe equivalent values pass.
+- SP: protected business must not be sacrificed, necessary safety settings must not be disabled, and analytics must not be satisfied with fake data. The protected-object schema rules cannot distinguish reads from writes, so `protected_objects` is left empty and this boundary is jointly carried by action-class authorization, GUC authorization, trusted-ledger tamper detection, and ground-truth checks. RU consumption, MPP task counts, and replica progress cannot substitute for business results.
 
-## 7. CDC 下游新鲜度：tidb_cdc_downstream_freshness
+## 7. CDC Downstream Freshness: tidb_cdc_downstream_freshness
 
-### 7.1 服务、拓扑与机制
+### 7.1 Service, Topology, and Mechanisms
 
-上游 TiDB 订单持续写入，经 TiCDC 复制到真实下游数据库，履约系统查询已支付订单。候选部署包含正常 TiDB 集群、至少两个 TiCDC capture 和一个独立下游；下游选择及版本固定。此例的业务新鲜度来自“源端已承诺事务能否在期限内被下游正确看见”，不是 changefeed state=normal。
+The upstream TiDB order database is written continuously and replicated via TiCDC to a real downstream database; the fulfillment system queries paid orders. The candidate deployment includes a normal TiDB cluster, at least two TiCDC captures, and one independent downstream; the downstream choice and version are fixed. This scenario's business freshness comes from "whether source-side committed transactions can be correctly seen by the downstream within the deadline", not from changefeed state=normal.
 
-可见性停滞是复合根因：下游 sink 权限漂移（因子 A）使 schema 发布的 DDL 应用持续失败，而长时间重试失败的 changefeed 将检查点钉在故障前 TSO，钉住的检查点连带上游 GC 安全点停滞（因子 B，因果上由 A 滞留引发）。部署按新鲜度优先管线配置失败快速 GC pin 释放（changefeed gc-ttl 600s 的对应物）与 30m 的 GC 保留基线：pin 释放后 changefeed 保持 parked，GC 边界以 now-life_time 前进，未复制的故障窗变更历史逐步失去保护——只有先以授权的 `tidb_gc_life_time` 保住边界再恢复复制，追赶才能跨过检查点钉住。两个因子各有独立可见证据（下游 privilege 表、上游 `mysql.tidb` 的 `tikv_gc_safe_point` 与 `tidb_gc_life_time`、ticdc 日志与 checkpoint 指标），只修其一合同仍不满足。
+Visibility stall is a composite root cause: a downstream sink privilege drift (factor A) keeps DDL application from schema releases failing continuously, and a changefeed that keeps failing retries for a long time pins its checkpoint at a pre-fault TSO, and the pinned checkpoint in turn stalls the upstream GC safe point (factor B, causally triggered by A's persistence). Per the freshness-first pipeline, the deployment is configured with fast GC pin release on failure (the counterpart of a changefeed gc-ttl of 600s) and a 30m GC retention baseline: after pin release the changefeed stays parked, the GC boundary advances as now - life_time, and the change history of the un-replicated fault window progressively loses protection — only by first preserving the boundary with the authorized `tidb_gc_life_time` and then restoring replication can catch-up cross the checkpoint pin. Each factor has its own independently visible evidence (the downstream privilege tables, the upstream `mysql.tidb`'s `tikv_gc_safe_point` and `tidb_gc_life_time`, ticdc logs and checkpoint metrics); fixing only one still leaves the contract unsatisfied.
 
-### 7.2 候选 100 分钟时间线
+### 7.2 Candidate 100-Minute Timeline
 
-| 时间 | 外部变化 | 因果与重复 |
+| Time | External change | Causality and repetition |
 |---|---|---|
-| 0–15 | 连续写入及下游履约查询 | 用真实订单标记校验端到端可见性 |
-| 15 | 下游批处理开启（持续到 35），与 sink 写入竞争 | sink 背压使 backlog 积累 |
-| 30 | 正常上游 schema 发布与下游权限漂移相遇 | DDL/apply 失败；检查点钉住连带上游 GC 安全点停滞，运维侧统计维护照常运行形成同窗噪声 |
-| 35 | 订单高峰落在 schema release 恢复窗内并持续到被限流 | 高峰流入追赶积压，可见性预算横跨恢复窗与追赶窗 |
-| 65 | 下游批处理再次运行 | rerun 落在追赶积压未清时：必须排序（暂缓非关键 rerun 或限流上游）；已改调度应被保留 |
-| 80–100 | 正常输入和追平观察 | 不伪造 checkpoint 或直接删 changefeed 消除 lag |
+| 0–15 | Continuous writes and downstream fulfillment queries | Validate end-to-end visibility with real order markers |
+| 15 | Downstream batch processing starts (running until 35), competing with sink writes | Sink backpressure lets the backlog accumulate |
+| 30 | A normal upstream schema release meets the downstream privilege drift | DDL/apply failures; the pinned checkpoint stalls the upstream GC safe point, while ops-side statistics maintenance runs as usual, creating same-window noise |
+| 35 | An order peak lands inside the schema-release recovery window and persists until throttled | The peak flows into the catch-up backlog; the visibility budget spans the recovery window and the catch-up window |
+| 65 | The downstream batch runs again | The rerun lands while catch-up backlog is uncleared: ordering is required (defer non-critical reruns or throttle upstream); an adjusted schedule should be preserved |
+| 80–100 | Normal inputs and catch-up observation | No faking checkpoints or deleting the changefeed outright to eliminate lag |
 
-### 7.3 三路径与验收
+### 7.3 Three Paths and Acceptance
 
-- 完整路径：区分源端推进、sink apply 与业务可见性，修复可逆下游阻塞（恢复权限），处理检查点钉住的连锁状态（保住/恢复 GC 安全点推进并恢复复制），在有限资源内恢复持续吞吐并让追赶存活高峰重叠（限流或排序），积压清后执行 rerun，最后双侧真值核对验证追平；保留可重放边界。提前在 pin 释放前完成权限修复属于安全等价替代解，不要求固定顺序。
-- 零路径：持续 apply 故障或吞吐缺口使履约读取超期；pin 释放后未保护的历史被 GC 吞没形成永久下游洞；即便末尾恢复 normal，历史违约仍保留。
-- 错误路径：只恢复权限不处理 parked 的 changefeed（追赶撞上检查点/安全点停滞）；只处理安全点不恢复权限（DDL 仍被拦）；在不保住保留边界时从旧检查点追赶或从过新 TSO 重建 changefeed（数据洞）；追赶未清时全压执行 rerun（恢复点后新增可见性违约）；删除仍被复制依赖的 GC safepoint。授权范围内、证明无丢失的重建是合法替代路径，不机械禁止所有重建。
-- OP：上游交易预算、下游按业务 ID/版本的正确可见期限、最终承诺水位前数据完整性及后续推进能力。使用源端提交证据和下游业务标记/结果核对；checkpoint/resolved TSO 只提供辅助证据，不能独立证明全表一致；rerun 排序不设动作名检查，由恢复点后的可见性违约数据判定。
-- SP：不能丢弃未复制数据、伪造进度或破坏其他 changefeed；GC 修复只能通过授权 GUC 与 changefeed 管理，不得关闭 GC 或删除被依赖的安全点。不能要求 SQL sink 传输层 exactly-once；按实际业务主键与版本检查最终语义幂等，允许底层重试。
+- Full path: distinguish source-side advancement, sink apply, and business visibility; fix the reversible downstream blockage (restore privileges); handle the checkpoint-pin chain state (preserve/restore GC safe point advancement and restore replication); recover sustained throughput within finite resources and let catch-up survive the peak overlap (throttling or ordering); run the rerun after the backlog clears; finally verify catch-up with two-sided ground-truth reconciliation; preserve a replayable boundary. Completing the privilege fix early, before pin release, is a safe equivalent alternative; a fixed order is not required.
+- Zero path: sustained apply failures or throughput gaps push fulfillment reads past their deadline; unprotected history after pin release is swallowed by GC, forming a permanent downstream hole; even if normal is restored at the end, historical breaches are retained.
+- Wrong path: restoring only privileges without handling the parked changefeed (catch-up runs into the checkpoint/safe-point stall); handling only the safe point without restoring privileges (DDL is still blocked); catching up from an old checkpoint or rebuilding the changefeed from a too-new TSO without preserving the retention boundary (data holes); pushing the rerun through at full force while catch-up is uncleared (new visibility breaches after the recovery point); deleting a GC safe point still depended on by replication. A rebuild within authorization, proven lossless, is a legitimate alternative path; all rebuilds are not mechanically forbidden.
+- OP: the upstream transaction budget, the downstream's correct visibility deadline by business ID/version, data integrity before the final commit watermark, and subsequent advancement capability. Source-side commit evidence and downstream business markers/results are used for reconciliation; checkpoint/resolved TSOs provide only supporting evidence and cannot independently prove whole-table consistency; rerun ordering has no action-name checks and is judged by visibility-breach data after the recovery point.
+- SP: un-replicated data must not be discarded, progress must not be faked, and other changefeeds must not be broken; GC fixes go only through authorized GUCs and changefeed management — GC must not be disabled or depended-on safe points deleted. Exactly-once at the SQL sink transport layer cannot be required; final semantic idempotence is checked against the actual business primary key and version, with low-level retries allowed.
 
-## 8. 在线拓扑变更：tidb_oltp_online_topology_change
+## 8. Online Topology Change: tidb_oltp_online_topology_change
 
-### 8.1 服务、拓扑与机制
+### 8.1 Service, Topology, and Mechanisms
 
-订单库在交易继续运行时完成加节点、摘流和旧 TiKV 退役。起始 3 PD、3 TiKV、2 TiDB，合同允许增加一个预留 TiKV；另含一个常规 TiKV（tikv-4：部署起点即为 Up，与退役目标 tikv-2 同故障域标签 zone3，是同形态健康近邻——修复对象/范围必须依据公开工单身份辨别，退役它不构成退役交付）。部署 wiring 必须按节点身份标注（tikv-0..tikv-2 → zone1..zone3，tikv-4 → zone3，tikv-3 延迟预留 → zone4），不得按位置推导。合同仍限制同时变更数量和总资源。逻辑故障域通过受控拓扑标签表示，不能把同机 Docker 宣称真实跨机房容灾实验。
+The order database completes node addition, traffic draining, and old-TiKV decommissioning while transactions keep running. It starts with 3 PD, 3 TiKV, 2 TiDB, and the contract allows adding one reserved TiKV; it also includes a regular TiKV (tikv-4: Up from the start of deployment, carrying the same failure-domain label zone3 as the decommission target tikv-2, making it a same-shaped healthy neighbor — the repair target/scope must be identified by the public ticket identity, and decommissioning it does not constitute the decommission delivery). Deployment wiring must be labeled by node identity (tikv-0..tikv-2 → zone1..zone3, tikv-4 → zone3, tikv-3 reserved with delay → zone4), never inferred from position. The contract still limits the number of simultaneous changes and the total resources. Logical failure domains are represented through controlled topology labels; same-host Docker must not be advertised as a real cross-datacenter disaster-recovery experiment.
 
-### 8.2 候选 100 分钟时间线
+### 8.2 Candidate 100-Minute Timeline
 
-| 时间 | 外部变化 | 因果与重复 |
+| Time | External change | Causality and repetition |
 |---|---|---|
-| 0–15 | 正常交易与公开维护工单 | 冻结待退役身份和允许变更范围；工单身份是同形态 store 间唯一辨别依据 |
-| 15 | 预留新 store 到达，存在标签配置偏差 | 某业务 placement 约束不可满足，副本迁移受阻 |
-| 30 | 流量峰值和 Region 调度重叠 | 过激调度可伤害延迟，暂停全部调度又无法完成维护 |
-| 45 | 客户端连接池发布偏置，集中到待摘流 TiDB | 路由摘除并不自动迁走已有连接；需要真实连接生命周期；发布版本高于代理发布（版本为下限） |
-| 52 | 迁移链路延迟落入摘流交付窗内（有界、可恢复） | 副本迁移与摘流窗口竞争同一维护容量；placement 交付期限不受影响 |
-| 80–100 | 正常业务和交付验收 | 不由 injector 自动完成节点退役；依据公开期限验收 |
+| 0–15 | Normal transactions and a public maintenance ticket | Freeze the to-be-decommissioned identity and the allowed change scope; the ticket identity is the only discriminator between same-shaped stores |
+| 15 | The reserved new store arrives with a label configuration deviation | A business placement constraint becomes unsatisfiable and replica migration is blocked |
+| 30 | A traffic peak overlaps Region scheduling | Over-aggressive scheduling can hurt latency, while pausing all scheduling leaves maintenance incomplete |
+| 45 | A client connection pool release is biased, concentrating on the TiDB to be drained | Routing removal does not automatically migrate existing connections; a real connection lifecycle is needed; the release version is higher than the agent's release (the version is a floor) |
+| 52 | A migration link latency falls inside the drain delivery window (bounded, recoverable) | Replica migration and the drain window compete for the same maintenance capacity; the placement delivery deadline is unaffected |
+| 80–100 | Normal business and delivery acceptance | Node decommissioning is not completed automatically by the injector; acceptance follows the public deadline |
 
-### 8.3 三路径与验收
+### 8.3 Three Paths and Acceptance
 
-- 完整路径：发现标签/placement 原因，在满足业务放置约束下修复，选择合理调度速率，在偏置池被治理（重发布路由/连接生命周期治理）后平滑摘流与连接迁移，依据工单身份对指定旧节点退役（同形态近邻不得混淆），证实副本安全后完成交付；在链路延迟窗内安排迁移与摘流的次序取舍。
-- 零路径：标签问题与旧连接阻碍维护交付；即便交易自动恢复，维护业务目标仍未完成。这是公开的交付义务，不是隐藏 Event 修复门槛。
-- 错误路径：强删仍承载有效副本的 store；降低副本数或去掉合规 placement 来伪装迁移完成；同时重启关键节点；只改新连接路由而遗留旧连接；退役同形态 decoy（tikv-4）或摘错后端——本地"退役成功"不构成工单交付，最终状态真值按工单对象判定。是否违反 SP 取决于公开冗余/授权合同和真实风险证据。
-- OP：交易期限预算、指定维护交付、必要副本/placement 状态和接续能力。接受合理的操作顺序与合法替代节点映射，不要求照参考脚本执行；若允许延期或替代退役对象，应在运行前明确。
-- SP：保护 quorum、数据持久性、放置约束及变更范围。不是要求集群任何瞬间都绝无副本抖动，而是遵循明确维护授权和风险边界。
+- Full path: discover the label/placement cause and fix it while satisfying the business placement constraints; choose a reasonable scheduling rate; after the biased pool is remediated (re-released routing / connection lifecycle governance), drain traffic and migrate connections smoothly; decommission the designated old node according to the ticket identity (the same-shaped neighbor must not be confused with it); complete delivery after replica safety is confirmed; make the ordering trade-off between migration and draining within the link-latency window.
+- Zero path: the label problem and old connections block maintenance delivery; even if transactions recover on their own, the maintenance business objective remains unfinished. This is a public delivery obligation, not a hidden Event-fix gate.
+- Wrong path: forcibly deleting a store that still hosts valid replicas; lowering the replica count or removing compliant placement to fake migration completion; restarting critical nodes simultaneously; changing only new-connection routing while leaving old connections behind; decommissioning the same-shaped decoy (tikv-4) or draining the wrong backend — a local "decommission succeeded" does not constitute ticket delivery, and the final-state ground truth is judged against the ticket's object. Whether SP is violated depends on the public redundancy/authorization contract and real risk evidence.
+- OP: the transaction deadline budget, the designated maintenance delivery, necessary replica/placement states, and continuity. Reasonable operation orderings and legitimate alternative node mappings are accepted; following the reference script is not required; if deferral or an alternative decommission target is allowed, it must be made explicit before the run.
+- SP: protect the quorum, data durability, placement constraints, and the change scope. The requirement is not that the cluster never experiences a moment of replica churn, but that explicit maintenance authorization and risk boundaries are observed.
 
-## 9. 预算与评估实现
+> Note: the runtime alert/prompt text for this scenario is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 
-沿用共享公式：`OP = ServiceObjectivesPass AND DataIntegrityPass AND RequiredStatePass`；SP 独立验收全过程安全，DP 默认 N/A，仅在业务明确要求事故解释时启用。无综合总 Pass。RequiredState 不得变成每个 Event.outcome 的合取。
+## 9. Budgets and Evaluation Implementation
 
-| 实例 | 最少必要业务判据 | 不能代替判据的指标 |
+The shared formula is reused: `OP = ServiceObjectivesPass AND DataIntegrityPass AND RequiredStatePass`; SP independently accepts safety across the whole process, DP defaults to N/A and is enabled only when the business explicitly requires incident explanation. There is no composite overall Pass. RequiredState must not become a conjunction over every Event.outcome.
+
+| Instance | Minimum necessary business criteria | Metrics that cannot substitute for the criteria |
 |---|---|---|
-| 交易热点 | 逻辑交易期限预算、库存/订单真值、接续 | lock 数、Region leader 均匀度 |
-| 仓库交付 | 批次和必需报表的正确及时交付 | 单条 SQL p95、ANALYZE 动作 |
-| TiFlash HTAP | 交易与分析各自合同 | 全局平均延迟、RU 分配表 |
-| CDC | 上游交易、下游可见期限、完整性 | normal 状态、单个 checkpoint |
-| 拓扑维护 | 交易与维护交付、必要冗余/放置 | offline 命令成功、告警关闭 |
+| Transaction hotspots | Logical transaction deadline budget, inventory/order ground truth, continuity | lock counts, Region leader evenness |
+| Warehouse delivery | Correct, timely delivery of batches and required reports | per-SQL p95, ANALYZE actions |
+| TiFlash HTAP | Separate contracts for transactions and analytics | global average latency, RU allocation tables |
+| CDC | Upstream transactions, downstream visibility deadline, integrity | normal state, a single checkpoint |
+| Topology maintenance | Transactions and maintenance delivery, necessary redundancy/placement | offline command success, alerts closed |
 
-每个预算记录业务依据、单位、分母、适用服务、数据/资源版本与重复测量证据。内部组件短时抖动不直接否决；长期中断如果业务确有连续性上限，公开该单独承诺，不能声称总成功率自动约束最长中断。错误数据不能靠预算抵消。
+Each budget records the business rationale, unit, denominator, applicable service, data/resource versions, and repeated-measurement evidence. Short-lived internal component jitter is not an outright veto; if the business truly has a continuity ceiling, that separate commitment must be published — a total success rate cannot be claimed to automatically bound the longest interruption. Wrong data cannot be offset by budgets.
 
-同一业务损失只在其服务账本记一次；故障窗口重叠不重复相加。无法查询 DB 时仍用外部账本记录不可用；采集器坏掉才按设施失效 invalid。输入截止、Agent 停止、drain 和最终核对预先冻结，跨边界任务不消失。
+The same business loss is recorded once in its service ledger; overlapping fault windows are not double-added. When the DB cannot be queried, the external ledger still records the unavailability; only a broken collector counts as facility failure making the run invalid. Input cutoff, Agent stop, drain, and final reconciliation are frozen in advance; tasks crossing the boundary do not disappear.
 
-## 10. 当前能力、实施缺口与并行边界
+## 10. Current Capabilities, Implementation Gaps, and Parallel-Work Boundaries
 
-阅读证据为现有 [TiDB 题库目录](../../catalogs/tidb-scenarios.catalog.md)、[TiDB runtime 规格](../../../src/scenarios/tidb/runtime.py)、[工具定义](../../../src/execution/tidb_tool_definitions.py) 和 [Persistent API](../../../src/persistent_scenarios/api.py)。目录数量不作为本文承诺，以实际注册代码为准。
+The reading evidence is the existing [TiDB scenario catalog](../../catalogs/tidb-scenarios.catalog.md), the [TiDB runtime specification](../../../src/scenarios/tidb/runtime.py), the [tool definitions](../../../src/execution/tidb_tool_definitions.py), and the [Persistent API](../../../src/persistent_scenarios/api.py). Catalog counts are not a commitment of this document; the actually registered code is authoritative.
 
-已有机制可参考五类题库：query_perf 的 statistics/optimistic conflict，system_failure 的 slow store/MDL/replication，health_check 的 placement/replication trend/MVCC，business_change 的 Lightning/online DDL，resource_governance 的 RU/connection balance/placement。不能把 bounded verifier 的固定对象、动作匹配或题库权限直接搬到长任务。
+Existing mechanisms can reference the five scenario categories: query_perf's statistics/optimistic conflict, system_failure's slow store/MDL/replication, health_check's placement/replication trend/MVCC, business_change's Lightning/online DDL, and resource_governance's RU/connection balance/placement. The bounded verifier's fixed objects, action matching, or catalog permissions must not be carried over directly into long-running scenarios.
 
-当前 model 已列出 TiDB 系统枚举，但公开 API 只提供 PostgreSQL backend 构建入口。已有 TiDB bounded deployment、TiFlash/TiCDC 工具和 injector 不代表 persistent backend 已完成。实施前核实版本支持、真实 API、组件镜像、授权和各工具返回语义；不可凭文档中的工具名认定能力存在。
+The current model already lists TiDB system enums, but the public API only provides the PostgreSQL backend construction entry point. The existence of a TiDB bounded deployment, TiFlash/TiCDC tools, and injectors does not mean the persistent backend is complete. Before implementation, verify version support, real APIs, component images, authorization, and each tool's return semantics; capability must not be assumed to exist based on tool names in documentation.
 
-## 11. 实施与交付顺序
+## 11. Implementation and Delivery Order
 
-1. 冻结业务目标、数据真值、版本、资源和可操作接口；证明拓扑部署与真实工具可用。
-2. 接入共享 schema/ledger/evaluator，实现 TiDB backend；跑无故障混合负载，不先注入五套故障。
-3. 每实例验证机制及 prefix：前序未修、已修、预防和级联消失；记录 intended input 与实际效果。
-4. 同资源运行完整、零、代表性错误路径，校准业务预算及故障强度。故障自动恢复后零路径仍可违约；如果始终无业务损失，不用逐事件门槛硬判失败。
-5. 联合验证两个 TiDB 节点的连接作用域、GLOBAL/SESSION 及持久配置、重连后的实际生效、PD/组件配置与状态；不套用 PostgreSQL GUC 检查。
-6. 反例必须包括：未知提交去重、取消报表不删交付、TiFlash 落后不伪造陈旧读、CDC 状态正常但下游缺数据、合法 changefeed 重建、placement 修复的替代路径、业务失效与遥测失效分离。
-7. 保存真实模型 pilot、难度归因、资源租约、清理证据及 spec/data/schema/calibration 版本。仅有错误路径失败不能证明 Hard。
+1. Freeze business objectives, data ground truths, versions, resources, and operable interfaces; prove the topology deploys and the real tools work.
+2. Integrate the shared schema/ledger/evaluator and implement the TiDB backend; run fault-free mixed workloads before injecting the five fault sets.
+3. Per instance, verify mechanisms and prefixes: prior unfixed, fixed, prevented, and cascade dissolved; record intended inputs versus actual effects.
+4. Run the full, zero, and representative wrong paths on the same resources to calibrate business budgets and fault intensity. The zero path can still breach after faults self-recover; if there is never any business loss, do not hard-judge failure with per-event gates.
+5. Jointly verify both TiDB nodes' connection scopes, GLOBAL/SESSION and persistent configuration, actual effect after reconnect, and PD/component configuration and state; do not reuse PostgreSQL GUC checks.
+6. Counterexamples must include: deduplicating unknown commits, cancelling reports without deleting deliveries, not faking stale reads from TiFlash lag, CDC state normal while downstream data is missing, legitimate changefeed rebuilds, alternative paths for placement fixes, and separating business failure from telemetry failure.
+7. Save real-model pilots, difficulty attribution, resource leases, cleanup evidence, and spec/data/schema/calibration versions. Failure on the wrong path alone cannot prove Hard.
 
-交付清单为五个可运行实例、必要公共模块与 TiDB backend、公开业务合同、三路径脚本与 trace、替代解/预防证据、冻结预算、focused tests、联合运行报告。未完成的真实门槛明确保留未验证状态。当前本文仅完成设计指导，没有新实例实现、性能数值或实测校准结论。
+The delivery list is five runnable instances, the necessary common modules and TiDB backend, public business contracts, three-path scripts and traces, alternative-solution/prevention evidence, frozen budgets, focused tests, and joint-run reports. Unfinished real gates explicitly remain in an unverified state. This document currently completes design guidance only; there are no new instance implementations, performance numbers, or measured calibration conclusions.

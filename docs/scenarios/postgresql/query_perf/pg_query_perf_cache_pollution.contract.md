@@ -40,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Shared buffer hit-ratio alert caused by a mixed reporting scan evicting OLTP pages.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresSharedBufferHitRatioLow service=tpcc-order-entry instance=postgresql-primary severity=warning summary=PostgreSQL shared buffer hit ratio dropped sharply during TPC-C order-entry traffic description=cache_hit_ratio fell below 85% while order-entry read latency increased. The memory dashboard marks shared buffer pressure as the initial suspect. Diagnose the database cause and restore
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresSharedBufferHitRatioLow service=tpcc-order-entry instance=postgresql-primary severity=warning summary=PostgreSQL shared buffer hit ratio dropped sharply during TPC-C order-entry traffic description=cache_hit_ratio fell below 85% while order-entry read latency increased. The memory dashboard marks shared buffer pressure as the initial suspect. Diagnose the database cause and restore OLTP cache behavior without blindly increasing memory.
 - Initial-state fields: `alert`, `archive_table`, `hot_table`, `shared_buffers`, `status`, `visible_symptom`
 - Expected-target fields: `active_reporting_scans`, `archive_table`, `hot_table`, `mitigation`, `root_cause`, `status`
 - Background profiles: none declared

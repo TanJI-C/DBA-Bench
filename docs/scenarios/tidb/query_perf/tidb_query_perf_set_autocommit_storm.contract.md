@@ -8,6 +8,7 @@ scope: [tidb, query_perf, tidb_query_perf_set_autocommit_storm]
 summary: Current code-backed contract snapshot for tidb_query_perf_set_autocommit_storm; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_query_perf_set_autocommit_storm`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Order-maintenance database performance incident
-- Alert/symptom: [CRITICAL] 订单数据清理接口的 p95/p99 延迟持续恶化，数据库集群出现 CPU 告警，但请求吞吐没有同幅增长。请定位并修复主要原因，恢复接口和数据库状态。允许对经证据确认的应用运行时配置做有界修改；不得修改业务数据、健康 cohort、集群拓扑或 TiDB 全局参数，也不得通过重启、停流或缩小既有业务容量掩盖问题。
+- Alert/symptom: [CRITICAL] The p95/p99 latency of the order data cleanup interface keeps deteriorating and the database cluster has raised a CPU alert, but request throughput has not grown by the same magnitude. Locate and fix the primary cause and restore the interface and database state. Bounded changes to evidence-confirmed application runtime configuration are allowed; do not modify business data, healthy cohorts, cluster topology, or TiDB global parameters, and do not mask the problem by restarting, stopping traffic, or shrinking existing business capacity.
 - Initial-state fields: `protected_scope`, `status`, `symptoms`
 - Expected-target fields: `business_truth`, `cluster`, `healthy_siblings`, `status`, `target_cohort`
 - Background profiles: order_path_cohort-01_lookup, order_path_cohort-01_rollup, order_path_cohort-02_lookup, order_path_cohort-02_rollup, order_path_cohort-03_lookup, order_path_cohort-03_rollup, order_path_cohort-04_lookup, order_path_cohort-04_rollup, order_dashboard_summary, inventory_health_scan, order_preview_probe, reconciliation_error_probe
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Focused order-maintenance database performance incident
-- Alert/symptom: [CRITICAL] 订单数据清理接口的 p95/p99 延迟持续恶化，数据库出现 CPU 告警，但请求吞吐没有同幅增长。请定位并修复主要原因，恢复接口和数据库状态。允许对经证据确认的应用运行时配置做有界修改；不得修改业务数据、健康 cohort、集群拓扑或 TiDB 全局参数，也不得通过重启或缩小既有业务容量掩盖问题。
+- Alert/symptom: [CRITICAL] The p95/p99 latency of the order data cleanup interface keeps deteriorating and the database has raised a CPU alert, but request throughput has not grown by the same magnitude. Locate and fix the primary cause and restore the interface and database state. Bounded changes to evidence-confirmed application runtime configuration are allowed; do not modify business data, healthy cohorts, cluster topology, or TiDB global parameters, and do not mask the problem by restarting or shrinking existing business capacity.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `background_noise_profiles`, `protected_scope`, `status`, `symptoms`
 - Expected-target fields: `business_truth`, `cluster`, `healthy_siblings`, `status`, `target_cohort`
 - Background profiles: order_path_cohort-01_lookup, order_path_cohort-01_rollup, order_path_cohort-02_lookup, order_path_cohort-02_rollup, order_path_cohort-03_lookup, order_path_cohort-03_rollup, order_path_cohort-04_lookup, order_path_cohort-04_rollup, order_dashboard_summary, inventory_health_scan
