@@ -170,10 +170,10 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
             context,
         )
         mode = _require_nonempty_string(data, "mode", context)
-        if mode not in {"mock", "zero", "llm", "human", "v-expel", "dbot", "dbaiops"}:
+        if mode not in {"mock", "zero", "llm", "human", "remote", "v-expel", "dbot", "dbaiops"}:
             raise ValueError(
-                f"manifest.agents[{index}].mode must be mock, zero, llm, v-expel, dbot, or "
-                f"dbaiops, or human, got {mode!r}"
+                f"manifest.agents[{index}].mode must be mock, zero, llm, v-expel, dbot, "
+                f"dbaiops, human, or remote, got {mode!r}"
             )
         if mode == "v-expel" and scenario_kind is not ScenarioKind.PERSISTENT:
             raise ValueError("v-expel is only supported when benchmark.scenario_kind='persistent'")
@@ -211,6 +211,18 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
                 raise ValueError(f"{context}.settings requires console_url and participant")
             _require_nonempty_string(settings, "console_url", context)
             _require_nonempty_string(settings, "participant", context)
+        if mode == "remote":
+            if scenario_kind is ScenarioKind.PERSISTENT:
+                raise ValueError("remote currently supports bounded scenarios only")
+            if set(settings) != {"endpoint"}:
+                raise ValueError(
+                    f"{context}.settings must contain exactly ['endpoint'], got {sorted(settings)}"
+                )
+            from src.agents.remote_agent import validate_endpoint
+
+            validate_endpoint(settings["endpoint"])
+            if max_output_tokens is not None:
+                raise ValueError(f"{context}.max_output_tokens is not supported when mode='remote'")
         if mode == "zero" and settings:
             raise ValueError(f"{context}.settings must be empty when mode={mode!r}")
         if mode == "llm":

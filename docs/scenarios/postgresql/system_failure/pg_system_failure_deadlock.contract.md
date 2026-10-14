@@ -8,6 +8,7 @@ scope: [postgres, system_failure, pg_system_failure_deadlock]
 summary: Current code-backed contract snapshot for pg_system_failure_deadlock; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_system_failure_deadlock`
@@ -53,7 +54,7 @@ Same-domain evidence expansion (both cases): the batch planner stages two additi
 - Background profiles: TPC-DS default mix + `distraction_update_orders_*` (unrelated `orders` row updates) + one low-rate `log_noise_statement_timeout_dashboard_refresh` profile
 - Evaluator: `src.scenarios.evaluation.postgres.system_failure.deadlock.PgSystemFailureDeadlockForCheckoutOrderDeadlockEvaluatorCase`
 - Difficulty labels and per-case calibration values are maintained in the code registry and the scenario catalogs; see the [difficulty standard](../../../standards/scenario/difficulty.standard.md). This contract intentionally does not duplicate the measured values.
-- Calibration ledger: maintained by the Case registry and the [难度标准](../../../standards/scenario/difficulty.standard.md).
+- Calibration ledger: maintained by the Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md).
 
 ### `single_order_pair_deadlock_simple`
 

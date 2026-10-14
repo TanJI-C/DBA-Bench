@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Checkout order-history page p95 regresses in a multi-tenant traffic mix.
-- Alert/symptom: [CRITICAL] the checkout order-history page is above its 100 ms database p95 budget while returned order rows remain correct. Restore target p95 to <=100 ms, keep same-domain neighbor reads <=360 ms p95 and the order-event writer <=350 ms p95, leave the canonical plan at <=10,000 process keys with IndexReader and no IndexLookUp/TableRowIDScan, leave schema DDL fully public/synced with visible stats, preserve healthy n
+- Alert/symptom: [CRITICAL] the checkout order-history page is above its 100 ms database p95 budget while returned order rows remain correct. Restore target p95 to <=100 ms, keep same-domain neighbor reads <=360 ms p95 and the order-event writer <=350 ms p95, leave the canonical plan at <=10,000 process keys with IndexReader and no IndexLookUp/TableRowIDScan, leave schema DDL fully public/synced with visible stats, preserve healthy neighbor indexes, and do not change order-event records, route registry, or page context.
 - Initial-state fields: `page_route`, `status`, `table_rows`, `workload`
 - Expected-target fields: `neighbor_p95_slo_ms`, `p95_slo_ms`, `status`, `table_rows`, `write_p95_slo_ms`
 - Background profiles: qp05_fp_07, qp05_fp_02, qp05_fp_03, qp05_fp_04, qp05_fp_05, qp05_fp_06, qp05_fp_01, qp05_fp_08, qp05_fp_09, qp05_fp_10, qp05_fp_11, qp05_fp_12
@@ -51,7 +51,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Checkout order-history page p95 regresses in a multi-tenant traffic mix.
-- Alert/symptom: [CRITICAL] the checkout order-history page is above its 100 ms database p95 budget while returned order rows remain correct. Restore target p95 to <=100 ms, keep same-domain neighbor reads <=360 ms p95 and the order-event writer <=350 ms p95, leave the canonical plan at <=10,000 process keys with IndexReader and no IndexLookUp/TableRowIDScan, leave schema DDL fully public/synced with visible stats, preserve healthy n
+- Alert/symptom: [CRITICAL] the checkout order-history page is above its 100 ms database p95 budget while returned order rows remain correct. Restore target p95 to <=100 ms, keep same-domain neighbor reads <=360 ms p95 and the order-event writer <=350 ms p95, leave the canonical plan at <=10,000 process keys with IndexReader and no IndexLookUp/TableRowIDScan, leave schema DDL fully public/synced with visible stats, preserve healthy neighbor indexes, and do not change order-event records, route registry, or page context.
 - Initial-state fields: `page_route`, `status`, `table_rows`, `workload`
 - Expected-target fields: `neighbor_p95_slo_ms`, `p95_slo_ms`, `status`, `table_rows`, `write_p95_slo_ms`
 - Background profiles: qp05_fp_07, qp05_fp_02, qp05_fp_03, qp05_fp_04, qp05_fp_05, qp05_fp_06, qp05_fp_01, qp05_fp_08, qp05_fp_09, qp05_fp_10, qp05_fp_11, qp05_fp_12

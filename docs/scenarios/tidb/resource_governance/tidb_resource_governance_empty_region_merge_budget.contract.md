@@ -8,6 +8,7 @@ scope: [tidb, resource_governance, tidb_resource_governance_empty_region_merge_b
 summary: Current code-backed contract snapshot for tidb_resource_governance_empty_region_merge_budget; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_resource_governance_empty_region_merge_budget`
@@ -39,7 +40,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: A live order workload coexists with a Region scheduling backlog after recent table maintenance; PD budget and protected online objects must remain healthy.
-- Alert/symptom: [WARNING] [Grafana/TiDB-PD/Region health] 集群 Region inventory 持续增长，PD heartbeat 处理和 operator 队列开始占用预算；订单查询仍可执行，但调度延迟和 PD CPU 有上升趋势。请在不修改在线数据、不删除业务表、不重启集群的前提下治理 Region 调度风险，选择有界的 merge/scheduler 预算，观察风险收敛，并证明没有引发新的调度风暴。
+- Alert/symptom: [WARNING] [Grafana/TiDB-PD/Region health] The cluster Region inventory keeps growing, and PD heartbeat processing and the operator queue are starting to consume the budget; order queries still execute, but scheduling latency and PD CPU show an upward trend. Without modifying online data, dropping business tables, or restarting the cluster, govern the Region scheduling risk, choose a bounded merge/scheduler budget, observe the risk converge, and prove that no new scheduling storm has been triggered.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business`, `pd_scheduling`, `region_inventory`, `status`
 - Expected-target fields: `business_result_preserved`, `pd_scheduling`, `region_risk`, `status`
 - Background profiles: rg07_order_tenant_status_dashboard, rg07_order_point_lookup, rg07_control_region_rollup, rg07_audit_reconciliation, rg07_table_inventory_probe, rg07_business_status_decoy, rg07_audit_recent_decoy

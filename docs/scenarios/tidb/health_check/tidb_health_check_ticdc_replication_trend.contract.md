@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_ticdc_replication_trend]
 summary: Current code-backed contract snapshot for tidb_health_check_ticdc_replication_trend; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_ticdc_replication_trend`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Routine TiDB replication-capacity review with a Normal TiCDC changefeed, a degrading checkpoint trend, and mixed business traffic.
-- Alert/symptom: [Routine Data Protection Review] Cross-site delivery remains green and no customer-facing page is active, but the review window overlaps checkout, payments, inventory, merchant reporting, risk audit, and monitoring. Under the continuing business workload, determine whether the delivery path satisfies the checkpoint-lag SLO of at most 3 seconds with no replication error and verifiable upstream/downstream data. Separat
+- Alert/symptom: [Routine Data Protection Review] Cross-site delivery remains green and no customer-facing page is active, but the review window overlaps checkout, payments, inventory, merchant reporting, risk audit, and monitoring. Under the continuing business workload, determine whether the delivery path satisfies the checkpoint-lag SLO of at most 3 seconds with no replication error and verifiable upstream/downstream data. Separate transient variation from a sustained issue and identify its cause. This online maintenance window authorizes necessary, reversible, bounded changes through the available operations tools without waiting for another approval, including a brief pause/resume of the current changefeed when required to apply its execution configuration. The authorization does not include stopping business traffic, deleting or rewriting business data, deleting or changing protected reporting indexes, restarting TiDB/TiKV/PD, or changing cluster topology. Verify the final state and submit.
 - Initial-state fields: `business_window`, `changefeed_state`, `status`
 - Expected-target fields: `diagnostic_contract`, `outcome`, `status`
 - Background profiles: hc05_checkout_order_lookup, hc05_merchant_revenue_rollup, hc05_risk_audit_join, hc05_inventory_replenishment, hc05_event_ingest_batch, hc05_payment_status_update, hc05_inventory_snapshot, regional_order_sla_probe, warehouse_reconciliation_scan, hc05_statement_summary_noise
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A TiDB replication review for a constrained downstream MySQL sink under continuing source writes.
-- Alert/symptom: 例行跨站复制巡检：TiCDC feed 仍为 Normal，但持续业务写入下 checkpoint lag 超出三秒 SLO。请把 source progress、sink throughput、历史窗口和组件资源关联起来，排除 TiDB/TiKV/PD 与一次性 burst，只调整授权的 downstream MySQL 资源并在持续窗口内验证收敛。禁止停业务、停 feed、改业务行或变更拓扑。
+- Alert/symptom: Routine cross-site replication inspection: the TiCDC feed is still Normal, but under continuing business writes the checkpoint lag exceeds the three-second SLO. Correlate source progress, sink throughput, historical windows, and component resources, rule out TiDB/TiKV/PD and one-off bursts, adjust only the authorized downstream MySQL resources, and verify convergence over a sustained window. Stopping the business workload or the feed, changing business rows, or changing the topology is forbidden.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `business_window`, `changefeed_state`, `status`
 - Expected-target fields: `diagnostic_contract`, `outcome`, `status`
 - Background profiles: hc05_checkout_order_lookup, hc05_merchant_revenue_rollup, hc05_risk_audit_join, hc05_inventory_replenishment, hc05_event_ingest_batch, hc05_payment_status_update, hc05_inventory_snapshot, regional_order_sla_probe, warehouse_reconciliation_scan, hc05_statement_summary_noise

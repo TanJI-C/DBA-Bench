@@ -8,47 +8,66 @@ scope: [shared, persistent-scenario, postgres, tidb]
 summary: Defines the Persistent Scenario static contract, persistent runtime, event capabilities, ownership, cleanup, and domain boundary.
 source_of_truth: contract
 related: [standard.persistent-scenario.evaluation, standard.persistent-scenario.difficulty, standard.evaluation.dp-op-sp, guide.persistent-scenario.implement-persistent-scenario]
+language: en
 ---
 
-# Persistent Scenario 场景架构原则
+# Persistent Scenario Architecture Principles
 
-本文是生产真实性优先的 Persistent Scenario 架构规范；Persistent Scenario 的实现、评审和后续重构均以本文为准。长任务使用一个持久 mailbox session 和一份公开信箱文档；Agent-facing 的 Persistent Scenario 控制面只有一个 `mailbox` 工具，通过 `operation` 选择读取、写入或等待。不产生组合的 `ScenarioPass`；Event 修复 deadline 只作观测，业务交付 deadline 属于服务合同。
+This document is the production-realism-first architecture standard for Persistent Scenarios; the
+implementation, review, and later refactoring of Persistent Scenarios all follow it. A long task
+uses one persistent mailbox session and one public mailbox document; the Agent-facing Persistent
+Scenario control plane has a single `mailbox` tool that selects read, write, or wait through
+`operation`. No composite `ScenarioPass` is produced; the Event remediation deadline is
+observation only, while the business delivery deadline belongs to the service contract.
 
-配套文档：
+Companion documents:
 
-- [Persistent Scenario 评估设计原则](evaluation.standard.md)
-- [Persistent Scenario 难度设计原则](difficulty.standard.md)
-- [Persistent Scenario 实现指南](../../guides/persistent-scenario/implement-persistent-scenario.guide.md)
-- [DP / OP / SP 设计原则](../evaluation/dp-op-sp.standard.md)
+- [Persistent Scenario Evaluation Design Principles](evaluation.standard.md)
+- [Persistent Scenario Difficulty Design Principles](difficulty.standard.md)
+- [Persistent Scenario Implementation Guide](../../guides/persistent-scenario/implement-persistent-scenario.guide.md)
+- [DP / OP / SP Design Principles](../evaluation/dp-op-sp.standard.md)
 
-## 1. 核心定义
+## 1. Core Definition
 
-Persistent Scenario 不是多个 bounded Scenario 的串行包装，也不是要求一次 LLM 调用阻塞整个 horizon。它评估的是：
+A Persistent Scenario is not a serial wrapper around multiple bounded Scenarios, nor does it
+require one LLM call to block for the whole horizon. It evaluates:
 
-> 在一个持久化数据库环境中，Agent 面对连续、异步、部分可观测且可能相互影响的运维事件时，能否维持业务结果、稳定恢复，并控制自身操作风险。
+> whether an Agent, in a persistent database environment facing continuous, asynchronous,
+> partially observable, and mutually influencing operations events, can sustain business
+> outcomes, recover stably, and control its own operational risk.
 
-这个定义包含四个不可删减的约束：
+This definition carries four non-removable constraints:
 
-1. **环境持久化**：整个 Persistent Scenario 只部署一次数据库，前序故障和修复产生的状态必须保留。
-2. **事件独立到达**：事件由 monotonic timeline 调度，后续事件不等待前序事件处理完成。
-3. **会话持久化**：整个 Persistent Scenario 只创建一个 Agent session 和一条持续的 LLM conversation。Agent 通过公开 mailbox 文档在有任务时工作，在空信箱时 idle；新任务追加后由系统唤醒同一会话。
-4. **全时间轴验收**：最终结果由整个 Persistent Scenario 的业务服务目标、数据完整性、必要系统状态和全局安全历史决定，不由某个事件的固定修复动作决定。
+1. **Persistent environment**: the database is deployed exactly once for the whole Persistent
+   Scenario, and state produced by earlier faults and remediations must be retained.
+2. **Independent event arrival**: events are scheduled by a monotonic timeline; later events do
+   not wait for earlier events to finish being handled.
+3. **Persistent session**: the whole Persistent Scenario creates exactly one Agent session and one
+   continuous LLM conversation. The Agent works through the public mailbox document when there
+   are tasks and idles when the mailbox is empty; when new tasks are appended, the system wakes
+   the same session.
+4. **Whole-timeline acceptance**: the final result is decided by the entire Persistent Scenario's
+   business service objectives, data integrity, required system state, and global safety history,
+   not by the fixed remediation action of any single event.
 
-## 2. Persistent Scenario 与 bounded Scenario 的边界
+## 2. Boundary Between Persistent Scenario and bounded Scenario
 
-| 维度 | bounded Scenario | Persistent Scenario |
+| Dimension | bounded Scenario | Persistent Scenario |
 | --- | --- | --- |
-| 被测能力 | 单个问题的诊断与修复 | 持续运维、并发事件处理、业务优先级与状态保持 |
-| 环境生命周期 | 一个 CaseRun 一次 setup / teardown | 一个 Persistent Scenario 一次部署，所有事件共享环境 |
-| 事件模型 | 一个主要故障计划 | 多个按时间独立到达的 Event |
-| Agent 上下文 | 通常是一个有界交互窗口 | 一个持久 mailbox session，跨 idle/wakeup 保留同一 conversation |
-| 通过条件 | 单 Case 的 DP / OP / SP | Persistent Scenario 级 DiagnosisPass / OutcomePass / SafePass |
-| 结果验收 | Case evaluator | PersistentScenarioEvaluator 与 Persistent Scenario 可信合同 |
-| 时间语义 | 固定动作窗口或 turn 边界可以有意义 | Event 响应时间用于观测，业务交付时间按服务合同验收 |
+| Capability under test | Diagnosis and remediation of a single problem | Continuous operations, concurrent event handling, business priorities, and state retention |
+| Environment lifecycle | One CaseRun gets one setup / teardown | One deployment for the whole Persistent Scenario; all events share the environment |
+| Event model | One primary fault plan | Multiple Events arriving independently over time |
+| Agent context | Usually one bounded interaction window | One persistent mailbox session keeping the same conversation across idle/wakeup |
+| Pass conditions | Per-Case DP / OP / SP | Persistent-Scenario-level DiagnosisPass / OutcomePass / SafePass |
+| Outcome acceptance | Case evaluator | PersistentScenarioEvaluator with the Persistent Scenario trusted contract |
+| Time semantics | Fixed action windows or turn boundaries can be meaningful | Event response time is observation; business delivery time is accepted per the service contract |
 
-bounded Scenario 可以提供成熟的故障注入能力，但不能成为 Persistent Scenario 的运行时主模型。允许复用的是 `ScenarioCase`、`FaultPlan` 和 injector 所表达的故障能力；禁止复用的是 bounded Scenario evaluator、一次性 `submit`、固定动作窗口以及单 Case OP/SP。
+A bounded Scenario can provide mature fault-injection capability, but it must not become the
+runtime's primary model for the Persistent Scenario. What may be reused is the fault capability
+expressed by `ScenarioCase`, `FaultPlan`, and injectors; what must not be reused is the bounded
+Scenario evaluator, the one-shot `submit`, fixed action windows, and per-Case OP/SP.
 
-目标依赖方向是：
+The target dependency direction is:
 
 ```text
 PersistentScenarioSpec / EventSpec
@@ -58,83 +77,103 @@ PersistentScenarioSpec / EventSpec
     -> PersistentScenarioEvaluator
 ```
 
-Persistent Scenario provider 最终必须直接面向 Persistent Scenario 合同。题库只作机制参考，不要求任何 Event 来自已注册 Case；原生 capability 以自身 ID/version/occurrence 注册。同一 capability 可以重复发生，event_id 唯一即可。旧 scenario_id/case_id 强制引用和 pair 去重均为待删除技术债。
+In the end, the Persistent Scenario provider must face the Persistent Scenario contract directly.
+The existing case library is only a mechanism reference; no Event is required to come from a
+registered Case, and native capabilities register under their own ID/version/occurrence. The same
+capability may recur; event_id uniqueness suffices. The legacy mandatory scenario_id/case_id
+references and pair deduplication are technical debt slated for removal.
 
-## 3. 静态合同与运行态分离
+## 3. Separation of Static Contract and Runtime State
 
-### 3.1 静态合同
+### 3.1 Static contract
 
-`PersistentScenarioSpec` 描述可审查、可序列化、运行前固定的事实：
+`PersistentScenarioSpec` describes reviewable, serializable facts fixed before the run:
 
-- Persistent Scenario 身份、数据库系统、时间范围和 calibration 状态；
-- 唯一的环境规格和资源预算；
-- OLTP 逻辑事务、OLAP job、HTAP 双侧服务、数据真值及业务交付预算；
-- 业务 SLO 与运维风险目标；
-- 外部变化的到达时间、重复 occurrence、触发类型、影响范围和有界 activation；
-- inspection cadence。
+- the Persistent Scenario identity, database system, time range, and calibration status;
+- the single environment specification and resource budget;
+- OLTP logical transactions, OLAP jobs, HTAP services on both sides, data ground truth, and
+  business delivery budgets;
+- business SLOs and operations risk objectives;
+- arrival times of external changes, repeated occurrences, trigger types, impact scope, and
+  bounded activation;
+- inspection cadence.
 
-静态合同必须在部署前通过校验。未知字段、重复 ID、越界时间、缺失 objective、资源不足或未注册能力都应直接失败，不能使用默认值继续运行。
+The static contract must pass validation before deployment. Unknown fields, duplicate IDs,
+out-of-range times, missing objectives, insufficient resources, or unregistered capabilities must
+fail immediately; the run must not continue with defaults.
 
-### 3.2 运行态
+### 3.2 Runtime state
 
-`PersistentScenarioRun` 和 `EventRun` 只记录执行过程中实际发生的事实：
+`PersistentScenarioRun` and `EventRun` record only what actually happened during execution:
 
-- 环境与 workload 的生命周期；
-- 注入开始、成功、失败、释放和 cleanup；
-- mailbox task 发布与完成、Agent 状态和 actions；
-- 业务事务/job/水位账本、checkpoint、可信 outcome 和 safety snapshot；
-- provider failure 与 run validity；
-- 最终 evaluation。
+- the lifecycle of the environment and workload;
+- injection start, success, failure, release, and cleanup;
+- mailbox task publication and completion, Agent state, and actions;
+- the business transaction/job/watermark ledger, checkpoints, trusted outcomes, and safety
+  snapshots;
+- provider failures and run validity;
+- the final evaluation.
 
-静态意图和运行事实不能混写。例如 `start_seconds=300` 只是计划时间，真正的 `injected_at_monotonic` 才是运行证据；配置声明会影响某条 flow，也不能替代 no-agent impact 的实测结果。
+Static intent and runtime facts must not be conflated. For example, `start_seconds=300` is only
+the planned time; the actual `injected_at_monotonic` is the runtime evidence. Likewise, a
+configuration declaration that a flow would be affected cannot substitute for measured no-agent
+impact results.
 
-## 4. 分层与所有权
+## 4. Layering and Ownership
 
 ### 4.1 System-neutral core
 
-`src/persistent_scenarios/model/`、`src/persistent_scenarios/runtime/`、`src/persistent_scenarios/evaluation/` 和
-`src/persistent_scenarios/backend/` 的核心层负责：
+The core layer under `src/persistent_scenarios/model/`, `src/persistent_scenarios/runtime/`,
+`src/persistent_scenarios/evaluation/`, and `src/persistent_scenarios/backend/` is responsible
+for:
 
-- 严格加载和验证 Persistent Scenario 静态合同；
-- monotonic timeline 调度；
-- Event、session 和 checkpoint 状态机；
-- append-only trace；
-- provider 协议与失败分类；
-- Persistent Scenario 级评估组合。
+- strictly loading and validating the Persistent Scenario static contract;
+- monotonic timeline scheduling;
+- Event, session, and checkpoint state machines;
+- the append-only trace;
+- provider protocols and failure classification;
+- Persistent-Scenario-level evaluation composition.
 
-核心层不能导入 Scenario evaluator，也不能包含 PostgreSQL/TiDB 对象名、SQL 文本或故障特例。
+The core layer must not import Scenario evaluators, and must not contain PostgreSQL/TiDB object
+names, SQL text, or fault special cases.
 
 ### 4.2 System-specific provider
 
-数据库 provider 负责将通用合同实现为真实系统行为：
+The database provider implements the generic contract as real system behavior:
 
-- 创建和销毁环境；
-- 注册、注入、验证、释放和 cleanup Event capability；
-- 运行 workload 与采集 telemetry；
-- 生成生产合理的 alert 症状；
-- 验证 Event 的真实影响和最终状态；
-- 读取可信最终状态和全局安全状态。
+- creating and destroying environments;
+- registering, injecting, verifying, releasing, and cleaning up Event capabilities;
+- running the workload and collecting telemetry;
+- generating production-plausible alert symptoms;
+- verifying the real impact and final state of Events;
+- reading the trusted final state and the global safety state.
 
-Provider 输出必须是结构化事实。核心层根据协议组合事实，不能解析 provider 的自然语言来猜测状态。
+Provider output must be structured facts. The core layer composes facts per protocol; it must not
+parse provider natural language to guess state.
 
 ### 4.3 Event capability
 
-每个 Event 在进入 Persistent Scenario 前必须拥有显式 capability，至少声明：
+Every Event must own an explicit capability before entering a Persistent Scenario, declaring at
+least:
 
-- 唯一能力标识及支持的数据库系统；
-- 注入前置条件和 bounded activation；
-- 资源所有权，包括进程、会话、行、表、文件、容器或 workload；
-- 注入成功的可观测证据；
-- alert 或 inspection 的可见性合同；
-- 外部意图的执行/预防证据及其业务影响观测；
-- release 与 cleanup 的幂等边界；
-- 与其他 capability 的冲突关系。
+- a unique capability identifier and the supported database systems;
+- injection prerequisites and bounded activation;
+- resource ownership, including processes, sessions, rows, tables, files, containers, or workload;
+- observable evidence of injection success;
+- the visibility contract of the alert or inspection;
+- execution/prevention evidence of the external intent and observation of its business impact;
+- the idempotent boundary of release and cleanup;
+- conflict relations with other capabilities.
 
-Event 编排不能依赖“配置顺序应该没问题”。资源所有权必须能够在静态 admission 阶段发现冲突，例如一个锁事件持有 customer 行，而后续 capability 的 activation 也必须访问同一行。此类组合要么调整设计，要么明确证明 activation 不会被已有故障无限阻塞。
+Event orchestration must not rely on "the configuration order should be fine". Resource ownership
+must allow conflicts to be discovered at the static admission stage — for example, a lock event
+holds customer rows while a later capability's activation also needs to access the same rows.
+Such combinations must either be redesigned or explicitly prove that activation will not be
+blocked indefinitely by an existing fault.
 
-## 5. 持久环境与生命周期
+## 5. Persistent Environment and Lifecycle
 
-一个有效 Persistent Scenario 按以下顺序执行：
+A valid Persistent Scenario executes in this order:
 
 ```text
 static admission
@@ -152,63 +191,80 @@ static admission
 -> environment teardown
 ```
 
-关键规则：
+Key rules:
 
-- warmup 是环境健康准入和上下文采集，不是把单次偶然值变成隐藏评分门槛；
-- Event 2 到达不等待 Event 1 被诊断、解决、超时或 cleanup；
-- Agent 修复和未解决故障都跨 Event 保留；
-- mailbox task 完成只更新公开工作记录，不等于可信恢复，也不等于释放 Event 资源；
-- cleanup 只属于基础设施回收，不能提前擦除最终评估所需状态；
-- final evaluation 必须发生在 reverse cleanup 之前；
-- teardown 无论成功与否都必须有清晰结果，失败直接标记 run invalid，不能把脏环境包装成模型失败。
+- warmup is environment health admission and context capture, not a way to turn a single
+  incidental value into a hidden scoring gate;
+- Event 2's arrival does not wait for Event 1 to be diagnosed, resolved, timed out, or cleaned up;
+- Agent remediations and unresolved faults both persist across Events;
+- completing a mailbox task only updates the public work record; it is neither a trusted recovery
+  nor a release of Event resources;
+- cleanup belongs to infrastructure reclamation only and must not erase state needed by the final
+  evaluation early;
+- final evaluation must happen before reverse cleanup;
+- teardown must have a clear outcome whether it succeeds or not; failure marks the run invalid
+  directly, and a dirty environment must not be dressed up as model failure.
 
-### 5.1 三种必须分离的时间
+### 5.1 Three Kinds of Time That Must Be Separated
 
-| 时间 | 含义 | 是否阻塞后续 Event |
+| Time | Meaning | Blocks subsequent Events |
 | --- | --- | --- |
-| Event arrival | 调度器开始注入并产生可见性 | 否 |
-| Incident resolution | 可信 outcome 已满足并完成稳定性验证 | 否 |
-| Injector cleanup | Persistent Scenario 评估后回收注入资源 | 否，仅影响 teardown |
+| Event arrival | The scheduler starts injection and produces visibility | No |
+| Incident resolution | The trusted outcome is satisfied and stability verification is complete | No |
+| Injector cleanup | Injection resources are reclaimed after Persistent Scenario evaluation | No, only affects teardown |
 
-将三者合并会把 Persistent Scenario 退化成 bounded Scenario 队列，并制造事件顺序死锁。
+Merging the three degrades the Persistent Scenario into a bounded Scenario queue and creates
+event-ordering deadlocks.
 
-## 6. 时间轴、并发与检查点
+## 6. Timeline, Concurrency, and Checkpoints
 
 ### 6.1 Monotonic timeline
 
-所有相对时间计算、deadline、latency 和 event ordering 使用 monotonic clock。Wall-clock 只用于展示和跨系统关联，不能驱动调度。
+All relative time computation, deadlines, latency, and event ordering use the monotonic clock.
+Wall-clock is for display and cross-system correlation only and must not drive scheduling.
 
-事件到达、Agent action、workload observation、checkpoint 和 provider result 必须携带可排序的 monotonic timestamp。相同 timestamp 下使用 append sequence 保证确定顺序。
+Event arrivals, Agent actions, workload observations, checkpoints, and provider results must carry
+sortable monotonic timestamps. With identical timestamps, an append sequence guarantees a
+deterministic order.
 
 ### 6.2 Append-only runtime history
 
-以下数据必须 append-only：
+The following data must be append-only:
 
-- timeline；
-- Agent request/action/tool result history；
-- mailbox 文档的发布、完成和其他引擎侧状态变更；
-- Agent 的数据库 action 与工具结果；
-- workload observations；
-- event checkpoints 和 safety checkpoints。
+- the timeline;
+- Agent request/action/tool result history;
+- mailbox document publication, completion, and other engine-side state changes;
+- the Agent's database actions and tool results;
+- workload observations;
+- event checkpoints and safety checkpoints.
 
-状态机可以维护当前视图，但不能覆盖或删除原始证据。Evaluator 只从可信运行事实计算结果，不能依赖执行后被修改的摘要。
+State machines may maintain current views, but must not overwrite or delete original evidence.
+The evaluator computes results only from trusted run facts and must not rely on summaries modified
+after execution.
 
 ### 6.3 Checkpoint
 
-Checkpoint 是对某一时刻可信环境状态的结构化采样，不是 Agent 自报。至少在下列边界采样：
+A checkpoint is a structured sample of the trusted environment state at a moment, not an Agent
+self-report. Sample at least at these boundaries:
 
-- healthy baseline；
-- Event 注入确认后；
-- mailbox task 完成后或引擎需要记录可信状态时；
-- verification window 到期；
-- Persistent Scenario horizon 结束；
-- 高风险动作之后。
+- healthy baseline;
+- after an Event's injection is confirmed;
+- after a mailbox task completes, or when the engine needs to record trusted state;
+- verification window expiry;
+- the end of the Persistent Scenario horizon;
+- after high-risk actions.
 
-Checkpoint 采集设施故障应使 run invalid。数据库因故障或 Agent 操作无法响应时，记录可验证的不可用事实并按业务合同评价；不能自动归类为设施故障。无法确定的字段不伪造为通过。
+Failures of checkpoint capture infrastructure must make the run invalid. When the database cannot
+respond due to a fault or Agent actions, record verifiable unavailability facts and evaluate them
+against the business contract; do not automatically classify them as infrastructure failure.
+Fields that cannot be determined must not be faked as passing.
 
-## 7. Agent session 与 mailbox 模型
+## 7. Agent Session and Mailbox Model
 
-整个 Persistent Scenario 只创建一个 `session-0001`。它绑定一个持久 Agent 实例和一条持续 conversation；可见运维工作项、周期巡检任务和后续追加的工作都进入同一份 mailbox，不创建新的 Agent、context 或 conversation。
+The entire Persistent Scenario creates exactly one `session-0001`. It binds one persistent Agent
+instance and one continuous conversation; visible operations work items, periodic inspection
+tasks, and later-appended work all enter the same mailbox, and no new Agent, context, or
+conversation is created.
 
 ```text
 Persistent Scenario start ----------> session-0001 starts and reads mailbox
@@ -219,119 +275,193 @@ new task appended ------> same conversation resumes
 Persistent Scenario horizon --------> stop task publication and signal session stop
 ```
 
-Mailbox 是公开的结构化控制面，至少包含：
+The mailbox is a public structured control plane containing at least:
 
-- `pending`：尚未完成的任务；
-- `completed`：已完成任务及完成时间；
-- `revision`：每次发布或完成后的单调版本；
-- append-only history：任务状态变化和时间。
+- `pending`: tasks not yet completed;
+- `completed`: completed tasks and their completion times;
+- `revision`: a monotonically increasing version after each publication or completion;
+- append-only history: task state changes and times.
 
-Agent-facing Persistent Scenario 控制面固定为一个 `mailbox` 工具：
+The Agent-facing Persistent Scenario control plane is fixed to a single `mailbox` tool:
 
-- `mailbox(operation="read")`：读取当前 mailbox，同时查看未完成和已完成任务；
-- `mailbox(operation="write", task_ids=[...], report={...})`：把一个或多个指定任务移到 `completed`，并为这批工作保存一份结构化报告；
-- `mailbox(operation="wait")`：在没有未完成任务时挂起当前 Agent，直到新任务追加或 Persistent Scenario 结束。
+- `mailbox(operation="read")`: reads the current mailbox, showing both incomplete and completed
+  tasks;
+- `mailbox(operation="write", task_ids=[...], report={...})`: moves one or more specified tasks to
+  `completed` and saves one structured report for that batch of work;
+- `mailbox(operation="wait")`: suspends the current Agent when no incomplete tasks exist, until
+  new tasks are appended or the Persistent Scenario ends.
 
-任务 payload 只包含生产监控中合理可见的标题、描述、症状、严重性和类别。它不包含任务来源、`task_type`、`event_id`、`scenario_id`、`case_id`、注入器私有状态或 evaluator 真值。Agent 不需要也不能通过控制面区分不同来源的任务。
+A task payload contains only the title, description, symptoms, severity, and category that would
+reasonably be visible in production monitoring. It contains no task provenance, `task_type`,
+`event_id`, `scenario_id`, `case_id`, injector-private state, or evaluator ground truth. The Agent
+does not need to, and cannot, distinguish tasks by their source through the control plane.
 
-`mailbox(operation="write")` 不验证数据库状态，也不触发恢复检查。`report` 采用与 bounded Scenario `submit` 相同的结构化形状：`diagnosis.conditions`、`outcome.changes`、`outcome.verification` 和 `summary` 为必填字段，`outcome.plan` 可选。仅当合同明确要求业务事故解释时，相关报告作为该事故 diagnosis matcher 的输入，不按 Event 一一映射；它不是 trusted database evidence，也不是 Outcome/Safety 结果。周期巡检任务只保存报告，不创建 diagnosis claim。一次写入可以完成多个任务，控制面不按任务来源设置不同的完成路径。
+`mailbox(operation="write")` does not validate database state and does not trigger recovery
+checks. `report` uses the same structured shape as the bounded Scenario `submit`:
+`diagnosis.conditions`, `outcome.changes`, `outcome.verification`, and `summary` are required
+fields, and `outcome.plan` is optional. Only when the contract explicitly requires a
+business-incident explanation does the relevant report feed that incident's diagnosis matcher,
+not mapped one-to-one per Event; it is not trusted database evidence and not an Outcome/Safety
+result. Periodic inspection tasks only save reports and do not create diagnosis claims. One write
+can complete multiple tasks, and the control plane does not set different completion paths by task
+source.
 
-Agent 每次 activation 首先调用 `mailbox(operation="read")`。有 pending task 时使用普通数据库工具处理自己选择的任务，完成一个或多个后调用 `mailbox(operation="write", task_ids=[...], report={...})`；没有 pending task 时调用 `mailbox(operation="wait")`，由系统挂起这条相同 conversation。新任务追加后，系统唤醒相同 session 和相同 conversation，并继续读取实时 mailbox。既有上下文 compaction 仍按 Agent 层已有实现执行，不通过新建 session 绕过上下文管理。
+On every activation the Agent first calls `mailbox(operation="read")`. With pending tasks it uses
+ordinary database tools to handle the tasks it chooses, and after finishing one or more calls
+`mailbox(operation="write", task_ids=[...], report={...})`; with no pending tasks it calls
+`mailbox(operation="wait")`, and the system suspends that same conversation. When new tasks are
+appended, the system wakes the same session and the same conversation, which continues reading the
+live mailbox. Existing context compaction still runs per the Agent layer's existing implementation;
+context management is not bypassed by creating new sessions.
 
-`agent_sessions[].status` 表示 session 生命周期，使用 `running`、`completed` 或 `failed`；`agent_sessions[].state` 表示当前工作态，使用 `active`、`idle` 或 `woken`。`mailbox(wait)` 开始阻塞前必须记录 `idle`，被新任务或结束信号唤醒后记录 `woken`，下一次处理开始时记录 `active`。
+`agent_sessions[].status` is the session lifecycle and uses `running`, `completed`, or `failed`;
+`agent_sessions[].state` is the current working state and uses `active`, `idle`, or `woken`.
+`mailbox(wait)` must record `idle` before it starts blocking, record `woken` after being woken by a
+new task or the end signal, and record `active` when the next round of processing starts.
 
-运行中不存在第二个 Agent session。控制面只校验唯一 session、操作参数、任务 ID、任务状态和报告结构；未知任务 ID、重复完成、带未完成任务等待或缺少报告直接报协议错误。Mailbox 是信息通知和工作记账机制，不是最终评判指标。
+There is no second Agent session during the run. The control plane validates only the unique
+session, operation parameters, task IDs, task states, and report structure; unknown task IDs,
+duplicate completion, waiting with incomplete tasks, or a missing report raise protocol errors
+immediately. The mailbox is an information notification and work-accounting mechanism, not the
+final judging metric.
 
-## 8. Alert 与 inspection 可观测性
+## 8. Alert and Inspection Observability
 
 ### 8.1 Alert Event
 
-Alert 只呈现监控系统在生产环境中合理产生的症状，例如业务错误率、等待数、资源异常或受影响服务。Event 影响确认后，引擎把这些内容整理成一个普通 mailbox work item。Agent 只看到工作项本身，不知道它是由什么内部来源产生的。Alert 不得直接包含：
+Alerts present only symptoms that monitoring systems would reasonably produce in production, such
+as business error rates, wait counts, resource anomalies, or affected services. After an Event's
+impact is confirmed, the engine organizes this content into an ordinary mailbox work item. The
+Agent sees only the work item itself and does not know which internal source produced it. Alerts
+must not directly contain:
 
-- 根因名称；
-- 精确 blocker PID、application name 或待终止对象；
-- 标准修复 SQL；
-- 唯一正确的操作顺序；
-- evaluator 私有字段。
+- root cause names;
+- the exact blocker PID, application name, or objects to kill;
+- standard remediation SQL;
+- the unique correct action order;
+- evaluator-private fields.
 
-Alert 是否足以触发排查，应通过真实 LLM pilot 校准；“不泄漏答案”不等于故意隐藏所有有效线索。
+Whether an alert is sufficient to trigger investigation should be calibrated with real LLM pilots;
+"not leaking the answer" does not mean deliberately hiding every useful clue.
 
 ### 8.2 Inspection Event
 
-Inspection Event 不发布针对某个 Event 的提示。调度器只按 cadence 追加普通例行检查 task；Agent 使用日常数据库工具自行观察当前系统，是否采取动作由 Agent 自己决定。完成 task 只表示 Agent 认为这一项工作已经处理完，不代表引擎认可某个发现或修复。
+An Inspection Event does not publish hints targeted at a specific Event. The scheduler only
+appends ordinary routine-check tasks per cadence; the Agent observes the current system itself
+with everyday database tools, and whether to act is its own decision. Completing a task only means
+the Agent considers that piece of work done; it does not mean the engine endorses any finding or
+remediation.
 
-最终是否恢复仍由可信 outcome、业务 SLO 和安全规则读取真实数据库状态判断。自然语言描述、任务完成记录或关键词不能替代这些检查。
+Whether recovery ultimately happened is still judged by the trusted outcome, business SLOs, and
+safety rules reading real database state. Natural-language descriptions, task completion records,
+or keywords cannot substitute for these checks.
 
-Inspection cadence 是发现机会的设计参数，不是用来缩短 Agent 时间预算的难度开关。
+Inspection cadence is a design parameter for discovery opportunities, not a difficulty switch for
+shrinking the Agent's time budget.
 
-## 9. 最终评估与 cleanup
+## 9. Final Evaluation and cleanup
 
-Persistent Scenario horizon 结束后，调度器停止创建新 mailbox task，唤醒并停止唯一持久 session，等待已开始的 bounded 操作到达协议边界。随后采集最终 workload、event outcome 和 safety checkpoint，执行 PersistentScenarioEvaluator，最后按 Event 实际 activation 的逆序 cleanup。
+After the Persistent Scenario horizon ends, the scheduler stops creating new mailbox tasks, wakes
+and stops the single persistent session, and waits for already-started bounded operations to reach
+a protocol boundary. It then captures the final workload, event outcome, and safety checkpoints,
+runs PersistentScenarioEvaluator, and finally cleans up in reverse order of the Events' actual
+activation.
 
-逆序 cleanup 的原因是资源依赖，而不是把 cleanup 当成修复。每个 capability 必须只回收自己拥有的资源，不能撤销 Agent 合法修复，也不能重置整个数据库来掩盖污染。
+Reverse-order cleanup exists because of resource dependencies, not to treat cleanup as remediation.
+Each capability must reclaim only the resources it owns; it must not undo legitimate Agent
+remediations, nor reset the whole database to mask contamination.
 
-最终只报告三个相互独立的通过结果：
+Only three mutually independent pass results are reported:
 
 ```text
-DiagnosisPass = 明确要求的业务事故解释正确；默认可为 N/A
+DiagnosisPass = the explicitly required business-incident explanation is correct; N/A by default
 OutcomePass   = ServiceObjectivesPass and DataIntegrityPass and RequiredStatePass
 SafePass      = PersistentScenarioSafePass
 ```
 
-不产生组合的 `ScenarioPass`。具体语义见 [Persistent Scenario 评估设计原则](evaluation.standard.md)。
+No composite `ScenarioPass` is produced. For the concrete semantics see
+[Persistent Scenario Evaluation Design Principles](evaluation.standard.md).
 
-## 10. Trace 与 run validity
+## 10. Trace and run validity
 
-完整 trace 至少需要保存：
+The complete trace must preserve at least:
 
-- source spec、实际运行 spec、run ID、代码版本和资源租约；
-- deploy、warmup、baseline、timeline、final evaluation、cleanup、teardown；
-- 每个 Event 的 activation handle、可信证据、checkpoint 和 cleanup；
-- 唯一 mailbox session 的输入、`active`/`idle`/`woken` 状态、action、工具结果和终止原因；
-- 一份永远不压缩的原始 conversation，以及每次 compaction 后新增的 Agent 视角 phase conversation；
-- mailbox 当前视图及 append-only 状态变更 history；
-- 每个 workload observation 和 telemetry completeness；
-- DP / OP / SP 的证据引用和 failure classification。
+- the source spec, the actually run spec, the run ID, the code version, and resource leases;
+- deploy, warmup, baseline, timeline, final evaluation, cleanup, teardown;
+- each Event's activation handle, trusted evidence, checkpoints, and cleanup;
+- the single mailbox session's inputs, `active`/`idle`/`woken` states, actions, tool results, and
+  termination reason;
+- one raw conversation that is never compacted, plus the Agent-perspective phase conversation
+  appended after each compaction;
+- the mailbox's current view and its append-only state-change history;
+- every workload observation and telemetry completeness;
+- the DP / OP / SP evidence references and failure classification.
 
-Provider 实现、工具传输设施、部署、trace recorder 或 telemetry 采集设施失效时，run 必须标记为 invalid，并保留明确分类与上下文。数据库业务超时、合法取消、连接拒绝以及 Agent 导致的数据库不可用，应由外部可信账本记录为业务结果，不能因此抹掉 OP/SP 后果。Invalid run 的三个 pass 均为 `None`；禁止将基础设施错误记成 `DiagnosisPass=False`、`OutcomePass=False` 或 `SafePass=False`。
+When the provider implementation, tool transport infrastructure, deployment, trace recorder, or
+telemetry collection infrastructure fails, the run must be marked invalid with a clear
+classification and context retained. Database business timeouts, legitimate cancellations,
+connection refusals, and Agent-caused database unavailability must be recorded by the external
+trusted ledger as business outcomes; their OP/SP consequences must not be erased because of them.
+For an invalid run all three passes are `None`; recording an infrastructure error as
+`DiagnosisPass=False`, `OutcomePass=False`, or `SafePass=False` is forbidden.
 
-## 11. 当前实现债务
+## 11. Current Implementation Debt
 
-以下内容是现状，不是应继续复制的模式：
+The following is the current state, not a pattern to keep copying:
 
-| 位置 | 当前问题 | 目标 |
+| Location | Current problem | Target |
 | --- | --- | --- |
-| `src/persistent_scenarios/evaluation/evaluator.py` / `src/persistent_scenarios/evaluation/diagnosis.py` | 公共层不能定义具体故障的根因语义 | 由合同明确要求的业务事故解释 matcher 判定，默认 N/A，不合取所有 Event |
-| `src/persistent_scenarios/backend/postgres/registry.py` | 依赖 `SCENARIOS_BY_ID`、`ScenarioCase`、`FaultPlan` 并按 ID 分派 | 独立的 PersistentScenarioEventCapability 注册表 |
-| `src/persistent_scenarios/backend/postgres/capabilities/` | 部分 outcome 依赖 action 文本、固定 SQL、对象名和 `repair_action_observed` | 仅验收最终状态、业务真值和公开不变量 |
-| `PostgresEventProvider.agent_alert` | 部分 alert 泄漏精确 blocker 和修复顺序 | 只暴露生产合理症状 |
-| `src/persistent_scenarios/evaluation/slo.py` | 部分 control 阈值直接绑定单次 warmup | 使用公开、稳定、经 calibration 的阈值；warmup 只做健康准入与上下文 |
+| `src/persistent_scenarios/evaluation/evaluator.py` / `src/persistent_scenarios/evaluation/diagnosis.py` | The shared layer must not define root-cause semantics for specific faults | Judged by the business-incident explanation matcher explicitly required by the contract, N/A by default, not a conjunction over all Events |
+| `src/persistent_scenarios/backend/postgres/registry.py` | Depends on `SCENARIOS_BY_ID`, `ScenarioCase`, `FaultPlan` and dispatches by ID | An independent PersistentScenarioEventCapability registry |
+| `src/persistent_scenarios/backend/postgres/capabilities/` | Some outcomes depend on action text, fixed SQL, object names, and `repair_action_observed` | Accept only final state, business ground truth, and public invariants |
+| `PostgresEventProvider.agent_alert` | Some alerts leak exact blockers and the remediation order | Expose only production-plausible symptoms |
+| `src/persistent_scenarios/evaluation/slo.py` | Some control thresholds bind directly to a single warmup | Use public, stable, calibrated thresholds; warmup only does health admission and context |
 
-处理这些债务时直接迁移到目标合同，删除旧路径和硬编码；不要增加兼容层或双重 evaluator。
+When addressing this debt, migrate directly to the target contract and delete the old paths and
+hardcoding; do not add compatibility layers or dual evaluators.
 
-## 12. 架构评审清单
+## 12. Architecture Review Checklist
 
-合入 Persistent Scenario 前必须回答：
+Before merging a Persistent Scenario, answer:
 
-- 是否只部署一次环境，并在最终评估前保留所有故障和修复状态？
-- 后续 Event 是否无需等待前序 Event resolution、deadline 或 cleanup？
-- 每个 capability 是否有 bounded activation、资源所有权、可信 outcome 和 cleanup？
-- Event 组合是否通过资源冲突 admission，而不是依赖幸运顺序？
-- alert 是否只暴露症状，inspection 是否必须通过真实工具发现？
-- 是否始终只有一个 mailbox session，且新任务唤醒时复用同一 conversation？
-- timeline、action、checkpoint 和 telemetry 是否 append-only 且可追溯？
-- Persistent Scenario evaluator 是否独立于 bounded Scenario evaluator？
-- final evaluation 是否在 reverse cleanup 之前？
-- 是否区分评测设施失败（invalid）与数据库业务失败、Agent 破坏（有效业务/安全后果）？
+- Is the environment deployed exactly once, with all fault and remediation state retained until
+  the final evaluation?
+- Do later Events need not wait for an earlier Event's resolution, deadline, or cleanup?
+- Does every capability have bounded activation, resource ownership, a trusted outcome, and
+  cleanup?
+- Do Event combinations pass resource-conflict admission instead of relying on lucky ordering?
+- Do alerts expose only symptoms, and must inspection findings be discovered through real tools?
+- Is there always exactly one mailbox session, with new-task wakeups reusing the same
+  conversation?
+- Are timeline, actions, checkpoints, and telemetry append-only and traceable?
+- Is the Persistent Scenario evaluator independent of the bounded Scenario evaluator?
+- Does final evaluation happen before reverse cleanup?
+- Are evaluation-infrastructure failures (invalid) distinguished from database business failures
+  and Agent-caused damage (valid business/safety consequences)?
 
-任何一项无法给出代码和 trace 证据，都说明该 Persistent Scenario 尚未达到架构准入标准。
+If any item cannot be evidenced from code and trace, the Persistent Scenario has not met the
+architecture admission bar.
 
-## 13. 生产因果、重复与端到端目标
+## 13. Production Causality, Recurrence, and End-to-end Objectives
 
-先定义生产 workload/业务交付，再设计外部变化；没有必须复用题库或事件配额。同一故障可多次发生，保留 Agent 修复和单会话状态。后续输入按时到达，但症状是否出现取决于真实数据库状态：保护措施成功预防、其他事件抵消症状都是有效结果，需要证据而非吞掉注入异常。
+Define the production workload/business delivery first, then design external changes; there is no
+requirement to reuse the existing case library or event quotas. The same fault may occur multiple
+times, retaining Agent remediations and single-session state. Subsequent inputs arrive on
+schedule, but whether symptoms appear depends on the real database state: successful prevention by
+protective measures and symptom cancellation by other events are both valid outcomes, and require
+evidence rather than swallowing injection exceptions.
 
-事件可以共享资源并级联，admission 验证真实权限/资源和有界执行，不用“长事务必须先于锁”掩盖架构限制。注入器不能不断恢复坏配置或重建被合法修复的 blocker 以保证故障存活。
+Events may share resources and cascade; admission verifies real permissions/resources and bounded
+execution, and does not use "the long transaction must precede the lock" to mask architectural
+limitations. The injector must not continuously restore bad configurations or rebuild blockers
+that were legitimately remediated in order to keep a fault alive.
 
-RequiredStatePass 面向最终业务接续、交付物与必要 GUC，禁止 all(Event.outcome) 和 regression_count==0。历史损失进 SLO，恢复后的正常负载继续验证接续能力。DP 不按注入事件要求逐项应答；多根因可由一个事故解释覆盖。
+RequiredStatePass targets final business continuity, deliverables, and required GUCs;
+all(Event.outcome) and regression_count==0 are forbidden. Historical losses enter the SLO, and
+normal load after recovery continues to verify continuity. DP does not require itemized answers
+per injected event; multiple root causes can be covered by one incident explanation.
 
-新五实例设计、淘汰名单和实现差距见 [生产型五实例方案](../../persistent-scenarios/postgresql/production-portfolio.contract.md)。真实副本型 HTAP 需要一个持续拓扑而非伪造 lag；一次部署可以包含多个明确角色的数据库节点。
+See the [Production-oriented Five-instance Portfolio](../../persistent-scenarios/postgresql/production-portfolio.contract.md)
+for the new five-instance design, the deprecation list, and implementation gaps. A real-replica
+HTAP needs a continuously maintained topology rather than fabricated lag; one deployment may
+contain multiple database nodes with explicit roles.

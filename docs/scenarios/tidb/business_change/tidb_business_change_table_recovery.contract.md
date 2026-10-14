@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_table_recovery]
 summary: Current code-backed contract snapshot for tidb_business_change_table_recovery; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_table_recovery`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Recover the original order-event table from an exact DROP DDL job before GC removes its data.
-- Alert/symptom: [CRITICAL] [Order Platform] 查询 benchops.order_events 的订单检索、对账和发布审计接口同时出现 'table doesn't exist'；数据库节点仍然 Up，其他归档查询正常。最近一次 release cleanup 可能误删了 order_events，但同一逻辑表曾被发布流程重复创建和清理。请在 GC 可恢复窗口内恢复原始业务表，事故边界为 2026-08-03 11:30:00；请从 incident context 和 release transition history 重建该时刻 order-api/prod 实际 serving 的 release，而不是直接采用当前 desired release。保留当前在线查询负载，不要从应用导出重建数据；恢复前必须核对 DDL 历史、GC safe point 和恢复对象，恢复后必须证明业务真值、主键/索引一致性和 Ti
+- Alert/symptom: [CRITICAL] [Order Platform] The order lookup, reconciliation, and release audit interfaces querying benchops.order_events all report 'table doesn't exist' at the same time; the database nodes are still Up and other archive queries are normal. The most recent release cleanup may have accidentally dropped order_events, but the same logical table was repeatedly created and cleaned up by past release processes. Restore the original business table within the GC-recoverable window; the incident boundary is 2026-08-03 11:30:00. Reconstruct, from the incident context and the release transition history, which release order-api/prod was actually serving at that moment, instead of directly adopting the current desired release. Keep the current online query load and do not rebuild the data by exporting from the application; before recovery you must verify the DDL history, the GC safe point, and the recovery target; after recovery you must prove that the business truth, primary key/index consistency, and TiDB table checks all pass, and then revoke this temporary retention window.
 - Initial-state fields: `cluster`, `database`, `gc_window`, `status`, `table`
 - Expected-target fields: `admin_check`, `crc`, `drop_job_id`, `gc_life_time`, `last_known_good_release`, `status`, `table_rows`
 - Background profiles: order_api_recent_lookup, order_reconciliation_rollup, release_archive_preview, release_audit_window, ddl_history_refresh, gc_window_probe, missing_order_cache_refresh, release_control_plane_lookup, release_registry_snapshot, business_release_ledger_reconcile, release_ddl_lineage_refresh, release_audit_config_window
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Recover the incident-boundary payment-events table from the exact DROP DDL job before GC cleanup.
-- Alert/symptom: [CRITICAL] [Payment Platform] 查询 benchops_bc07_payments.payment_events 的支付检索、对账和发布审计接口同时出现 'table doesn't exist'；数据库节点仍然 Up，其他归档查询正常。最近一次 payment release cleanup 可能误删了 payment_events，但同一逻辑表曾被发布流程重复创建和清理。请在 GC 可恢复窗口内恢复原始业务表，事故边界为 2026-08-10 16:30:00；请从 incident context 和 release transition history 重建该时刻 payments-api/prod 实际 serving 的 release，而不是直接采用当前 desired release。保留当前在线查询负载，不要从应用导出重建数据；恢复前必须核对 DDL 历史、GC safe point
+- Alert/symptom: [CRITICAL] [Payment Platform] The payment lookup, reconciliation, and release audit interfaces querying benchops_bc07_payments.payment_events all report 'table doesn't exist' at the same time; the database nodes are still Up and other archive queries are normal. The most recent payment release cleanup may have accidentally dropped payment_events, but the same logical table was repeatedly created and cleaned up by past release processes. Restore the original business table within the GC-recoverable window; the incident boundary is 2026-08-10 16:30:00. Reconstruct, from the incident context and the release transition history, which release payments-api/prod was actually serving at that moment, instead of directly adopting the current desired release. Keep the current online query load and do not rebuild the data by exporting from the application; before recovery you must verify the DDL history, the GC safe point, and the recovery target; after recovery you must prove that the business truth, primary key/index consistency, and TiDB table checks all pass, and then revoke this temporary retention window.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `cluster`, `database`, `gc_window`, `status`, `table`
 - Expected-target fields: `admin_check`, `crc`, `drop_job_id`, `gc_life_time`, `last_known_good_release`, `status`, `table_rows`
 - Background profiles: payment_api_recent_lookup, payment_reconciliation_rollup, release_archive_preview, release_audit_window, ddl_history_refresh, gc_window_probe, missing_payment_cache_refresh, release_control_plane_lookup, release_registry_snapshot, business_release_ledger_reconcile, release_ddl_lineage_refresh, release_audit_config_window

@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: PG16 I/O context identifies a workload window that violates the OLTP SLO.
-- Alert/symptom: [FIRING: WARNING] alertname=PostgresCacheHitAndReadPressure service=checkout-oltp instance=postgresql-primary severity=warning summary=Several I/O windows show lower cache hit and higher reads while one transaction window misses SLO description=Compare the historical I/O context, device queue, workload buckets and transaction p99. Keep all required jobs within their deadlines while controlling the actual source of im
+- Alert/symptom: [FIRING: WARNING] alertname=PostgresCacheHitAndReadPressure service=checkout-oltp instance=postgresql-primary severity=warning summary=Several I/O windows show lower cache hit and higher reads while one transaction window misses SLO description=Compare the historical I/O context, device queue, workload buckets and transaction p99. Keep all required jobs within their deadlines while controlling the actual source of impact.
 - Initial-state fields: `alert`, `required_observation`, `status`, `visible_symptom`
 - Expected-target fields: `oltp_slo`, `required_jobs`, `status`, `target_workload`
 - Background profiles: none declared

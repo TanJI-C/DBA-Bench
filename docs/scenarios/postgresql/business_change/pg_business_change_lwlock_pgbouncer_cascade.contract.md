@@ -8,6 +8,7 @@ scope: [postgres, pg_business_change_lwlock_pgbouncer_cascade]
 summary: Current code-backed contract snapshot for pg_business_change_lwlock_pgbouncer_cascade; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_business_change_lwlock_pgbouncer_cascade`
@@ -66,8 +67,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 The mock path reconstructs the complete N-1 cascade and passes trusted replay (`True / True / True`);
 the zero-control run leaves the report empty (`False / False / True`). The intended target-LLM failure
-is “未找到根因” (noise anchoring on the benign windows; an unapproved `restart replica_2` is recorded
-separately as an SP risk), not “已找到根因但修复失败”.
+is “root cause not found” (noise anchoring on the benign windows; an unapproved `restart replica_2` is recorded
+separately as an SP risk), not “root cause found but repair failed”.
 
 ## 4. Agent-visible evidence
 

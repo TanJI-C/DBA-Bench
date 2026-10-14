@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_table_cache_lease]
 summary: Current code-backed contract snapshot for tidb_system_failure_table_cache_lease; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_table_cache_lease`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Diagnose a misleading 2PC alert amid mixed commerce reads, writes, and component activity.
-- Alert/symptom: [CRITICAL] [Commerce transaction path] 最近观测窗口内，多个业务入口均出现间歇性事务提交失败；多个业务读取路径的成功率与集群 QPS 同时波动，TiDB 侧出现 2PC/Prewrite 错误，TiKV 写流量也有所上升。请定位造成当前业务退化的主要原因，在不改变业务数据语义且不扩大影响范围的前提下恢复服务，并验证错误率、吞吐、Schema 与 TSO。
+- Alert/symptom: [CRITICAL] [Commerce transaction path] Within the recent observation window, multiple business entrances all show intermittent transaction commit failures; the success rates of multiple business read paths and the cluster QPS fluctuate at the same time, 2PC/Prewrite errors appear on the TiDB side, and TiKV write traffic has also risen. Locate the main cause of the current business degradation, restore service without changing business data semantics or expanding the impact scope, and verify the error rate, throughput, Schema, and TSO.
 - Initial-state fields: `status`, `symptoms`, `tidb_instances`
 - Expected-target fields: `business_truth`, `cache_contention`, `healthy_cache`, `schema`, `status`, `tso`
 - Background profiles: catalog_tenant_rollup, catalog_sku_lookup, catalog_category_probe, catalog_stock_report, catalog_price_preview, catalog_recent_probe, pricing_rule_tenant_lookup, pricing_rule_rollup, inventory_health_rollup, inventory_low_stock_probe, warehouse_availability_read, inventory_capacity_probe
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Diagnose a focused misleading 2PC alert from one cached commerce table.
-- Alert/symptom: [CRITICAL] 订单入口间歇性出现 2PC/Prewrite 失败，集群 QPS 与成功率波动，TiKV 写流量也有所上升。请在不改变业务数据语义、不修改健康缓存表的前提下定位并恢复服务，验证错误率、吞吐、Schema 与 TSO。
+- Alert/symptom: [CRITICAL] The order entrance intermittently shows 2PC/Prewrite failures, cluster QPS and success rate fluctuate, and TiKV write traffic has also risen. Locate the cause and restore service without changing business data semantics and without modifying the healthy cached tables, and verify the error rate, throughput, Schema, and TSO.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `causal_cached_tables`, `status`, `symptoms`, `tidb_instances`
 - Expected-target fields: `business_truth`, `cache_contention`, `healthy_cache`, `schema`, `status`, `tso`
 - Background profiles: catalog_tenant_rollup, catalog_sku_lookup, catalog_category_probe, catalog_stock_report, catalog_price_preview, catalog_recent_probe, pricing_rule_tenant_lookup, pricing_rule_rollup, inventory_health_rollup, inventory_low_stock_probe, warehouse_availability_read, inventory_capacity_probe

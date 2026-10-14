@@ -37,6 +37,10 @@ DBA-Bench 让 Agent 在真实数据库环境里完成运维任务，并由数据
 环境要求与完整准备（Python、Docker、镜像源、LLM 凭证、embedding/judge 模型）见
 [docs/getting-started.md](docs/getting-started.md)。
 
+> 中文文档：`docs/` 下的文档为英文原版；中文版本位于 [docs/zh/](docs/zh/index.md)
+> （子目录结构镜像，文件名带 `.zh-CN.md` 后缀），索引见
+> [docs/zh/index.md](docs/zh/index.md)。
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -U pip && pip install -e .
@@ -49,7 +53,18 @@ python examples/run_tidb_demo.py
 ```
 
 正式实验、Agent 接入、内置 baseline（D-Bot / Panda / DBAIOps / Andromeda）、场景分类总览
-与扩展指南见 [英文 README](README.md)——两者内容同构，文档均为英文。
+与扩展指南见 [英文 README](README.md)和[中文文档索引](docs/zh/index.md)。
+
+正式实验可通过 `runtime.agent_language` 选择框架提供给 Agent 的文本语言：`zh`（默认）
+或 `en`。英文目前仅支持 PostgreSQL bounded Scenario，也适用于远程 Agent 接收的
+提示词和工具说明；完整范围和限制见[正式实验指南](docs/zh/guides/benchmark/run-experiment.guide.zh-CN.md)。
+
+## 接入远程 Agent
+
+独立于 benchmark 进程、使用任意语言编写的 Agent 可以通过 `remote` 模式接入。
+外部服务负责模型调用和决策，benchmark 通过 HTTP 获取动作并执行共享工具。
+配置、轮数计算、usage 上报和会话结束要求见
+[远程 Agent 接入指南](docs/zh/guides/benchmark/connect-remote-agent.guide.zh-CN.md)。
 
 ## 引用
 

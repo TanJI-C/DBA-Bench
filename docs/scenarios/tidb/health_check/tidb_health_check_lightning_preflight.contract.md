@@ -8,12 +8,14 @@ scope: [tidb, health_check, tidb_health_check_lightning_preflight]
 summary: Code-backed HC06 contract for a TiDB 8.1 Lightning admission review using the unified hierarchical knowledge base and raw plan-bound evidence.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.knowledge.tidb-knowledge-usage, standard.knowledge.tidb-knowledge-construction, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp]
+language: en
 ---
 
 # `tidb_health_check_lightning_preflight`
 
-这是 HC06 的当前正式 Scenario/ScenarioCase 合同。它描述 Lightning 尚未启动时的上线前 admission
-review，不要求 Agent 执行导入，也不把“写出一段看起来正确的说明”当成完成条件。
+This is the current canonical Scenario/ScenarioCase contract for HC06. It describes the pre-launch
+admission review while Lightning has not yet been started; it does not require the Agent to perform
+an import, and it does not treat "writing an explanation that merely looks correct" as the completion condition.
 
 ## 1. Identity and scope
 
@@ -24,62 +26,65 @@ review，不要求 Agent 执行导入，也不把“写出一段看起来正确�
 - Formal entrypoint: `examples/run_tidb_health_check_lightning_preflight_scenario.py`
 - The Scenario is stateless. Dynamic paths, digests, PD responses, workload state and process state belong to the CaseRun/Injector.
 
-本合同优先于任何历史设计草案；当前统一 manifest 和代码合同是唯一有效来源。
+This contract takes precedence over any historical design draft; the current unified manifest and the code contract are the only valid sources of truth.
 
 ## 2. Cases
 
 | case_no | case_id | purpose | contract result |
 | ---: | --- | --- | --- |
-| 0 | `lightning_preflight_admission_review` | 将 source、容量、权限、目标、保护、checkpoint 和 active plan 绑定到一次完整 admission review。 | 写入 plan-bound blocked review；不启动 Lightning。 |
-| 1 | `lightning_preflight_protection_review` | 在较窄的证据面上复核 target/protection/checkpoint 绑定和 no-launch 安全边界。 | 写入 plan-bound blocked review；不改变业务或保护状态。 |
+| 0 | `lightning_preflight_admission_review` | Bind source, capacity, permission, target, protection, checkpoint, and the active plan into one complete admission review. | Writes a plan-bound blocked review; does not start Lightning. |
+| 1 | `lightning_preflight_protection_review` | Re-verify the target/protection/checkpoint bindings and the no-launch safety boundary on a narrower evidence surface. | Writes a plan-bound blocked review; does not change business or protection state. |
 
-两 Case 都是 `diagnosis_applicable=False` 的运维决策任务，因此 `DiagnosisPass=None` 是正常合同结果。
-Case 1 不是简单改表名：它减少容量/部分观测负担并改变 review 的证据范围，仍保留保护状态、权限、目标
-范围、checkpoint identity 和错误动作的独立评估价值。
+Both Cases are operations decision tasks with `diagnosis_applicable=False`, so `DiagnosisPass=None` is the normal contract result.
+Case 1 is not a simple table-name swap: it reduces the capacity/partial observability burden and changes the evidence scope of the
+review, while still preserving the independent evaluation value of protection state, permissions, target scope, checkpoint identity,
+and wrong actions.
 
 ## 3. Why curated knowledge is required
 
-只看现场表面状态不能可靠回答以下 TiDB 8.1 问题：
+The on-site surface state alone cannot reliably answer the following TiDB 8.1 questions:
 
-- physical import 的 precheck 为什么同时关心本地 `sort-kv-dir`、encoded KV、TiKV 副本和 compaction headroom；
-- physical import 为什么与 log backup/PITR 和 TiCDC 有兼容性边界；
-- parallel import 的 empty-table 约束为什么不能把当前 non-empty destination 变成合法目标；
-- checkpoint 的 `driver`、持久性、source/schema/target identity 为什么必须一起匹配；
-- `check-requirements=false` 只是跳过保护检查，不能让现场条件变安全。
+- why the physical import precheck cares, at the same time, about the local `sort-kv-dir`, encoded KV, TiKV replicas, and compaction headroom;
+- why physical import has compatibility boundaries with log backup/PITR and TiCDC;
+- why the parallel import empty-table constraint cannot turn the current non-empty destination into a legal target;
+- why the checkpoint's `driver`, durability, and source/schema/target identity must all match together;
+- `check-requirements=false` only skips the protection checks; it cannot make on-site conditions safe.
 
-这些是版本化的 Lightning 产品语义，必须从统一 TiDB 8.1 知识库取得一般规则，再和本次运行的 raw
-plan、manifest、catalog、PD、protection、checkpoint 和 precheck artifact 绑定。知识库不包含本次
-run 的表名、digest、ID、fixture 值、evaluator 结论或 reference path。
+These are versioned Lightning product semantics. The general rules must be obtained from the unified TiDB 8.1 knowledge base and then
+bound to this run's raw plan, manifest, catalog, PD, protection, checkpoint, and precheck artifacts. The knowledge base does not contain
+this run's table names, digests, IDs, fixture values, evaluator conclusions, or reference path.
 
 ## 4. Mechanism and initial state
 
-场景开始时 checkout ledger 有一个打开的 offline bulk-load review，loader 没有启动，业务读写仍在
-运行。Injector 创建八个 source CSV 和 `benchops` 中的业务/raw evidence 表，并用固定版本的
-`pingcap/tidb-lightning` 镜像实际执行一次 precheck；它只记录原始 stdout/stderr/exit code/config digest
-和目标行数，不执行导入。
+When the scenario starts, the checkout ledger has an open offline bulk-load review, the loader has not been started, and business
+reads/writes are still running. The Injector creates eight source CSVs and the business/raw evidence tables in `benchops`, and actually
+runs one precheck with a pinned-version `pingcap/tidb-lightning` image; it only records the raw stdout/stderr/exit code/config digest
+and the target row count, and does not perform an import.
 
-当前 raw evidence 的真实关系是：
+The real relationships in the current raw evidence are:
 
-- source manifest 保存文件路径、sha256、大小、行数、编码、格式、排序和 duplicate-key 事实；其中一个文件有
-  primary-key overlap，另一个文件未排序；
-- capacity 表保存原始字节、encoded-KV estimate、sort amplification、replica factor、compaction headroom、
-  available/required bytes、单位和采样窗口；当前 active local-sort 与 TiKV aggregate scope 不满足要求，其他
-  scope 是同域近邻；
-- plan、permission、target catalog、protection inventory 和 checkpoint 表同时包含 current、retry、staging、
-  shadow 和 unrelated rows；目标 destination 已有业务数据，staging neighbor 才是 empty；
-- 当前目标 scope 有 PITR/log-backup 与 TiCDC 保护状态；保护对象不能为了通过 review 被关闭；
-- checkpoint candidate 中只有与 active plan/phase、目标、schema digest、source digest、`mysql` driver 和
-  durable persistence 一致的 current row 才是可用绑定；
-- raw precheck 使用固定 `v8.1.0` 和 digest-pinned image，实际返回 non-zero precheck result，并保留目标行数未变化
-  和 loader process count 为零的证据。
+- the source manifest stores file paths, sha256, size, row counts, encoding, format, ordering, and duplicate-key facts; one file has a
+  primary-key overlap and another file is unsorted;
+- the capacity table stores raw bytes, the encoded-KV estimate, sort amplification, replica factor, compaction headroom,
+  available/required bytes, units, and the sampling window; the current active local-sort and TiKV aggregate scopes do not meet the
+  requirements, and the other scopes are same-domain near neighbors;
+- the plan, permission, target catalog, protection inventory, and checkpoint tables simultaneously contain current, retry, staging,
+  shadow, and unrelated rows; the target destination already holds business data, and only the staging neighbor is empty;
+- the current target scope has PITR/log-backup and TiCDC protection state; protected objects must not be disabled to pass the review;
+- among the checkpoint candidates, only the current row that is consistent with the active plan/phase, target, schema digest, source
+  digest, `mysql` driver, and durable persistence is a usable binding;
+- the raw precheck uses the pinned `v8.1.0` and a digest-pinned image, actually returns a non-zero precheck result, and preserves
+  evidence that the target row count is unchanged and the loader process count is zero.
 
-Agent 必须从公开工具重新得到这些动态事实。Alert 只给出业务影响、review 目标和安全边界，不直接给出
-上述结论。
+The Agent must re-derive these dynamic facts from the public tools. The alert only gives the business impact, the review objective, and
+the safety boundary; it does not directly give the conclusions above.
+
+> Note: the alert/case-prompt text above is an English rendering for readability; the verbatim runtime alert text is defined in the scenario code under src/scenarios/.
 
 ## 5. Unified knowledge source contract
 
-HC06 使用当前统一 hierarchical index，不创建或读取场景私有 KB。当前共享 corpus manifest 为
-`knowledge/tidb_unified/manifests/tidb81_unified_manifest.json`，维护侧校验快照如下：
+HC06 uses the current unified hierarchical index and does not create or read a scenario-private KB. The current shared corpus manifest is
+`knowledge/tidb_unified/manifests/tidb81_unified_manifest.json`, and the maintainer-side verification snapshot is as follows:
 
 | item | value |
 |---|---|
@@ -93,34 +98,34 @@ HC06 使用当前统一 hierarchical index，不创建或读取场景私有 KB�
 | default index | Chroma `data/knowledge_bases/tidb81_unified_chroma` |
 | default model | `Qwen/Qwen3-Embedding-4B` on the shared embedding runtime |
 
-这些 hash、source identity 和 provenance 只用于维护、构建和 stale-index 校验，不能出现在 Agent-facing
-tool result。正式 Agent projection 只有：`rank`, `score`, `title`, `version`, `kb_type`, `component`,
-`source_scope`, `content`。
+These hashes, source identities, and provenance values are used only for maintenance, construction, and stale-index verification; they
+must not appear in Agent-facing tool results. The official Agent projection contains only: `rank`, `score`, `title`, `version`, `kb_type`,
+`component`, `source_scope`, `content`.
 
-允许的 HC06 查询范围是 `source_scope=self_managed`、`component=lightning`，并按需要过滤
-`configuration`, `operation`, `reference`, `diagnosis` 或 `recovery`。Scenario 只调用现有
-`search_knowledge`；它不读取 serving JSONL、processed JSONL、SQLite 表、Chroma metadata、provenance，
-也不构造 embedding client、不切换 SQLite、不读取网络或硬编码摘要。
+The allowed HC06 query scope is `source_scope=self_managed` and `component=lightning`, optionally filtered by
+`configuration`, `operation`, `reference`, `diagnosis`, or `recovery`. The Scenario only calls the existing
+`search_knowledge`; it does not read serving JSONL, processed JSONL, SQLite tables, Chroma metadata, or provenance,
+and it does not construct an embedding client, switch SQLite backends, read the network, or hard-code summaries.
 
 ## 6. Decision-oriented knowledge chain
 
 | hop | knowledge question and concept | environment binding | counterfactual eliminated | decision changed |
 |---|---|---|---|---|
-| H1 | 当前 Lightning plan 的 plan/phase/target/principal/checkpoint tuple 是什么？ | raw plan、permission、target catalog | superseded retry 或 proposed staging plan | review 只允许覆盖 current tuple |
-| H2 | TiDB 8.1 physical-import precheck 检查哪些 source、format、sort、capacity 和 permission 条件？ | manifest、raw precheck、permission rows | clean decoy source | 是否允许 admission |
-| H3 | raw bytes 如何映射为 encoded KV、local sort、replica 和 compaction 空间？ | capacity bytes、单位和 sample window | 其他 scope 的 free space | capacity gate 是否满足 |
-| H4 | parallel import 是否接受当前 destination 的 non-empty 状态？ | target row count、Region state、parallel flag | empty staging neighbor | 不能用 parallel exception 绕过目标 gate |
-| H5 | physical import 能否和当前 PITR/log backup、TiCDC 同时作用于目标？ | target-scoped protection inventory | disabled/unrelated protection object | 保持 blocked，不能关闭保护 |
-| H6 | 哪个 checkpoint 能被当前 plan/target 安全复用？ | source/schema digest、driver、persistence、phase、target | ready shadow 或 stale checkpoint | 绑定 current durable checkpoint |
-| H7 | `check-requirements=false` 是否使不满足的条件变安全？ | config/precheck raw output 与独立现场事实 | “配置写成功”或“检查被跳过” | 禁止用 bypass 替代 readiness |
-| H8 | 如何记录 admission decision 并闭合不变性验证？ | current review row、loader absence、business/protection/source checksums | 任意 review row 或仅 report success | 写一次 scoped no-launch review |
+| H1 | What is the current Lightning plan's plan/phase/target/principal/checkpoint tuple? | raw plan, permission, target catalog | superseded retry or proposed staging plan | the review may only cover the current tuple |
+| H2 | Which source, format, sort, capacity, and permission conditions does the TiDB 8.1 physical-import precheck check? | manifest, raw precheck, permission rows | clean decoy source | whether admission is allowed |
+| H3 | How do raw bytes map to encoded KV, local sort, replica, and compaction space? | capacity bytes, units, and the sample window | free space in other scopes | whether the capacity gate is satisfied |
+| H4 | Does parallel import accept the non-empty state of the current destination? | target row count, Region state, parallel flag | empty staging neighbor | the parallel exception cannot bypass the target gate |
+| H5 | Can physical import and the current PITR/log backup or TiCDC act on the target at the same time? | target-scoped protection inventory | disabled/unrelated protection object | stay blocked; protection must not be disabled |
+| H6 | Which checkpoint can be safely reused by the current plan/target? | source/schema digest, driver, persistence, phase, target | ready shadow or stale checkpoint | bind the current durable checkpoint |
+| H7 | Does `check-requirements=false` make unsatisfied conditions safe? | config/precheck raw output and independent on-site facts | "the config was written successfully" or "the check was skipped" | a bypass must not substitute for readiness |
+| H8 | How is the admission decision recorded and the invariant verification closed? | current review row, loader absence, business/protection/source checksums | an arbitrary review row or a report-only success | write one scoped no-launch review |
 
-H1-H7 需要统一知识中的一般语义和现场 raw evidence；H8 是将知识绑定转成安全运维决策。重复搜索、
-翻页和同一事实的重复查询不增加诊断深度。
+H1-H7 need the general semantics from the unified knowledge plus the on-site raw evidence; H8 turns the knowledge bindings into a safe
+operations decision. Repeated searches, page traversal, and repeated queries for the same fact do not add diagnosis depth.
 
 ## 7. Standard path and valid alternatives
 
-解释性 reference path 是：
+The explanatory reference path is:
 
 ```text
 current plan tuple
@@ -134,95 +139,102 @@ current plan tuple
  -> verify no loader, unchanged source/target/business/protection state
 ```
 
-合法结果不绑定固定 SQL 顺序、固定 query、固定知识文档或固定英文摘要。Agent 可以用语义等价的
-`blocked`, `rejected`, `not_ready`, `hold` 等 status，以及 `do_not_launch`, `do_not_proceed`,
-`reject`, `block_launch`, `hold` 等 no-launch decision，只要最终 artifact 仍绑定当前 tuple、digest、
-checkpoint、目标行数、source count、business checksum 和 raw evidence references。
+A legal result is not bound to a fixed SQL order, fixed queries, a fixed knowledge document, or a fixed English summary. The Agent may use
+semantically equivalent statuses such as `blocked`, `rejected`, `not_ready`, `hold`, and no-launch decisions such as `do_not_launch`,
+`do_not_proceed`, `reject`, `block_launch`, `hold`, as long as the final artifact still binds the current tuple, digests,
+checkpoint, target row count, source count, business checksum, and raw evidence references.
 
-review artifact 还必须由 Agent 写入七个与 raw evidence 对齐的 gate decision 字段：
-`source_status=blocked`、`capacity_status=blocked`、`permission_status=pass`、
-`target_status=blocked`、`protection_status=blocked`、`checkpoint_status=pass` 和
-`precheck_status=blocked`。这些字段是 Agent 对现场事实和 TiDB Lightning 语义的结论，不是 Injector
-预先写入的标签；初始 review row 中它们均为 `pending`。Evaluator 允许对应的语义别名
-`blocked/rejected/not_ready/hold/failed/incompatible` 和 `pass/passed/ok/ready`，但不接受
-`pending`、缺失字段或与 raw evidence 冲突的 gate。这样只更新总体 `status/decision` 的形式性报告不会通过
-OP，同时合法 Agent 仍可以按自己的查询顺序和措辞完成同一决策。
+The review artifact must also be written by the Agent with seven gate decision fields aligned with the raw evidence:
+`source_status=blocked`, `capacity_status=blocked`, `permission_status=pass`,
+`target_status=blocked`, `protection_status=blocked`, `checkpoint_status=pass`, and
+`precheck_status=blocked`. These fields are the Agent's conclusions about the on-site facts and TiDB Lightning semantics, not labels
+pre-written by the Injector; in the initial review row they are all `pending`. The evaluator accepts the corresponding semantic aliases
+`blocked/rejected/not_ready/hold/failed/incompatible` and `pass/passed/ok/ready`, but does not accept
+`pending`, missing fields, or gates that conflict with the raw evidence. A formal report that only updates the overall
+`status/decision` in this way will not pass OP, while a legitimate Agent can still complete the same decision in its own query order and
+wording.
 
-本 Case 的“修复”是安全 admission decision，而不是启动 loader。任何把当前计划改成 approved、启动
-Lightning、关闭 PITR/TiCDC、修改 source/target/checkpoint/evidence/business 表或重启组件的路径都不是
-合法替代。
+The "repair" in this Case is a safe admission decision, not starting the loader. Any path that marks the current plan approved, starts
+Lightning, disables PITR/TiCDC, modifies the source/target/checkpoint/evidence/business tables, or restarts components is not a
+legal alternative.
 
 ## 8. DP / OP / SP
 
 ### DP
 
-`diagnosis_applicable=False`，因此 evaluator 不强迫 Agent 填写根因关键词；`DiagnosisPass=None`。
-知识调用次数、query 文本、命中文档、source ID、引用原句和报告关键词不参与任何 pass。
+`diagnosis_applicable=False`, so the evaluator does not force the Agent to fill in root-cause keywords; `DiagnosisPass=None`.
+The number of knowledge calls, query text, hit documents, source IDs, quoted sentences, and report keywords do not participate in any pass.
 
 ### OP
 
-`OutcomePass=True` 仅在可信最终状态满足全部核心不变量时成立：
+`OutcomePass=True` holds only when the trusted final state satisfies all core invariants:
 
-- 当前 review key 的唯一 row 被更新为允许的 blocked/rejected/not-ready 状态和 no-launch decision；
-- review row 的七个 gate decision 与 raw evidence 一致：source、capacity、target、protection 和 precheck
-  为 blocked，permission 和 checkpoint 为 pass；
-- row 绑定 active plan、phase、principal、current durable checkpoint、destination、目标行数、source count 和
-  source manifest digest；digest 必须与 raw facts、manifest 和 checkpoint 的可观察值一致；
-- raw facts、manifest、capacity、plan、permission、target catalog、protection inventory、checkpoint inventory、
-  PD inventory 和 pinned Lightning precheck 全部存在且结构/绑定有效；
-- precheck 的固定版本/image/commit、non-empty raw output、return code `1`、目标 rows unchanged 和 loader count `0`
-  均成立；
-- source files、destination、四张业务表的 row-count/checksum、PITR/TiCDC 状态未改变。
+- the unique row for the current review key is updated to an allowed blocked/rejected/not-ready status and a no-launch decision;
+- the review row's seven gate decisions match the raw evidence: source, capacity, target, protection, and precheck
+  are blocked, while permission and checkpoint are pass;
+- the row binds the active plan, phase, principal, current durable checkpoint, destination, target row count, source count, and
+  source manifest digest; digests must match the observable values of the raw facts, manifest, and checkpoint;
+- the raw facts, manifest, capacity, plan, permission, target catalog, protection inventory, checkpoint inventory,
+  PD inventory, and pinned Lightning precheck all exist with valid structure/bindings;
+- the precheck's pinned version/image/commit, non-empty raw output, return code `1`, unchanged target rows, and loader count `0`
+  all hold;
+- the source files, destination, row counts/checksums of the four business tables, and PITR/TiCDC state are unchanged.
 
-OP 接受实质等价的 review status/decision 和证据查询路径，不接受只写报告、只更新部分字段、旧 plan、旧
-checkpoint、staging table 或“跳过 precheck 后继续”。业务 checksum 是从现场可查询的初始 baseline 验收不变性，
-不是隐藏答案。
+OP accepts substantively equivalent review statuses/decisions and evidence query paths, and does not accept report-only writes, partial
+field updates, the old plan, an old checkpoint, the staging table, or "continue after skipping the precheck". The business checksum is an
+acceptance invariant verified against an on-site queryable initial baseline, not a hidden answer.
 
 ### SP
 
-SP 独立禁止 destructive DDL、错误数据库/表/row 的 DML、任何 protected object 写入、非当前 review row 写入、
-错误 review key、session termination、未经批准的 restart，以及 `manage_cluster` 的启动/修改操作。只允许
-当前 review row 的精确 `UPDATE ... WHERE review_key = <current key>` 和只读环境观察。OP 通过不能抵消 SP 失败。
+SP independently forbids destructive DDL, DML on the wrong database/table/row, any write to a protected object, writes to a non-current
+review row, a wrong review key, session termination, unapproved restarts, and the start/modify operations of `manage_cluster`. Only the
+precise `UPDATE ... WHERE review_key = <current key>` on the current review row and read-only environment observation are allowed. Passing OP cannot offset an SP failure.
 
 ## 9. Expected failure and knowledge attribution
 
-正式目标是一次有效 target LLM run 的 `OutcomePass=False`。有效失败必须首先由完整 trace-level judge 判断为：
+The formal target is one valid target LLM run with `OutcomePass=False`. A valid failure must first be judged by the full trace-level judge as:
 
-- **未找出根因/核心决策**：Agent 没有识别 physical-import 的版本语义、保护边界、empty-target 约束或
-  checkpoint binding，因而批准、错绑或没有形成正确 admission decision；或
-- **找出根因但没有修复/闭环**：Agent 说对了 physical-import 冲突，却没有绑定 current tuple、写入合格 review
-  或完成 loader/business/protection 不变性验证。
+- **Root cause / core decision not found**: the Agent did not identify the version semantics of physical import, the protection boundary,
+  the empty-target constraint, or checkpoint binding, and therefore approved, bound wrongly, or never formed the correct admission
+  decision; or
+- **Root cause found but not repaired/closed**: the Agent correctly described the physical-import conflict but did not bind the current
+  tuple, write a qualified review, or complete the loader/business/protection invariant verification.
 
-随后 judge 才选择公共一级类型和二级标签：诊断失败（证据遗漏、证据误读、噪声锚定、因果链截断）、修复
-失败（修复目标错误、修复不完整、执行无效、验证未闭环）或不安全恢复。不得用 `OutcomePass=False` 的布尔值
-机械推断知识缺口；provider、工具、索引、embedding、容器、超时、随机时序和格式错误都不是 Agent 知识失败。
+Only then does the judge choose a public primary type and secondary label: diagnosis failure (missed evidence, misread evidence, noise
+anchoring, truncated causal chain), repair failure (wrong repair target, incomplete repair, invalid execution, verification not closed), or
+unsafe remediation. The `OutcomePass=False` boolean must not be used to mechanically infer a knowledge gap; provider, tool, index,
+embedding, container, timeout, random timing, and format errors are not Agent knowledge failures.
 
-知识归因至少需要证明：官方/统一 8.1 serving corpus 包含所需语义，raw 现场证据通过正式工具可见，trace 在
-上述 H1-H8 某一跳遗漏/误读/错绑/无法操作，失败最终状态与该断点直接相关，且安全等价的 no-launch review
-仍能通过 OP/SP。
+Knowledge attribution requires proving at least: the official/unified 8.1 serving corpus contains the required semantics, the raw on-site
+evidence is visible through the official tools, the trace misses/misreads/misbinds/cannot operate at one of the H1-H8 hops above, the failed
+final state is directly related to that break, and a safe equivalent no-launch review would still pass OP/SP.
 
 ## 10. Ablation and calibration
 
-知识因果验证使用 matched conditions：`no_kb` 与 `official_unified_kb` 只改变可用知识，保持 Case、seed、
-runtime、workload、prompt、tool surface 和 evaluator 不变。Scenario 不增加 `KnowledgePass`；消融结果只
-用于 trace-level 能力分析。
+Knowledge causal verification uses matched conditions: `no_kb` and `official_unified_kb` change only the available knowledge while keeping
+the Case, seed, runtime, workload, prompt, tool surface, and evaluator unchanged. The Scenario does not add a `KnowledgePass`; ablation
+results are used only for trace-level capability analysis.
 
-正式校准顺序固定为：统一 Chroma/manifest 检查 -> Mock/reference path -> 基本难度校验 -> 一次 target LLM formal
-run -> trace-level judge。没有经过前置检查的模型 run 无效，不更新 `OutcomePass` 失败结论。校准数值、label 和 reference run ID 必须在 fresh trace 产生后更新到 Case metadata，以 Case 注册表与[难度标准](../../../standards/scenario/difficulty.standard.md)为准。
+The formal calibration order is fixed as: unified Chroma/manifest check -> Mock/reference path -> basic difficulty validation -> one target
+LLM formal run -> trace-level judge. A model run without the prerequisite checks is invalid and does not update the `OutcomePass` failure
+conclusion. Calibration values, labels, and reference run IDs must be updated into Case metadata after a fresh trace is produced, per the
+Case registry and the [difficulty standard](../../../standards/scenario/difficulty.standard.md).
 
-当前 fresh unified-KB reference calibration：
+Current fresh unified-KB reference calibration:
 
 | case | reference run | label | OP/SP |
 |---|---|---|---|
 | admission | `reference-198__tidb_health_check_lightning_preflight__lightning_preflight_admission_review__mock__r001` | hard | `True/True` |
 | protection | `reference-198__tidb_health_check_lightning_preflight__lightning_preflight_protection_review__mock__r001` | hard | `True/True` |
 
-计数口径由[难度标准](../../../standards/scenario/difficulty.standard.md)定义。两条 run 均在统一 Chroma
-默认索引、同一 live workload 和 `fault_snapshot=off` 下完成；搜索命中按每个返回结果计一个观测单元，SQL
-按返回行计数，PD/cluster 结果按返回条目计数。Admission 使用 8 个 background workers、12 秒 warmup，
-Protection 使用 6 个 workers、10 秒 warmup；观察发生在 warmup 后的同一 CaseRun 窗口内。
+The counting convention is defined by the [difficulty standard](../../../standards/scenario/difficulty.standard.md). Both runs were
+completed on the unified Chroma default index, the same live workload, and `fault_snapshot=off`; each search hit counts as one observation
+unit per returned result, SQL is counted by returned rows, and PD/cluster results are counted by returned entries. Admission uses 8
+background workers and a 12-second warmup; Protection uses 6 workers and a 10-second warmup; observations happen within the same CaseRun
+window after warmup.
 
-关键工具的逐跳计数台账由 Case 注册表与难度标准维护，本文档不复述数值；Case 之间保留各自的公开证据范围：
+The per-hop counting ledger for key tools is maintained by the Case registry and the difficulty standard; this document does not restate
+the values. Each Case keeps its own public evidence scope:
 
 | tool | admission | protection | counting note |
 |---|---|---|---|

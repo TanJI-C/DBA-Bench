@@ -8,6 +8,7 @@ scope: [tidb, resource_governance, tidb_resource_governance_br_slo_adaptive_thro
 summary: Current code-backed contract snapshot for tidb_resource_governance_br_slo_adaptive_throttling; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_resource_governance_br_slo_adaptive_throttling`
@@ -39,7 +40,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Govern a live maintenance window without violating foreground SLO or data integrity.
-- Alert/symptom: P1 资源治理告警：夜间数据维护任务正在运行但尚未完成，checkout 前台 p95 超过 35 ms SLO。请在不修改业务数据、不关闭空间安全检查且不重启集群的前提下，找到可持续的维护资源预算，让任务完成并验证 checksum、前台 SLO 和业务真值。
+- Alert/symptom: P1 resource-governance alert: the overnight data maintenance task is running but not yet complete, and the checkout foreground p95 exceeds the 35 ms SLO. Without modifying business data, disabling the space-safety check, or restarting the cluster, find a sustainable maintenance resource budget so the task completes, and verify the checksum, the foreground SLO, and the business truth.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `completion`, `foreground_slo`, `space_check`, `status`
 - Expected-target fields: `business_integrity`, `completion`, `foreground_slo`, `space_check`, `status`
 - Background profiles: checkout_point_lookup, checkout_recent_orders, tenant_dashboard_rollup, settlement_export_preview, fraud_window_scan, order_detail_join, inventory_reconciliation, customer_segment_preview, business_truth_probe, table_status_probe, maintenance_config_probe, cluster_config_decoy

@@ -8,6 +8,7 @@ scope: [tidb, resource_governance, tidb_resource_governance_sql_binding]
 summary: Current code-backed contract snapshot for tidb_resource_governance_sql_binding; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_resource_governance_sql_binding`
@@ -39,7 +40,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Approve one currently served customer read path with a session-local plan policy.
-- Alert/symptom: [RESOURCE GOVERNANCE] 一个 customer-facing read path 需要批准稳定的 session-local 执行计划。当前 workload 同时包含相邻业务读取、历史 plan policy、schema/统计探针和可失败的辅助探针；请从未过滤的 workload/TopSQL 与当前 plan policy 证据中识别准确的业务请求，在当前 session 选择已有的匹配访问路径，保护全局 policy、全局 TiDB 变量、schema 和业务数据。当前业务真值摘要必须保持为 782 行、event id sum=39092962、CRC=1892534002；提交时保留启用的 session binding，并验证最终计划由该 binding 控制、业务结果与表真值未变；harness 会在 teardown 清理 session binding。
+- Alert/symptom: [RESOURCE GOVERNANCE] A customer-facing read path needs a stable session-local execution plan approved. The current workload also contains neighboring business reads, historical plan policies, schema/statistics probes, and fail-prone auxiliary probes; identify the exact business request from the unfiltered workload/TopSQL evidence and the current plan policy evidence, choose an existing matching access path in the current session, and protect the global policy, global TiDB variables, schema, and business data. The current business truth summary must remain 782 rows, event id sum=39092962, CRC=1892534002; keep the enabled session binding when submitting, and verify that the final plan is controlled by that binding and that the business result and table truth are unchanged; the harness cleans up the session binding during teardown.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `approved_access_path`, `global_binding`, `session_binding`, `status`
 - Expected-target fields: `cleanup`, `last_plan_from_binding`, `plan_contains`, `result_count`, `session_binding`, `status`
 - Background profiles: wrk_03, wrk_04, wrk_05, wrk_06, wrk_07, wrk_08, wrk_09, wrk_10, wrk_11, wrk_12, wrk_29, wrk_30
@@ -51,7 +53,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Approve the batch-channel search window with a session-local plan policy.
-- Alert/symptom: [RESOURCE GOVERNANCE] A customer-facing channel search window needs a session-local plan approval. The workload contains neighboring tenant/time and channel searches, historical plan policies, schema probes, and auxiliary checks. Identify the exact batch-channel request from live evidence, choose an existing matching access path in the current session, and preserve global policy, global TiDB variables, schema, and bu
+- Alert/symptom: [RESOURCE GOVERNANCE] A customer-facing channel search window needs a session-local plan approval. The workload contains neighboring tenant/time and channel searches, historical plan policies, schema probes, and auxiliary checks. Identify the exact batch-channel request from live evidence, choose an existing matching access path in the current session, and preserve global policy, global TiDB variables, schema, and business data. The published result summary must remain unchanged; the harness removes the target session binding during teardown.
 - Initial-state fields: `approved_access_path`, `global_binding`, `session_binding`, `status`
 - Expected-target fields: `cleanup`, `last_plan_from_binding`, `plan_contains`, `result_count`, `session_binding`, `status`
 - Background profiles: wrk_03, wrk_04, wrk_05, wrk_06, wrk_07, wrk_08, wrk_09, wrk_10, wrk_11, wrk_12, wrk_29, wrk_30

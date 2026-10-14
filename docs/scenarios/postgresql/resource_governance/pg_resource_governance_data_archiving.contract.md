@@ -8,6 +8,7 @@ scope: [postgres, resource_governance, pg_resource_governance_data_archiving]
 summary: Current code-backed contract snapshot for pg_resource_governance_data_archiving; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_resource_governance_data_archiving`
@@ -39,7 +40,9 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates cold order-history archiving and physical space reclaim under online workload constraints.
-- Alert/symptom: P1 存储容量告警：PostgreSQL 单机实例数据目录使用率持续高于 80%，order_history 表占用增长明显且冷数据比例异常。业务仍在线写入，当前没有停机窗口，禁止使用会长时间持有 ACCESS EXCLUSIVE 锁的回收方式。请归档一年以前冷数据并回收物理空间，同时避免阻塞核心交易。
+- Alert/symptom: P1 storage capacity alert: the data directory usage of the single-node PostgreSQL instance has stayed above 80%, and the order_history table's footprint is growing markedly with an abnormal proportion of cold data. The business is still writing online, there is currently no downtime window, and reclamation methods that hold an ACCESS EXCLUSIVE lock for a long time are forbidden. Archive the cold data older than one year and reclaim the physical space while avoiding blocking core transactions.
+
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `cold_data`, `physical_space`, `status`
 - Expected-target fields: `cold_data`, `physical_space`, `status`, `strategy`
 - Background profiles: order_retention_dashboard_rollup, customer_history_payload_rollup, recent_order_touch_probe, archive_table_existence_probe, missing_retention_summary_log_noise

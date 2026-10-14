@@ -49,7 +49,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: A single-table category-prefix report lacks a matching expression index.
-- Alert/symptom: Alert: postgres-primary-1 reporting API response time has spiked from ~200ms to ~8s starting around 14:30 today. The regression is concentrated on a single reporting query against the product relation. Identify the cause and restore performance without rewriting the application. Affected query: /* report: product_category_prefix_simple */ SELECT pr_product_sk FROM product WHERE substring(pr_category, 1, 3) = 'Sho'; H
+- Alert/symptom: Alert: postgres-primary-1 reporting API response time has spiked from ~200ms to ~8s starting around 14:30 today. The regression is concentrated on a single reporting query against the product relation. Identify the cause and restore performance without rewriting the application. Affected query: /* report: product_category_prefix_simple */ SELECT pr_product_sk FROM product WHERE substring(pr_category, 1, 3) = 'Sho'; Hint: focus on access paths — the query plan changed recently.
 - Initial-state fields: `plan`, `status`, `target_index`
 - Expected-target fields: `index`, `status`
 - Background profiles: none declared

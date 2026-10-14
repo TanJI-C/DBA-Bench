@@ -8,6 +8,7 @@ scope: [postgres, business_change, pg_business_change_collation_conversion]
 summary: Current code-backed contract snapshot for pg_business_change_collation_conversion; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `pg_business_change_collation_conversion`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates an online collation conversion on a TPC-DS fact table that invalidates LIKE-friendly B-tree access paths.
-- Alert/symptom: 业务变更窗口提醒：退货报表发布要求主票号文本字段支持区域性排序，同时该字段仍承载线上 LIKE 前缀检索，变更存在计划回归风险。请先从当前业务负载中区分主票号、审计票号和历史预览字段，再评估表重写成本、锁等待窗口、空间膨胀和依赖索引影响；随后在低峰期完成必要的在线变更，恢复前缀检索计划并用元数据查询与 EXPLAIN 验证。避免无关临时演练；确认变更闭环后必须调用 submit 结束流程。
+- Alert/symptom: Business change window notice: the returns reporting release requires the primary ticket-number text field to support regional collation, while the same field still carries live LIKE prefix searches, so the change carries plan-regression risk. First distinguish the primary ticket number, the audit ticket number, and the historical preview fields in the current business load; then evaluate the table rewrite cost, the lock wait window, space bloat, and the impact on dependent indexes. Afterwards, complete the necessary online change during the off-peak period, restore the prefix-search plan, and verify it with metadata queries and EXPLAIN. Avoid unrelated temporary experiments; after confirming the change is fully closed out, you must call submit to end the workflow.
 - Initial-state fields: `column`, `current_collation`, `risk`, `status`, `table`
 - Expected-target fields: `column`, `like_index`, `plan`, `status`, `table`, `target_collation`
 - Background profiles: returns_ticket_prefix_probe, returns_ticket_audit_prefix_probe, returns_ticket_legacy_sort_preview, returns_numeric_ticket_rollup, missing_returns_locale_cache_noise, returns_archive_prefix_probe
@@ -50,7 +51,9 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Simplified regional collation conversion with one adjacent ticket-search decoy.
-- Alert/symptom: 变更窗口告警：退货检索服务需要支持区域化文本排序，发布预检显示前缀查询计划可能回退。请确认真正承载线上检索的字段，评估转换与索引影响，安全完成变更并验证查询计划；审计预览流量仍在低频运行。
+- Alert/symptom: Change window alert: the returns search service needs to support regionalized text collation, and the release precheck shows that the prefix query plan may regress. Confirm the field that actually carries the live search, evaluate the conversion and index impact, complete the change safely, and verify the query plan; the audit preview traffic is still running at low frequency.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `status`, `symptom`
 - Expected-target fields: `collation`, `plan`, `status`
 - Background profiles: returns_ticket_prefix_probe, returns_ticket_audit_prefix_probe

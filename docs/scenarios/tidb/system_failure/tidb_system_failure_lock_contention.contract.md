@@ -8,6 +8,7 @@ scope: [tidb, system_failure, tidb_system_failure_lock_contention]
 summary: Current code-backed contract snapshot for tidb_system_failure_lock_contention; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_system_failure_lock_contention`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Checkout writes stall amid mixed transactional activity.
-- Alert/symptom: [P1] checkout-api 的订单确认写入延迟持续升高，部分请求未完成，但读取和其他业务流量仍可继续服务。同一 TiDB 集群还存在账户、审计、回放/归档校验、报表和监控活动，当前窗口同时有会话/事务活动与历史错误记录。请从当前运行时证据判断影响 checkout 的主要原因，区分当前业务路径、无关活动、同名对象和历史记录，只改变为恢复该业务路径所必需的状态，避免终止或修改无关会话和数据，并验证新的 checkout 写入可以完成。
+- Alert/symptom: [P1] The order-confirmation write latency of checkout-api keeps rising and some requests do not complete, but reads and other business traffic can still be served. The same TiDB cluster also has account, audit, replay/archive verification, reporting, and monitoring activity, and the current window contains both session/transaction activity and historical error records. Judge the main cause affecting checkout from the current runtime evidence, distinguish the current business path from unrelated activity, same-named objects, and historical records, change only the state necessary to restore that business path, avoid terminating or modifying unrelated sessions and data, and verify that new checkout writes can complete.
 - Initial-state fields: `lock`, `status`
 - Expected-target fields: `amount`, `lock`, `status`
 - Background profiles: sf04_checkout_event_detail, sf04_checkout_account_total, sf04_checkout_status_summary, sf04_checkout_event_account_join, sf04_checkout_pending_scan, sf04_checkout_recent_events, sf04_account_profile, sf04_account_balance_dashboard, sf04_account_tier_mix, sf04_account_top_balances, sf04_audit_reconciliation, sf04_audit_recent
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Checkout writes stall amid mixed transactional activity.
-- Alert/symptom: [P1] checkout-api 的订单确认写入延迟持续升高，部分请求未完成，但读取和其他业务流量仍可继续服务。同一 TiDB 集群还存在账户、审计、回放/归档校验、报表和监控活动，当前窗口同时有会话/事务活动与历史错误记录。请从当前运行时证据判断影响 checkout 的主要原因，区分当前业务路径、无关活动、同名对象和历史记录，只释放为恢复目标 checkout waiter 所必需的 holder，并用只读查询验证后台已有 waiter 的提交结果。不要执行额外的 INSERT、UPDATE、DELETE 或修改任何业务行；无关会话和数据必须保持不变。
+- Alert/symptom: [P1] The order-confirmation write latency of checkout-api keeps rising and some requests do not complete, but reads and other business traffic can still be served. The same TiDB cluster also has account, audit, replay/archive verification, reporting, and monitoring activity, and the current window contains both session/transaction activity and historical error records. Judge the main cause affecting checkout from the current runtime evidence, distinguish the current business path from unrelated activity, same-named objects, and historical records, release only the holders necessary to restore the target checkout waiter, and use read-only queries to verify the committed results of the pre-existing background waiters. Do not execute additional INSERT, UPDATE, DELETE or modify any business rows; unrelated sessions and data must remain unchanged.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `lock`, `status`
 - Expected-target fields: `amount`, `lock`, `status`
 - Background profiles: sf04_checkout_event_detail, sf04_checkout_pending_scan, sf04_shadow_business_read, sf04_replay_business_read, sf04_archive_business_read, sf04_canary_business_read, sf04_lock_wait_inventory, sf04_transaction_inventory, sf04_deadlock_history, sf04_active_process_inventory, sf04_lock_process_correlation, sf04_target_key_read

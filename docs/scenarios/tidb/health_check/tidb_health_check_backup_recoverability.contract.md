@@ -8,6 +8,7 @@ scope: [tidb, health_check, tidb_health_check_backup_recoverability]
 summary: Current code-backed contract snapshot for tidb_health_check_backup_recoverability; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_health_check_backup_recoverability`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Repair a corrupted TiDB backup-chain object and prove the approved isolated restore reaches the requested checkpoint rather than trusting a green backup job.
-- Alert/symptom: [Data Protection Recovery Alert] The approved weekly restore validation for the regional commerce cluster did not reach its requested checkpoint. The scheduler still reports a green backup. Determine why the approved restore did not reach its requested checkpoint. Use the available recovery records and live traffic to identify the affected validation, apply a safe correction in the isolated validation environment, an
+- Alert/symptom: [Data Protection Recovery Alert] The approved weekly restore validation for the regional commerce cluster did not reach its requested checkpoint. The scheduler still reports a green backup. Determine why the approved restore did not reach its requested checkpoint. Use the available recovery records and live traffic to identify the affected validation, apply a safe correction in the isolated validation environment, and verify the four critical business tables. Never restore over production, mutate the production business tables, or restart a healthy TiDB/TiKV/PD component.
 - Initial-state fields: `backup_jobs`, `business_window`, `request_key`, `status`
 - Expected-target fields: `checkpoint`, `critical_tables`, `restore_sample`, `restore_status`, `safety`, `selected_chain`
 - Background profiles: hc04_checkout_order_lookup, hc04_merchant_order_rollup, hc04_order_line_reconciliation, hc04_payment_settlement_probe, hc04_inventory_snapshot, hc04_backup_catalog_refresh, hc04_checkpoint_window_probe, hc04_restore_queue_probe, hc04_object_store_inventory_scan, hc04_restore_attempt_poll, hc04_live_checkout_event_writer, hc04_business_checksum_probe
@@ -51,7 +52,8 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Repair one readable but unreplicated TiDB backup segment and prove isolated restore continuity.
-- Alert/symptom: 数据保护例行恢复抽样发现当前 restore chain 没有跨过请求 checkpoint。请把当前请求、批准的 archive source、segment continuity 和 isolated restore 记录关联起来。区分 readable-but-unreplicated 与 checksum failure，只在隔离目标修复单个 continuity gap，禁止覆盖生产表或修改业务数据。
+- Alert/symptom: The routine data-protection recovery sampling found that the current restore chain does not span the requested checkpoint. Correlate the current request, the approved archive source, segment continuity, and the isolated restore records. Distinguish readable-but-unreplicated from a checksum failure, and repair only the single continuity gap on the isolated target; overwriting production tables or modifying business data is forbidden.
+> Note: some of the runtime alerts for this scenario are issued in Chinese by the scenario code; the text above is an English rendering for readability.
 - Initial-state fields: `fault_shape`, `request_key`, `status`
 - Expected-target fields: `continuity_segment`, `critical_tables`, `production`, `restore_status`
 - Background profiles: hc04_checkout_order_lookup, hc04_merchant_order_rollup, hc04_order_line_reconciliation, hc04_payment_settlement_probe, hc04_inventory_snapshot, hc04_backup_catalog_refresh, hc04_checkpoint_window_probe, hc04_restore_queue_probe, hc04_object_store_inventory_scan, hc04_restore_attempt_poll, hc04_live_checkout_event_writer, hc04_business_checksum_probe

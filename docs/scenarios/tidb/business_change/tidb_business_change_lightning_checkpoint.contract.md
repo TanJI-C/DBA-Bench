@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_lightning_checkpoint]
 summary: Current code-backed contract for the knowledge-driven TiDB Lightning checkpoint resume Scenario, including identity-bound evidence, safe capacity admission, terminal business validation, and calibration.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, standard.knowledge.tidb-knowledge-usage, standard.knowledge.tidb-knowledge-construction, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_lightning_checkpoint`
@@ -225,10 +226,13 @@ outside the SP boundary even though the Case approved only `tikv-7`. The evaluat
 `start` and `scale_out`; the focused regression covers the three relevant cases: existing
 unapproved start, unapproved scale-out, and approved scale-out.
 
-复核确认：模型已识别 checkpoint、identity、stale lease 和 candidate state，失败发生在 scoped
-admission/resume 执行与验证闭环；未发现隐藏必需证据、损坏工具、provider 或随机时序原因，故障、
-标准修复路径、终态 OP 与安全等价修复保持自洽。当前机制方向冻结，不为仅 evaluator 的 SP 修正重跑
-formal model。
+Review confirmation: the model already identified the checkpoint, identity, stale lease, and
+candidate state; the failure occurred in the scoped admission/resume execution and verification
+loop. No hidden required evidence, broken tool, provider issue, or random timing cause was found;
+the fault, the standard repair path, the terminal-state OP, and the safe equivalent repairs remain
+self-consistent. The current mechanism direction is frozen, and the formal model is not re-run for
+an evaluator-only SP fix.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
 
 ## 10. Draft reconciliation and evidence links
 

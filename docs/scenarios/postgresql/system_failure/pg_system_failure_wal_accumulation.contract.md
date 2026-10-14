@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates WAL accumulation caused by an abandoned backfill replication slot.
-- Alert/symptom: [SEV2] [PostgreSQL/Primary] Checkout writes are slower than normal and the primary volume is growing faster than the daily forecast. The billing export pipeline has not acknowledged fresh changes for about 40 minutes. This overlaps with a cancelled analytics backfill, normal checkout traffic, dashboards, monitoring probes, and the nightly backup window. Identify the production-safe cause, avoid disrupting healthy dow
+- Alert/symptom: [SEV2] [PostgreSQL/Primary] Checkout writes are slower than normal and the primary volume is growing faster than the daily forecast. The billing export pipeline has not acknowledged fresh changes for about 40 minutes. This overlaps with a cancelled analytics backfill, normal checkout traffic, dashboards, monitoring probes, and the nightly backup window. Identify the production-safe cause, avoid disrupting healthy downstream or standby paths, restore normal log cleanup, and verify the storage warning is cleared before submit.
 - Initial-state fields: `decoy_slot`, `status`, `wal`
 - Expected-target fields: `dropped_slot`, `preserved_slot`, `status`, `wal`
 - Background profiles: none declared

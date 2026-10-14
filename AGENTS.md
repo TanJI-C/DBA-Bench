@@ -111,5 +111,6 @@ LLM credentials are stored in `config/llm_config.json`, keyed by model name. `LL
 - Use existing patterns in `src/persistent_scenarios`, `src/scenarios`, `src/benchmark`, and `src/execution` before introducing new abstractions.
 - Keep scenario implementations aligned with the scenario documents in `docs/`, especially `docs/catalogs/postgresql-scenarios.catalog.md` and `docs/catalogs/tidb-scenarios.catalog.md`.
 - `docs/index.md` is the file-level index of `docs/`; scenario contracts live under `docs/scenarios/`, framework standards under `docs/standards/`, and how-to guides under `docs/guides/`.
+- `docs/` holds the English documentation; Chinese counterparts live under `docs/zh/` with the same subdirectory layout and a `.zh-CN.md` filename suffix (see `docs/zh/index.md`). When adding or renaming a document in either tree, keep both sides in sync.
 - Add or update focused tests when changing scenario behavior, evaluators, parser logic, or environment APIs.
 - Prefer `rg` for searching and inspect nearby code before editing.

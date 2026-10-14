@@ -39,7 +39,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Production DR readiness audit with multiple backup chains and one selected unrecoverable recovery window.
-- Alert/symptom: [DR Readiness Audit] The scheduled recoverability audit for a production recovery window needs manual evidence review. Validate the selected backup chain, restore-drill evidence, archive continuity, and the most recent recoverable point for the business recovery target. Several historical drills and monitoring events are present in the catalog, so separate current-window evidence from operational noise before submitt
+- Alert/symptom: [DR Readiness Audit] The scheduled recoverability audit for a production recovery window needs manual evidence review. Validate the selected backup chain, restore-drill evidence, archive continuity, and the most recent recoverable point for the business recovery target. Several historical drills and monitoring events are present in the catalog, so separate current-window evidence from operational noise before submitting.
 - Initial-state fields: `audit_batch_id`, `business_service`, `recovery_window_label`, `requested_recovery_target_time`, `status`
 - Expected-target fields: `archive_gap_detected`, `backup_id`, `business_rpo_risk`, `latest_recoverable_time`, `missing_wal_file`, `status`
 - Background profiles: none declared

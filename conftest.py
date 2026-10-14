@@ -66,6 +66,7 @@ _TPCDS_BACKED_TESTS = frozenset(
     tests/test_evaluator_layout.py
     tests/test_evaluator_protocol.py
     tests/test_pg_full_reference_report.py
+    tests/test_remote_agent_commands.py
     tests/test_runner_port_rebase.py
     tests/test_scenario_cases.py
     tests/test_semantic_diagnosis.py

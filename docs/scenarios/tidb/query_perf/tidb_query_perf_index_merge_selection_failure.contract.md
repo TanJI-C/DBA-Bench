@@ -8,6 +8,7 @@ scope: [tidb, query_perf, tidb_query_perf_index_merge_selection_failure]
 summary: Current code-backed contract snapshot for tidb_query_perf_index_merge_selection_failure; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_query_perf_index_merge_selection_failure`
@@ -39,7 +40,7 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `0`
 - Title: Simulates TiDB skipping Index Merge for a time-bounded OR event search while the optimizer setting is disabled.
-- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] 事件检索接口 P99 延迟从 18ms 上升到 4.6s。慢 SQL 集中在 test.qp03_admission_events 的带时间窗口 OR 事件检索，目标表 CPU 读放大明显；同一业务路径还有多个租户/事件类型相似 fingerprint 和统计探针；请从可观测的 SQL fingerprint 和执行计划中定位退化原因，恢复性能，同时保持结果集和整表真值不变。
+- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] The P99 latency of the event search interface has risen from 18ms to 4.6s. The slow SQL concentrates on the time-windowed OR event search over test.qp03_admission_events, and CPU read amplification on the target table is obvious; the same business path also carries multiple similar fingerprints across tenants/event types and statistics probes. Locate the cause of the regression from observable SQL fingerprints and execution plans, restore performance, and keep both the result set and the whole-table truth unchanged.
 - Initial-state fields: `global_index_merge`, `index_merge`, `plan`, `result_count`, `result_summary`, `status`, `table_truth`
 - Expected-target fields: `global_index_merge`, `index_merge`, `plan`, `result_count`, `result_summary`, `status`, `table_truth`
 - Background profiles: qp03_target_fingerprint_summary, qp03_tenant_charge_summary, qp03_tenant7_charge_decoy, qp03_tenant_create_summary, qp03_refund_window_probe, qp03_tenant7_no_residual_probe, qp03_amount_range_probe, qp03_event_window_probe, qp03_table_status_probe, qp03_index_catalog_probe, qp03_optimizer_variable_probe, qp03_missing_search_cache_probe
@@ -51,7 +52,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 - Case number: `1`
 - Title: Simulates TiDB skipping Index Merge for a time-bounded OR event search while the optimizer setting is disabled.
-- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] 事件检索接口 P99 延迟从 18ms 上升到 4.6s。慢 SQL 集中在 test.qp03_admission_events 的带时间窗口 OR 事件检索，目标表 CPU 读放大明显；请从可观测的 SQL fingerprint 和执行计划中定位退化原因，恢复性能，同时保持结果集和整表真值不变。
+- Alert/symptom: [CRITICAL] [Grafana/TiDB-Query-Detail] The P99 latency of the event search interface has risen from 18ms to 4.6s. The slow SQL concentrates on the time-windowed OR event search over test.qp03_admission_events, and CPU read amplification on the target table is obvious. Locate the cause of the regression from observable SQL fingerprints and execution plans, restore performance, and keep both the result set and the whole-table truth unchanged.
+
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
+
 - Initial-state fields: `global_index_merge`, `index_merge`, `plan`, `result_count`, `result_summary`, `status`, `table_truth`
 - Expected-target fields: `global_index_merge`, `index_merge`, `plan`, `result_count`, `result_summary`, `status`, `table_truth`
 - Background profiles: qp03_target_fingerprint_summary, qp03_tenant_charge_summary, qp03_tenant7_charge_decoy, qp03_refund_window_probe, qp03_table_status_probe, qp03_index_catalog_probe, qp03_optimizer_variable_probe, qp03_target_ordered_fingerprint

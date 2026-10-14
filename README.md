@@ -99,6 +99,10 @@ LLM agents return JSON actions:
 OpenAI-compatible and Anthropic-native function calling are both supported; credentials live in
 `config/llm_config.json` (start from `config/llm_config.example.json`).
 
+Agents that run outside the benchmark process, in any language, use the `remote` agent mode:
+the benchmark relays the same tool plane over HTTP and still executes every action itself —
+see the [remote agent guide](docs/guides/benchmark/connect-remote-agent.guide.md).
+
 ## Built-in baselines
 
 Reproductions of published database-troubleshooting agents, sharing the same tool plane and scenarios:
@@ -129,6 +133,10 @@ runtime:
   fault_snapshot: auto
   agent_language: en   # optional: zh (default) or en; English covers PostgreSQL bounded scenarios
 ```
+
+`runtime.agent_language` selects the framework's Agent-facing text, including the prompts
+and tools sent to remote agents. English currently supports PostgreSQL bounded Scenarios;
+see the [language scope and restrictions](docs/guides/benchmark/run-experiment.guide.md#agent-facing-language).
 
 ```bash
 aiopsbench experiment plan experiments/pg_smoke.example.yaml

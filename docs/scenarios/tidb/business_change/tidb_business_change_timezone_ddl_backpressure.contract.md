@@ -8,6 +8,7 @@ scope: [tidb, business_change, tidb_business_change_timezone_ddl_backpressure]
 summary: Code-backed contract for the timezone-DDL backpressure scenario, including the unified TiDB knowledge contract, measured Hard calibration, DP/OP/SP boundaries, and current validation evidence.
 source_of_truth: code
 related: [catalog.tidb-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
+language: en
 ---
 
 # `tidb_business_change_timezone_ddl_backpressure`
@@ -194,7 +195,10 @@ remove the business-table slow write, and issued `DROP TABLE benchops.cf01_order
 failure is therefore a domain-knowledge/causal-chain failure followed by incomplete and unsafe
 recovery, not an environment or evaluator-readability failure.
 
-目标 LLM 校准运行的主要失败分类为 `诊断失败 / 因果链截断`：模型发现了局部 DDL/sink 症状，但没有把
-H5-H7 关联到其修复与验收路径。正式 raw TiCDC `commitTs` 与 injection `fault_ddl_commit_ts` 均为
-`468584646483640331`，正式恢复起点为 `468584646483640332`；Mock reference 的 action/evaluator 起点与其自身
-失败事件后的第一个 TSO 一致，本证据集无需 TSO 合同修正。
+The primary failure classification of the target LLM calibration run was `diagnosis failure /
+truncated causal chain`: the model found partial DDL/sink symptoms but did not connect H5-H7 to its
+repair and acceptance path. The formal raw TiCDC `commitTs` and the injection `fault_ddl_commit_ts`
+are both `468584646483640331`, and the formal recovery start point is `468584646483640332`; the Mock
+reference's action/evaluator start point matches the first TSO after its own failure event, so this
+evidence set requires no TSO contract correction.
+> Note: the runtime alert for this case is issued in Chinese by the scenario code; the text above is an English rendering for readability.
