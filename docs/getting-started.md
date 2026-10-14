@@ -184,6 +184,12 @@ obtain them from the official TPC-DS kit (tpc.org) and place the query stream at
 The multi-GB `.dat` data files (each listed with its sha256 in `data/workloads/tpcds/manifest.json`)
 are only needed for `examples/run_tpcds_demo.py`, which generates and loads a full TPC-DS dataset.
 
+TPC-DS and TPC-DSX preparation writes the manifest for the actual local dataset to
+`data/workloads/<workload>/runtime/manifest.json`, which Git ignores. Deployment
+uses this runtime manifest to validate data and schema hashes. The published
+`data/workloads/<workload>/manifest.json` files remain unchanged, so preparing a
+workload does not invalidate the clean-checkout requirement for the next formal run.
+
 ## 8. Troubleshooting
 
 | Symptom | Cause / fix |

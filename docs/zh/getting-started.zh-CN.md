@@ -153,6 +153,11 @@ TPC-DS 查询流 `data/workloads/tpcds/queries/query_0.sql` 在**首次运行前
 
 数 GB 的 `.dat` 数据文件（每个文件都在 `data/workloads/tpcds/manifest.json` 中列有 sha256）只有 `examples/run_tpcds_demo.py` 需要，该脚本会生成并加载完整的 TPC-DS 数据集。
 
+TPC-DS 和 TPC-DSX 准备过程将实际本地数据集的 manifest 写入 Git 忽略的
+`data/workloads/<workload>/runtime/manifest.json`。部署使用这个运行时 manifest
+校验数据和 schema 的哈希。公开的 `data/workloads/<workload>/manifest.json`
+保持不变，因此准备 workload 不会使下一次正式实验的工作区洁净检查失败。
+
 ## 8. 故障排查
 
 | 症状 | 原因 / 解决办法 |

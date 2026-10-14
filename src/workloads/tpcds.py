@@ -171,6 +171,7 @@ class TPCDSWorkload(BaseWorkload):
     """
     def __init__(self, workload_root: str = None, scale: int = 1):
         super().__init__("tpcds", workload_root)
+        self.manifest_path = os.path.join(self.workload_dir, "runtime", "manifest.json")
         self.scale = scale
         # 16GB: the continuous-ops episodes coexist a 64MB max_wal_size fault
         # with a WAL-retention slot; pg_wal cannot recycle past the slot and
@@ -268,7 +269,7 @@ class TPCDSWorkload(BaseWorkload):
             "scale": self.scale,
             "required_tables": list(self.REQUIRED_TABLES),
             "data_files": data_files,
-            "init_sql": init_sql_path,
+            "init_sql": os.path.relpath(init_sql_path, os.path.dirname(self.manifest_path)),
             "init_sql_sha256": self._sha256(init_sql_path),
             "schema_sha256": schema_digest,
             "schema_source": schema_source,
@@ -363,6 +364,7 @@ class TPCDSXWorkload(TPCDSWorkload):
 
     def __init__(self, workload_root: str = None, scale: int = 1):
         BaseWorkload.__init__(self, "tpcdsx", workload_root)
+        self.manifest_path = os.path.join(self.workload_dir, "runtime", "manifest.json")
         self.scale = scale
         self.disk_quota_mb = 8192
         self.source_workload = TPCDSWorkload(workload_root, scale)
@@ -384,7 +386,7 @@ class TPCDSXWorkload(TPCDSWorkload):
         manifest = {
             **source_manifest,
             "workload_name": self.workload_name,
-            "init_sql": self.get_init_sql_path(),
+            "init_sql": os.path.relpath(self.get_init_sql_path(), os.path.dirname(self.manifest_path)),
             "init_sql_sha256": self._sha256(self.get_init_sql_path()),
             "source_workload": self.source_workload.workload_name,
         }
