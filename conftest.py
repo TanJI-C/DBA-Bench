@@ -26,6 +26,7 @@ _TPCDS_BACKED_TESTS = frozenset(
     tests/persistent_scenarios/test_pg5_warehouse_reporting.py
     tests/persistent_scenarios/test_pg5_workload_wiring.py
     tests/postgres/test_alert_causality_evaluators.py
+    tests/postgres/test_audit_logging_contract.py
     tests/postgres/test_business_change_invalid_index.py
     tests/postgres/test_business_change_simplified_cases.py
     tests/postgres/test_cache_pollution_evaluators.py

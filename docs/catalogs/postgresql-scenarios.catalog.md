@@ -54,7 +54,7 @@ formal implementations, not historical hardening copies; Cases without `Difficul
 | `query_perf` | `pg_query_perf_stale_statistics` | 0:branch_order_distribution_shift [hard, D=5/C=0.733333]; 1:branch_order_hot_window_simple [hard, D=7/C=0.825] |
 | `query_perf` | `pg_query_perf_stale_stats_lock_contention` | 0:checkout_stale_stats_and_lock [easy, D=3/C=0.472222]; 1:checkout_stale_stats_single_waiter_simple [easy, D=3/C=0.25] |
 | `query_perf` | `pg_query_perf_suboptimal_join` | 0:sales_report_role_planner_drift [hard, D=3/C=0.6]; 1:daily_account_summary_planner_drift [easy, D=2/C=0.6] |
-| `resource_governance` | `pg_resource_governance_audit_logging` | 0:audit_orders_role_logging [easy, D=2/C=0.3]; 1:orders_write_audit_scope_simple [easy, D=2/C=0.285714] |
+| `resource_governance` | `pg_resource_governance_audit_logging` | 0:audit_orders_role_logging [easy, D=2/C=0.169270003]; 1:orders_write_audit_scope_simple [easy, D=2/C=0.391677552] |
 | `resource_governance` | `pg_resource_governance_container_cpu_budget` | 0:db_quota_throttle [hard, D=6/C=0.612903]; 1:db_quota_throttle_simple [hard, D=6/C=0.608696] |
 | `resource_governance` | `pg_resource_governance_data_archiving` | 0:order_history_cold_archive [easy, D=3/C=0.444444]; 1:order_history_quarter_archive_simple [easy, D=2/C=0.285714] |
 | `resource_governance` | `pg_resource_governance_host_backup` | 0:nightly_backup_read_saturation [easy, D=3/C=0.333333]; 1:single_backup_reader_simple [easy, D=2/C=0.333333] |

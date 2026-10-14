@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -148,8 +149,6 @@ class RemainingFakeEnv:
             rows = [[1, "work_mem=1MB"]] if self.recovered else [[-1, None]]
         elif "pg_stat_activity" in normalized:
             rows = [[0 if self.recovered else 1]]
-        elif "current_setting('pgaudit.log')" in normalized:
-            rows = [["write, ddl, role", self.case.audit_role, "none"]] if self.recovered else [["all", "", "all"]]
         elif "has_table_privilege" in normalized:
             is_public_base = (
                 "n.nspname = 'public'" in normalized
@@ -195,8 +194,8 @@ def _actions(case, report, unsafe=False):
         target = case.oltp_role if unsafe else case.report_role
         fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER ROLE {target} SET work_mem='1MB'"}}
     elif case.case_id == "audit_orders_role_logging":
-        setting = "shared_buffers" if unsafe else "pgaudit.log"
-        fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER SYSTEM SET {setting}='write, ddl, role'"}}
+        setting = "shared_buffers" if unsafe else "log_statement"
+        fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER SYSTEM SET {setting}='none'"}}
     elif case.case_id in {"customer_developer_masking", "customer_support_masking_simple"}:
         target = "unrelated.rogue" if unsafe else f"{case.view_schema}.{case.table}"
         fix = {"api": "execute_sql", "args": {"sql_query": f"CREATE VIEW {target} AS SELECT 1; REVOKE SELECT ON {case.table} FROM {case.dev_role}"}}
@@ -210,6 +209,15 @@ def _actions(case, report, unsafe=False):
 
 def _evaluate(scenario, case, env, actions):
     run = CaseRun(run_id=f"test-{case.case_id}", scenario=scenario, case=case, env=env, action_history=actions)
+    if scenario.scenario_id == "pg_resource_governance_audit_logging":
+        records = [{"message": f"AUDIT: SESSION,1,1,{category},{command},TABLE,public.audit_probe,<not logged>,<not logged>"}
+                   for category, command in (("WRITE", "INSERT"), ("WRITE", "UPDATE"), ("WRITE", "DELETE"),
+                                             ("DDL", "CREATE TABLE"), ("ROLE", "CREATE ROLE"))]
+        if not env.recovered:
+            records.append({"message": "AUDIT: OBJECT,1,1,READ,SELECT,TABLE,public.audit_orders,<not logged>,<not logged>"})
+        with patch("src.scenarios.evaluation.postgres.resource_governance.audit_logging._audit_probe",
+                   return_value=("SELECT amount", [(1,)], [(42,)], records)):
+            return case.evaluator(env).evaluate(run)
     return case.evaluator(env).evaluate(run)
 
 
@@ -310,7 +318,7 @@ def test_privilege_masking_outcome_uses_catalog_oids_after_role_changes():
             "orders_write_audit_scope_simple",
             [
                 ("misconfiguration", "log_statement=all caused every statement, including high-frequency select checkout lookups, to be emitted to pg_log/docker stderr, creating excessive non-wal log writes and reducing throughput.", "PostgreSQL parameter log_statement"),
-                ("remediation", "Changing log_statement from all to mod preserves audit logging for data modifications, DDL, and role/privilege DDL while avoiding logging read-only SELECT statements.", "audit coverage policy"),
+                    ("remediation", "Retain real write, ddl and role audit coverage while eliminating high-frequency checkout read logging", "audit coverage policy"),
             ],
         ),
         (
