@@ -53,7 +53,14 @@ python examples/run_tidb_demo.py
 ```
 
 正式实验、Agent 接入、内置 baseline（D-Bot / Panda / DBAIOps / Andromeda）、场景分类总览
-与扩展指南见 [英文 README](README.md)——两者内容同构，文档均为英文。
+与扩展指南见 [英文 README](README.md)和[中文文档索引](docs/zh/index.md)。
+
+## 接入远程 Agent
+
+独立于 benchmark 进程、使用任意语言编写的 Agent 可以通过 `remote` 模式接入。
+外部服务负责模型调用和决策，benchmark 通过 HTTP 获取动作并执行共享工具。
+配置、轮数计算、usage 上报和会话结束要求见
+[远程 Agent 接入指南](docs/zh/guides/benchmark/connect-remote-agent.guide.zh-CN.md)。
 
 ## 引用
 
