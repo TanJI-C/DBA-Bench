@@ -151,15 +151,15 @@ _PGRESOURCEGOVERNANCEAUDITLOGGINGSCENARIO_CASE = PgResourceGovernanceAuditLoggin
                     "factor": "configure scoped pgaudit role",
                     "entity": "audit_orders_role_logging",
                     "evidence": [
-                        "scripted diagnostic actions observed configure scoped pgaudit role"
+                        "Retain real write, DDL and role-change audit coverage while eliminating high-frequency checkout read logging; verify actual audit records and business read/write results."
                     ]
                 },
                 {
                     "type": "finding",
-                    "factor": "verify business throughput after audit change",
+                    "factor": "verify audit records and business read write after audit change",
                     "entity": "audit_orders_role_logging",
                     "evidence": [
-                        "scripted diagnostic actions observed verify business throughput after audit change"
+                        "scripted diagnostic actions observed verify audit records and business read write after audit change"
                     ]
                 }
             ]
@@ -176,18 +176,17 @@ _PGRESOURCEGOVERNANCEAUDITLOGGINGSCENARIO_CASE = PgResourceGovernanceAuditLoggin
     },
     case_no=0,
     evaluator=PgResourceGovernanceAuditLoggingForAuditOrdersRoleLoggingEvaluatorCase,
-    base_image_name='aiopsbench-pg-initialized:latest',
+    base_image_name='aiopsbench-pg-audit-initialized:pg16',
     workload_tag='initialized',
     title='Simulates excessive audit logging that amplifies disk writes under a high-QPS OLTP workload.',
-    alert='P1 production alert: after a compliance logging rollout, checkout transaction throughput dropped by more than half and disk write bandwidth is near saturation. WAL volume and table bloat do not explain the write amplification. Identify the logging source and restore transaction throughput without disabling required compliance coverage.',
+    alert='P1 production alert: a compliance logging rollout caused excessive checkout log writes not explained by WAL or table growth. Restore normal checkout operation while retaining real audit records for INSERT/UPDATE/DELETE, DDL and role changes. Routine checkout SELECTs must not produce statement or audit logs, and checkout reads/writes must succeed. No particular native statement-logging setting is required.',
     initial_state={'status': 'degraded',
  'disk_write_amplification': 'audit_logging',
- 'audit_scope': 'all_statements',
- 'transaction_throughput': 'low'},
+ 'audit_scope': 'all_statements'},
     expected_target={'status': 'recovered',
  'audit_scope': 'scoped_sensitive_activity',
- 'statement_logging': 'not_all',
- 'transaction_throughput': 'recovered'},
+ 'checkout_read_logging': 'eliminated',
+ 'business_read_write': 'working'},
     background_workload=BackgroundWorkloadSpec(
         profiles=tuple(build_audit_logging_noise_profiles('audit_orders')),
         worker_count=2,
@@ -196,7 +195,7 @@ _PGRESOURCEGOVERNANCEAUDITLOGGINGSCENARIO_CASE = PgResourceGovernanceAuditLoggin
     ),
     runtime=PostgresCaseRuntime(
         parameters=PostgresRuntimeSpec(parameters=(
-            ("shared_preload_libraries", "pg_stat_statements"),
+            ("shared_preload_libraries", "pg_stat_statements,pgaudit"),
         )),
         resources=RESOURCE_GOVERNANCE_POSTGRES_RESOURCES,
     ),
@@ -206,11 +205,8 @@ _PGRESOURCEGOVERNANCEAUDITLOGGINGSCENARIO_CASE = PgResourceGovernanceAuditLoggin
     slow_queries=('SELECT amount FROM audit_orders WHERE id = 42;',),
     difficulty=DifficultyCalibration(
         diagnostic_depth=2,
-        environmental_complexity=0.3,
-        reference_run_ids=(
-            "reference-52__pg_resource_governance_audit_logging__"
-            "audit_orders_role_logging__mock__r001",
-        ),
+        environmental_complexity=0.169270003,
+        reference_run_ids=('bcffcc96-9d12-43a4-abe4-b98b069e803a',),
     ),
 )
 
@@ -218,12 +214,12 @@ _PGRESOURCEGOVERNANCEAUDITLOGGING_SIMPLE_CASE = PgResourceGovernanceAuditLogging
     case_id='orders_write_audit_scope_simple',
     case_no=1,
     evaluator=PgResourceGovernanceAuditLoggingForOrdersWriteAuditScopeSimpleEvaluatorCase,
-    base_image_name='aiopsbench-pg-initialized:latest',
+    base_image_name='aiopsbench-pg-audit-initialized:pg16',
     workload_tag='initialized',
-    title='A focused audit logging case with one checkout table and one compliance role.',
-    alert='P2 compliance rollout alert: checkout write throughput dropped after audit logging was enabled. Disk writes are elevated, but WAL and table growth do not explain the spike. Keep required write/DDL/role audit coverage while restoring transaction throughput.',
+    title='A focused pgAudit case with one checkout table and one compliance audit role.',
+    alert='P2 compliance rollout alert: checkout log writes increased after audit logging was enabled, without corresponding WAL or table growth. Retain real audit records for INSERT/UPDATE/DELETE, DDL and role changes while eliminating routine checkout SELECT logs. Checkout reads/writes must succeed; no particular native statement-logging setting is required.',
     initial_state={'status': 'degraded', 'disk_write_amplification': 'audit_logging', 'audit_scope': 'all_statements'},
-    expected_target={'status': 'recovered', 'audit_scope': 'scoped_sensitive_activity', 'statement_logging': 'not_all'},
+    expected_target={'status': 'recovered', 'audit_scope': 'scoped_sensitive_activity', 'checkout_read_logging': 'eliminated', 'business_read_write': 'working'},
     background_workload=BackgroundWorkloadSpec(
         profiles=tuple(build_audit_logging_noise_profiles('audit_orders_simple')[:1]),
         worker_count=1,
@@ -231,7 +227,7 @@ _PGRESOURCEGOVERNANCEAUDITLOGGING_SIMPLE_CASE = PgResourceGovernanceAuditLogging
         warmup_seconds=2,
     ),
     runtime=PostgresCaseRuntime(
-        parameters=PostgresRuntimeSpec(parameters=(("shared_preload_libraries", "pg_stat_statements"),)),
+        parameters=PostgresRuntimeSpec(parameters=(("shared_preload_libraries", "pg_stat_statements,pgaudit"),)),
         resources=RESOURCE_GOVERNANCE_POSTGRES_RESOURCES,
     ),
     table='audit_orders_simple',
@@ -241,8 +237,8 @@ _PGRESOURCEGOVERNANCEAUDITLOGGING_SIMPLE_CASE = PgResourceGovernanceAuditLogging
     reference_report=_PGRESOURCEGOVERNANCEAUDITLOGGINGSCENARIO_CASE.reference_report,
     difficulty=DifficultyCalibration(
         diagnostic_depth=2,
-        environmental_complexity=0.285714,
-        reference_run_ids=('run_pg_resource_governance_audit_logging_orders_write_audit_scope_simple_MockLLMAgent',),
+        environmental_complexity=0.391677552,
+        reference_run_ids=('1aa4312c-fa64-47e9-95d8-4aa94fe1e988',),
     ),
 )
 
@@ -268,7 +264,7 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
     """
     模拟全量审计/语句日志导致的高并发日志写入放大。
     业务线程只执行高频点查，数据页和 WAL 压力很小；写 I/O 主要来自
-    log_statement=all 与 pgaudit.log=all 暴露的审计策略。
+    log_statement=all 与真实 pgAudit 的 session/object READ 审计共同放大日志。
     """
 
     def __init__(self):
@@ -286,8 +282,10 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
         )
         with env.metrics_hidden(allow_pgss_reset=True):
             self._setup_table_and_role()
-            self._register_custom_guc("pgaudit.log")
-            self._register_custom_guc("pgaudit.role")
+            _require_sql_success(
+                env.execute_sql("CREATE EXTENSION pgaudit;"),
+                "install pgAudit DDL audit event triggers",
+            )
             self._set_config("pgaudit.log", "all")
             self._set_config("pgaudit.role", self.audit_role)
             self._set_config("log_statement", "all")
@@ -296,9 +294,6 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
                 env.execute_sql("SELECT pg_reload_conf();"),
                 "reload audit-logging settings",
             )
-            self._reset_session_custom_guc("pgaudit.log")
-            self._reset_session_custom_guc("pgaudit.role")
-            # The custom pgaudit GUCs were registered in this setup session.
             # Verify the post-reload values through the same fresh-connection
             # boundary used by workload workers and the Agent.
             env.reconnect()
@@ -309,10 +304,7 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
     def _configure(self, config: Mapping[str, object], env) -> None:
         self.env = env
         self.table = _validate_sql_identifier(config["table"], "table")
-        self.audit_role = _validate_sql_identifier(
-            config["audit_role"],
-            "audit_role",
-        )
+        self.audit_role = _validate_sql_identifier(config["audit_role"], "audit_role")
         self.worker_count = int(config["worker_count"])
 
     def _start_runtime(self) -> None:
@@ -332,8 +324,7 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
 
     def _setup_table_and_role(self):
         self.env.execute_sql(f"DROP TABLE IF EXISTS {self.table} CASCADE;")
-        self.env.execute_sql(f"DROP ROLE IF EXISTS {self.audit_role};")
-        self.env.execute_sql(f"CREATE ROLE {self.audit_role};")
+        _require_sql_success(self.env.execute_sql(f"CREATE ROLE {self.audit_role};"), "create compliance audit role")
         self.env.execute_sql(f"""
             CREATE TABLE {self.table} (
                 id integer PRIMARY KEY,
@@ -352,20 +343,15 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
                 CASE WHEN g % 11 = 0 THEN 'REVIEW' ELSE 'PAID' END
             FROM generate_series(1, 30000) AS g;
         """)
-        self.env.execute_sql(f"GRANT SELECT ON {self.table} TO {self.audit_role};")
         self.env.execute_sql(f"ANALYZE {self.table};")
+        _require_sql_success(
+            self.env.execute_sql(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {self.table} TO {self.audit_role};"),
+            "configure broad pgAudit object privileges",
+        )
 
     def _set_config(self, param: str, value: str):
         result = self.env.execute_sql(f"ALTER SYSTEM SET {param} = '{value}';")
         _require_sql_success(result, f"set audit-logging config {param}={value}")
-
-    def _register_custom_guc(self, param: str):
-        result = self.env.execute_sql(f"SET {param} = 'none';")
-        _require_sql_success(result, f"register audit-logging custom GUC {param}")
-
-    def _reset_session_custom_guc(self, param: str):
-        result = self.env.execute_sql(f"RESET {param};")
-        _require_sql_success(result, f"reset audit-logging session GUC {param}")
 
     def _reset_config(self, param: str):
         result = self.env.execute_sql(f"ALTER SYSTEM RESET {param};")
@@ -375,14 +361,16 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
         payload = _json_object(
             self.env.execute_sql(
                 f"SELECT to_regclass('public.{self.table}')::text, "
-                f"EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{self.audit_role}'), "
                 f"(SELECT count(*) FROM {self.table}), "
+                "current_setting('log_statement'), current_setting('log_min_duration_statement'), "
                 "current_setting('pgaudit.log'), current_setting('pgaudit.role'), "
-                "current_setting('log_statement'), current_setting('log_min_duration_statement');"
+                "EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgaudit'), "
+                "EXISTS (SELECT 1 FROM pg_settings WHERE name = 'pgaudit.log'), "
+                f"has_table_privilege('{self.audit_role}', '{self.table}', 'SELECT');"
             ),
             "verify audit-logging fault image",
         )
-        expected = [[self.table, True, 30000, "all", self.audit_role, "all", "-1"]]
+        expected = [[self.table, 30000, "all", "-1", "all", self.audit_role, True, True, True]]
         if payload["result"] != expected:
             raise RuntimeError(
                 f"Audit-logging fault image does not match the Case: "
@@ -515,24 +503,26 @@ class PgResourceGovernanceAuditLoggingInjector(BaseFaultInjector):
             "terminate audit-logging workers",
         )
         for param in (
-            "log_statement",
-            "log_min_duration_statement",
             "pgaudit.log",
             "pgaudit.role",
+            "log_statement",
+            "log_min_duration_statement",
         ):
             self._reset_config(param)
         _require_sql_success(
             self.env.execute_sql("SELECT pg_reload_conf();"),
             "reload recovered audit-logging settings",
         )
+        self.env.reconnect()
+        _require_sql_success(
+            self.env.execute_sql("DROP EXTENSION IF EXISTS pgaudit;"),
+            "remove pgAudit event triggers after resetting audit settings",
+        )
         _require_sql_success(
             self.env.execute_sql(f"DROP TABLE IF EXISTS {self.table} CASCADE;"),
             f"drop audit-logging table {self.table}",
         )
-        _require_sql_success(
-            self.env.execute_sql(f"DROP ROLE IF EXISTS {self.audit_role};"),
-            f"drop audit-logging role {self.audit_role}",
-        )
+        _require_sql_success(self.env.execute_sql(f"DROP ROLE IF EXISTS {self.audit_role};"), "drop compliance audit role")
         self.env.reconnect()
 
     def activate(self, context: FaultLifecycleContext):

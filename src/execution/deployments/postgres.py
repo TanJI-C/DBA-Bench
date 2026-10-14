@@ -53,6 +53,7 @@ class PGDockerDeployment(BaseDeployment):
                  workload_data_dir: Optional[str] = None,
                  dataset_manifest_path: Optional[str] = None,
                  image_name: Optional[str] = None,
+                 initialization_image: str = "postgres:16",
                  postgres_runtime_options: Optional[str] = None,
                  data_volume_name: Optional[str] = None,
                  data_volume_root: Optional[str] = None,
@@ -72,6 +73,7 @@ class PGDockerDeployment(BaseDeployment):
             dataset_manifest_path = str(Path(workload_data_dir).parent / "manifest.json")
         self.dataset_manifest_path = dataset_manifest_path
         self.image_name = image_name or "aiopsbench-pg-initialized:latest"
+        self.initialization_image = initialization_image
         self.postgres_runtime_options = postgres_runtime_options
         self.data_volume_name = data_volume_name
         self.data_volume_root = os.path.abspath(data_volume_root) if data_volume_root else None
@@ -248,7 +250,7 @@ class PGDockerDeployment(BaseDeployment):
             # IO 争用下会被 shutdown checkpoint 超过（2026-09-15 实测容器
             # exit 1，数据装载本身已完成）；放宽等待只影响初始化时长。
             cmd.extend(["-e", "PGCTLTIMEOUT=600"])
-            cmd.append("postgres:16")
+            cmd.append(self.initialization_image)
             cmd.extend(["-c", "shared_buffers=1GB", "-c", "work_mem=64MB", "-c", "shared_preload_libraries=pg_stat_statements"])
         else:
             if self.data_volume_name:

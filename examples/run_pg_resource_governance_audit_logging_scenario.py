@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import time
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,11 +34,11 @@ FULL_SCORE_MOCK_RESPONSES = [
                 "sql_query": (
                     "SELECT name, setting, source "
                     "FROM pg_settings "
-                    "WHERE name IN ('log_statement', 'log_min_duration_statement') "
-                    "UNION ALL "
-                    "SELECT 'pgaudit.log', current_setting('pgaudit.log', true), 'runtime' "
-                    "UNION ALL "
-                    "SELECT 'pgaudit.role', current_setting('pgaudit.role', true), 'runtime';"
+                    "WHERE name IN ('shared_preload_libraries', 'pgaudit.log', 'pgaudit.role', "
+                    "'log_statement', 'log_min_duration_statement'); "
+                    "SELECT extname, extversion FROM pg_extension; "
+                    "SELECT grantee, privilege_type FROM information_schema.role_table_grants "
+                    "WHERE table_name = 'audit_orders';"
                 )
             },
         },
@@ -59,10 +60,10 @@ FULL_SCORE_MOCK_RESPONSES = [
         ],
     },
     {
-        "thinking": "Keep compliance coverage but stop full statement auditing: scope audit classes and bind object audit to the compliance role.",
+        "thinking": "Scope loaded pgAudit to write/DDL/role classes, remove the compliance role's object READ grant, and disable duplicate native statement logging.",
         "actions": [
             {"api": "execute_sql", "args": {"sql_query": "ALTER SYSTEM SET pgaudit.log = 'write, ddl, role';"}},
-            {"api": "execute_sql", "args": {"sql_query": "ALTER SYSTEM SET pgaudit.role = 'compliance_audit_role';"}},
+            {"api": "execute_sql", "args": {"sql_query": "REVOKE SELECT ON audit_orders FROM compliance_audit_role;"}},
             {"api": "execute_sql", "args": {"sql_query": "ALTER SYSTEM SET log_statement = 'none';"}},
             {"api": "execute_sql", "args": {"sql_query": "SELECT pg_reload_conf();"}},
         ],
@@ -74,9 +75,8 @@ FULL_SCORE_MOCK_RESPONSES = [
                 "api": "execute_sql",
                 "args": {
                     "sql_query": (
-                        "SELECT current_setting('pgaudit.log', true), "
-                        "current_setting('pgaudit.role', true), "
-                        "current_setting('log_statement', true);"
+                        "SELECT current_setting('pgaudit.log'), current_setting('pgaudit.role'), "
+                        "current_setting('log_statement');"
                     )
                 },
             },
@@ -138,10 +138,17 @@ def build_zero_score_mock_responses(case):
 
 
 def build_env(case, port: int, container_name: str, image_name: str = None) -> PGEnv:
+    if not PGDockerDeployment.image_exists(image_name or case.base_image_name):
+        subprocess.run(
+            ["docker", "build", "-t", "aiopsbench-pg-audit-base:pg16", "-f",
+             os.path.join(project_root, "config/docker/pg-audit/Dockerfile"), project_root],
+            check=True, timeout=600,
+        )
     deployment = PGDockerDeployment(
         container_name=container_name,
         port=port,
         image_name=image_name or case.base_image_name,
+        initialization_image="aiopsbench-pg-audit-base:pg16",
         postgres_runtime_options=case.runtime.parameters.as_command_line(),
     )
     return PGEnv(workload=None, deployment=deployment, port=port)
