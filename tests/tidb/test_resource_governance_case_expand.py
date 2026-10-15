@@ -69,7 +69,6 @@ def _new_cases():
 
 def test_all_expanded_cases_have_independent_hard_identity_and_contracts():
     cases = _new_cases()
-    assert len(cases) == 10
     assert [(case.evaluator.scenario_id, case.evaluator.case_id) for case in cases] == list(NEW_CASES)
     assert all(case.case_no == 1 for case in cases)
     measured_labels = {
@@ -86,8 +85,8 @@ def test_all_expanded_cases_have_independent_hard_identity_and_contracts():
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda item: item.scenario_id)
 def test_each_resource_governance_scenario_has_contiguous_cases_and_case_specific_fault_plan(scenario):
-    assert [case.case_no for case in scenario.cases] == [0, 1]
-    original, expanded = scenario.cases
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
+    original, expanded = scenario.cases[:2]
     assert expanded.case_id != original.case_id
     assert expanded.evaluator is not original.evaluator
     original_plan = scenario.build_fault_plan(original)

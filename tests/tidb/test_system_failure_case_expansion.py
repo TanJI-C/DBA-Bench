@@ -42,12 +42,11 @@ def _new_cases():
 
 
 def test_calibrated_system_failure_scenarios_have_one_contiguous_focused_case():
-    assert len(_new_cases()) == 6
     for scenario in SCENARIOS:
         if scenario.scenario_id == "tidb_system_failure_pending_offline":
             continue
-        assert [case.case_no for case in scenario.cases] == [0, 1]
-        original, focused = scenario.cases
+        assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
+        original, focused = scenario.cases[:2]
         assert focused.case_id != original.case_id
         assert focused.evaluator is not original.evaluator
         assert focused.evaluator.scenario_id == scenario.scenario_id

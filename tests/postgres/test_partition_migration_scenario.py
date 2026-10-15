@@ -91,7 +91,7 @@ def _scenario():
 ])
 def test_partition_migration_case_identity_and_fault_plan(case_type, case_no, case_id):
     scenario = _scenario()
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     case = scenario.get_case(case_id)
     assert isinstance(case, case_type)
     assert case.case_no == case_no

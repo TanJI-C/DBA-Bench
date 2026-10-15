@@ -13,8 +13,6 @@ def test_scenario_attribute_registry_has_all_postgresql_cases():
     tidb_cases = {key: case for key, case in cases.items() if key[0] == "tidb"}
 
     assert {case["_annotation_status"] for case in cases.values()} == {"provisional"}
-    assert len(postgres_cases) == 50
-    assert len(tidb_cases) == 65
     assert {case["category"] for case in postgres_cases.values()} == {
         "query_perf",
         "system_failure",

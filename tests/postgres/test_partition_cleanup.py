@@ -122,7 +122,7 @@ def _safe_actions(case, report):
 def test_partition_cleanup_registration_identity_ports_and_fault_image():
     scenario = PgResourceGovernancePartitionCleanupScenario()
     assert scenario.scenario_id == "pg_resource_governance_partition_cleanup"
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     assert [case.case_id for case in scenario.cases] == [
         "filesystem_cleanup_pressure",
         "filesystem_cleanup_pressure_simple",

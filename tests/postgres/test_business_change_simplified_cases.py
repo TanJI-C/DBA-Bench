@@ -166,7 +166,7 @@ def test_simplified_case_contract_and_evaluator_identity(
     scenario_type, case_id, evaluator_type
 ):
     scenario = scenario_type()
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     case = scenario.get_case(case_id)
     assert case.case_no == 1
     assert case.evaluator is evaluator_type

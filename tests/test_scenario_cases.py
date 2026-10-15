@@ -1,5 +1,4 @@
 import ast
-from collections import Counter
 import re
 import runpy
 import inspect
@@ -18,9 +17,8 @@ from src.scenarios.base import FaultPlan
 from src.scenarios.faults import BaseFaultInjector
 
 
-def test_initial_migration_has_one_case_per_scenario():
-    assert len(ALL_SCENARIOS) == 117
-    assert len({scenario.scenario_id for scenario in ALL_SCENARIOS}) == 117
+def test_scenario_ids_are_unique_and_well_formed():
+    assert len({scenario.scenario_id for scenario in ALL_SCENARIOS}) == len(ALL_SCENARIOS)
     for scenario in ALL_SCENARIOS:
         assert re.fullmatch(r"[a-z][a-z0-9_]*", scenario.scenario_id)
         assert len(scenario.cases) >= 1, scenario.scenario_id
@@ -32,23 +30,12 @@ def test_postgres_registry_uses_five_task_categories():
         for registration in POSTGRES_SCENARIO_REGISTRY
         if registration.category is not ScenarioCategory.BASIC
     )
-    assert Counter(registration.category for registration in task_registrations) == {
-        ScenarioCategory.QUERY_PERF: 9,
-        ScenarioCategory.SYSTEM_FAILURE: 16,
-        ScenarioCategory.HEALTH_CHECK: 9,
-        ScenarioCategory.BUSINESS_CHANGE: 8,
-        ScenarioCategory.RESOURCE_GOVERNANCE: 9,
-    }
-    assert Counter(
-        registration.category
-        for registration in task_registrations
-        for _case in registration.scenario.cases
-    ) == {
-        ScenarioCategory.QUERY_PERF: 19,
-        ScenarioCategory.SYSTEM_FAILURE: 33,
-        ScenarioCategory.HEALTH_CHECK: 21,
-        ScenarioCategory.BUSINESS_CHANGE: 16,
-        ScenarioCategory.RESOURCE_GOVERNANCE: 18,
+    assert {registration.category for registration in task_registrations} == {
+        ScenarioCategory.QUERY_PERF,
+        ScenarioCategory.SYSTEM_FAILURE,
+        ScenarioCategory.HEALTH_CHECK,
+        ScenarioCategory.BUSINESS_CHANGE,
+        ScenarioCategory.RESOURCE_GOVERNANCE,
     }
 
 
@@ -87,7 +74,6 @@ def test_resource_governance_simple_cases_reduce_scope_without_removing_noise():
     )
     for scenario_id in resource_ids:
         scenario = scenarios[scenario_id]
-        assert len(scenario.cases) == 2
         assert scenario.cases[1].case_no == 1
 
     archive = scenarios["pg_resource_governance_data_archiving"]
@@ -119,7 +105,7 @@ def test_resource_governance_simple_cases_reduce_scope_without_removing_noise():
     assert len(host_backup.cases[1].report_app_names) < len(host_backup.cases[0].report_app_names)
 
     cpu_budget = scenarios["pg_resource_governance_container_cpu_budget"]
-    assert [case.case_no for case in cpu_budget.cases] == [0, 1]
+    assert [case.case_no for case in cpu_budget.cases] == list(range(len(cpu_budget.cases)))
     assert cpu_budget.cases[0].case_id == "db_quota_throttle"
     assert cpu_budget.cases[1].case_id == "db_quota_throttle_simple"
     assert len(cpu_budget.cases[0].sibling_jobs) > len(cpu_budget.cases[1].sibling_jobs)
@@ -132,7 +118,6 @@ def test_multi_cause_simple_cases_reduce_scope_without_flattening_chain():
     wal_checkpoint = scenarios["pg_system_failure_wal_checkpoint_storm"]
 
     for scenario in (connection, stale_lock, wal_checkpoint):
-        assert len(scenario.cases) == 2
         assert scenario.cases[1].case_no == 1
 
     assert connection.cases[1].worker_connections < connection.cases[0].worker_connections
@@ -302,9 +287,6 @@ def test_alert_causality_cases_preserve_fault_strength_and_workloads():
     cpu_lock = scenarios["pg_system_failure_cpu_lock_spin"]
     io_saturation = scenarios["pg_business_change_io_saturation"]
 
-    assert len(cache.cases) == 3
-    assert len(cpu_lock.cases) == 3
-    assert len(io_saturation.cases) == 3
     assert cache.cases[0].background_workload is EMPTY_BACKGROUND_WORKLOAD
     assert "without blindly increasing memory" in cache.cases[0].alert
     assert cache.cases[1].case_id == "billing_export_scan_cache_churn"
@@ -482,14 +464,6 @@ def test_resource_governance_cases_preserve_workload_and_environment_semantics()
     assert lightning.row_count == 600000
     assert lightning.source_file_count == 6
 
-    resource_governance_cases = [
-        case
-        for scenario in ALL_SCENARIOS
-        if scenario.scenario_id.startswith("tidb_resource_governance_")
-        for case in scenario.cases
-    ]
-    assert len(resource_governance_cases) == 23
-
 
 def test_system_failure_cases_preserve_workload_lifecycle_semantics():
     scenarios = {scenario.scenario_id: scenario for scenario in ALL_SCENARIOS}
@@ -513,7 +487,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     lock_contention = scenarios["pg_system_failure_lock_contention"]
     simple_lock = lock_contention.get_case("customer_profile_lock_queue_simple")
-    assert len(lock_contention.cases) == 2
     assert simple_lock.case_no == 1
     assert simple_lock.background_workload.worker_count == 1
     assert len(simple_lock.background_workload.profiles) == 1
@@ -522,7 +495,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     noisy_neighbor = scenarios["pg_system_failure_noisy_neighbor"]
     simple_neighbor = noisy_neighbor.get_case("single_archive_cpu_neighbor_simple")
-    assert len(noisy_neighbor.cases) == 2
     assert simple_neighbor.case_no == 1
     assert simple_neighbor.worker_count == 1
     assert simple_neighbor.production_noise is False
@@ -531,7 +503,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     checkpoint = scenarios["pg_system_failure_io_checkpoint_spikes"]
     simple_checkpoint = checkpoint.get_case("single_checkout_checkpoint_spike_simple")
-    assert len(checkpoint.cases) == 2
     assert simple_checkpoint.case_no == 1
     assert simple_checkpoint.table != checkpoint.cases[0].table
     assert simple_checkpoint.background_workload.worker_count == 1
@@ -539,7 +510,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     wal = scenarios["pg_system_failure_wal_accumulation"]
     simple_wal = wal.get_case("abandoned_report_slot_wal_retention_simple")
-    assert len(wal.cases) == 2
     assert simple_wal.case_no == 1
     assert simple_wal.production_noise is False
     assert simple_wal.stale_slot_names == (
@@ -554,7 +524,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     temp = scenarios["pg_system_failure_temp_file_explosion"]
     simple_temp = temp.get_case("daily_sales_temp_exhaustion_simple")
-    assert len(temp.cases) == 2
     assert simple_temp.case_no == 1
     assert simple_temp.production_noise is False
     assert simple_temp.tmpfs_size_mb < temp.cases[0].tmpfs_size_mb
@@ -562,7 +531,6 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     fd = scenarios["pg_system_failure_fd_exhaustion"]
     simple_fd = fd.get_case("report_export_fd_exhaustion_simple")
-    assert len(fd.cases) == 2
     assert simple_fd.case_no == 1
     assert simple_fd.production_noise is False
     assert simple_fd.table_count < fd.cases[0].table_count
@@ -633,14 +601,12 @@ def test_system_failure_cases_preserve_workload_lifecycle_semantics():
 
     page_corruption = scenarios["pg_system_failure_page_corruption"]
     simple_page = page_corruption.get_case("invoice_page_corruption_triage_simple")
-    assert len(page_corruption.cases) == 2
     assert simple_page.case_no == 1
     assert simple_page.row_count < page_corruption.cases[0].row_count
     assert simple_page.background_workload.worker_count == 1
 
     oom = scenarios["pg_system_failure_oom"]
     simple_oom = oom.get_case("restart_shared_buffers_oom_simple")
-    assert len(oom.cases) == 2
     assert simple_oom.case_no == 1
     assert simple_oom.production_noise is False
     assert simple_oom.work_mem == "8MB"

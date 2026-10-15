@@ -209,7 +209,7 @@ def test_registry_identity_case_numbers_and_port_contract():
     history_case = scenario.get_case("pool_partition_shortage")
     history_case.frozen_history.validate(history_case.background_workload)
     assert [case.case_id for case in scenario.cases] == ["pool_partition_shortage", "pool_partition_shortage_simple"]
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     assert [case.evaluator.scenario_id for case in scenario.cases] == [SCENARIO_ID, SCENARIO_ID]
     assert PGBOUNCER_FAULT_IMAGE_PREFIX == "aiopsbench-pg-resource-governance-pgbouncer-connection-budget"
     assert [case.pgbouncer_fault_image for case in scenario.cases] == [

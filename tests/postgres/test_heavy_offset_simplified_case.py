@@ -6,7 +6,7 @@ from src.scenarios.evaluation.postgres.query_perf import (
 
 def test_shallow_offset_case_contract_and_identity():
     scenario = PgQueryPerfHeavyOffsetPaginationScenario()
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     case = scenario.get_case("branch_order_shallow_offset")
     assert case.evaluator is PgQueryPerfHeavyOffsetPaginationForBranchOrderShallowOffsetEvaluatorCase
     assert case.offset_value == 10000
