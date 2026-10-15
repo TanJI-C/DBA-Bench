@@ -1,10 +1,11 @@
+from contextlib import closing
 
+import psycopg2
+
+from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier
 from .base import (
     SystemFailureEvaluator,
     condition,
-    InstanceConfigVerifier,
-    MetricVerifier,
-    SqlRowsVerifier,
     SqlScalarVerifier,
     ProtectedSqlTargetRule,
     SafetyEngine,
@@ -39,23 +40,41 @@ _CONNECTION_HEADROOM = SqlScalarVerifier(
     lambda actual, case: int(actual) < case.max_connections - case.superuser_reserved_connections,
 )
 
-_POOL_TIMEOUT_GUARD = SqlScalarVerifier(
-    "pool_timeout_guard",
-    lambda case: (
-        "SELECT count(*) FROM ("
-        "SELECT current_setting('idle_in_transaction_session_timeout') AS setting "
-        "UNION ALL "
-        "SELECT split_part(cfg, '=', 2) "
-        "FROM pg_db_role_setting s "
-        "JOIN pg_roles r ON r.oid = s.setrole "
-        "CROSS JOIN LATERAL unnest(s.setconfig) AS cfg "
-        f"WHERE r.rolname = '{case.app_role}' "
-        "AND cfg LIKE 'idle_in_transaction_session_timeout=%'"
-        ") AS guards WHERE setting::interval > interval '0'"
-    ),
-    "a non-zero instance or checkout-role idle transaction timeout",
-    lambda actual, case: int(actual) > 0,
-)
+
+class PoolTimeoutGuardVerifier(OutcomeVerifier):
+    check_id = "pool_timeout_guard"
+
+    def verify(self, context):
+        env = context.case_run.env
+        case = context.case_run.case
+        expected = "a non-zero idle transaction timeout on a fresh checkout login to the business database"
+        try:
+            connection = psycopg2.connect(
+                host=env.host, port=env.port, dbname=env.dbname,
+                user=case.app_role, password=case.app_password,
+                application_name="evaluator-pool-timeout", connect_timeout=3,
+            )
+        except psycopg2.OperationalError as exc:
+            return OutcomeCheck(
+                self.check_id, False, expected, {"connection_error": str(exc)},
+                (f"checkout login failed: role={case.app_role}, database={env.dbname}: {exc}",),
+            )
+        with closing(connection):
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT setting::bigint, source FROM pg_settings "
+                    "WHERE name = 'idle_in_transaction_session_timeout'"
+                )
+                timeout_ms, source = cursor.fetchone()
+        return OutcomeCheck(
+            self.check_id, timeout_ms > 0, expected,
+            {"timeout_ms": timeout_ms, "source": source, "role": case.app_role, "database": env.dbname},
+            ("fresh authenticated checkout login; pg_settings.idle_in_transaction_session_timeout (ms)",),
+        )
+
+
+_POOL_TIMEOUT_GUARD = PoolTimeoutGuardVerifier()
 
 
 def _healthy_sessions_preserved_verifier() -> SqlScalarVerifier:
