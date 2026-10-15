@@ -412,6 +412,9 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
         tokens = grant_dialect.tokenize(sql)
     except TokenError as error:
         return (SqlStatement(event.index, sql, None, None, frozenset(), False, str(error)),)
+    if tokens:
+        # Anchored safety rules must start at SQL, not at a leading comment.
+        sql = sql[tokens[0].start:]
     if tokens and tokens[0].token_type in {TokenType.GRANT, TokenType.REVOKE}:
         operation = tokens[0].text.upper()
         try:
