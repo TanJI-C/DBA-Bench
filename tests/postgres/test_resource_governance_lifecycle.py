@@ -55,6 +55,9 @@ def test_single_report_role_limit_simple_alert_keeps_symptom_only_contract():
         assert leaked not in alert, f"alert leaks fix direction or culprit class: {leaked}"
     assert "without restarting the instance" in alert
     assert "reduce the risk of recurrence" in alert
+    assert "within 30s" in alert
+    assert "within 1000ms" in alert
+    assert "all order data" in alert
 
 
 def test_resource_governance_scripted_reports_have_applicable_diagnosis():

@@ -58,8 +58,9 @@ FULL_SCORE_MOCK_RESPONSES = [
         },
     },
     {
-        "thinking": "对报表账号实施 DB 级资源隔离：降低 work_mem 并限制最大连接数。",
+        "thinking": "对报表账号实施 DB 级资源隔离：限制后续导出时长，并控制内存和连接数。",
         "actions": [
+            {"api": "execute_sql", "args": {"sql_query": "ALTER ROLE report_user SET statement_timeout = '5s';"}},
             {"api": "execute_sql", "args": {"sql_query": "ALTER ROLE report_user SET work_mem = '1MB';"}},
             {"api": "execute_sql", "args": {"sql_query": "ALTER ROLE report_user CONNECTION LIMIT 1;"}},
         ],

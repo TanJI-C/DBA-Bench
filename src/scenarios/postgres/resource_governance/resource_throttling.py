@@ -40,9 +40,27 @@ class PgResourceGovernanceResourceThrottlingCase(PostgresScenarioCase):
     noise_roles: tuple[str, ...]
     role_password: str
     slow_queries: tuple[str, ...]
-    report_role_connection_limit_max: int
-    report_role_work_mem_max_mb: int
     oltp_probe_latency_ms: int
+
+    @property
+    def report_query(self):
+        factor = 1000 if self.table.endswith('_simple') else 250
+        return (
+            f"SELECT sum((a.amount * b.amount)::numeric) FROM public.{self.table} a "
+            f"JOIN public.{self.table} b ON (a.tenant_id = b.tenant_id) "
+            f"JOIN generate_series(1, {factor}) g ON true "
+            "WHERE a.status IN ('PAID', 'PENDING') "
+            "AND a.created_at > NOW() - INTERVAL '30 days';"
+        )
+
+    @property
+    def business_truth_sql(self):
+        return (
+            "SELECT count(*) AS row_count, md5(string_agg(md5(jsonb_build_array("
+            "id, tenant_id, customer_id, amount, status, "
+            "extract(epoch FROM created_at), payload)::text), '' ORDER BY id)) AS digest "
+            f"FROM public.{self.table}"
+        )
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PgResourceGovernanceResourceThrottlingForTenantReportRoleThrottlingScenarioCase(PgResourceGovernanceResourceThrottlingCase):
@@ -175,13 +193,13 @@ _PGRESOURCEGOVERNANCERESOURCETHROTTLINGSCENARIO_CASE = PgResourceGovernanceResou
     base_image_name='aiopsbench-pg-initialized:latest',
     workload_tag='initialized',
     title='Simulates mixed OLTP and reporting workload contention and requires role-level resource isolation.',
-    alert='P1 混合业务资源告警：PostgreSQL 单机实例 CPU 使用率持续偏高，核心交易接口 P95 延迟从毫秒级升高到秒级，QPS 明显下降。同实例活跃会话数量上升且存在长耗时 SQL，请排查资源占用来源，在不重启实例且符合安全合规要求的前提下恢复核心交易延迟，并降低复发风险。',
-    alert_en="P1 mixed-workload resource alert: CPU usage of the standalone PostgreSQL instance stays high, the P95 latency of core transaction APIs has risen from milliseconds to seconds, and QPS has dropped noticeably. The number of active sessions on the same instance is rising and there are long-running SQL statements. Investigate the source of the resource usage, restore core transaction latency without restarting the instance and in compliance with security and compliance requirements, and reduce the risk of recurrence.",
+    alert='P1 混合业务资源告警：PostgreSQL 单机实例 CPU 使用率持续偏高，核心交易接口 P95 延迟从毫秒级升高到秒级，QPS 明显下降。同实例活跃会话数量上升且存在长耗时 SQL，请排查资源占用来源，在不重启实例且符合安全合规要求的前提下恢复核心交易延迟，并降低复发风险。报表账号须保留登录/读取权限与全部订单数据；后续导出须在 30 秒内完成或被数据库取消（另允许 1 秒传输时间），导出期间 tenant 1 点读须不超过 1000 ms。',
+    alert_en="P1 mixed-workload resource alert: CPU usage of the standalone PostgreSQL instance stays high, the P95 latency of core transaction APIs has risen from milliseconds to seconds, and QPS has dropped noticeably. The number of active sessions on the same instance is rising and there are long-running SQL statements. Investigate the source of the resource usage, restore core transaction latency without restarting the instance and in compliance with security and compliance requirements, and reduce the risk of recurrence. Business acceptance: preserve existing login/read access and all order data. Analytical statements must finish or be canceled by the database within 30s (1s delivery allowance); tenant-1 point reads must finish within 1000ms during concurrent analytics.",
     initial_state={'status': 'degraded',
  'resource_contention': 'reporting_query_consuming_cpu',
  'transaction_latency': 'high'},
     expected_target={'status': 'recovered',
- 'resource_isolation': 'role_limits_applied',
+ 'resource_isolation': 'replay_bounded',
  'report_query': 'terminated_or_throttled',
  'transaction_latency': 'normal'},
     background_workload=BackgroundWorkloadSpec(
@@ -199,9 +217,8 @@ _PGRESOURCEGOVERNANCERESOURCETHROTTLINGSCENARIO_CASE = PgResourceGovernanceResou
     noise_roles=('analytics_user', 'etl_user'),
     role_password='password',
     slow_queries=('SELECT amount FROM tenant_orders WHERE id = 42;',),
-    report_role_connection_limit_max=2,
-    report_role_work_mem_max_mb=4,
     oltp_probe_latency_ms=1000,
+    # Historical diagnosis calibration; behavioral OP does not reuse old pass results.
     difficulty=DifficultyCalibration(
         diagnostic_depth=3,
         environmental_complexity=0.291667,
@@ -219,9 +236,9 @@ _PGRESOURCEGOVERNANCERESOURCETHROTTLING_SIMPLE_CASE = PgResourceGovernanceResour
     base_image_name='aiopsbench-pg-initialized:latest',
     workload_tag='initialized',
     title='A focused resource isolation case with one report role, one OLTP role, and one nearby analytics decoy.',
-    alert='P2 mixed workload alert: checkout point reads on the shared PostgreSQL instance have slowed from millisecond latency to several hundred milliseconds while instance CPU usage stays elevated and the number of active sessions keeps growing. Investigate the source of the resource usage, restore core transaction latency without restarting the instance, and reduce the risk of recurrence.',
+    alert='P2 mixed workload alert: checkout point reads on the shared PostgreSQL instance have slowed from millisecond latency to several hundred milliseconds while instance CPU usage stays elevated and the number of active sessions keeps growing. Investigate the source of the resource usage, restore core transaction latency without restarting the instance, and reduce the risk of recurrence. Business acceptance: preserve existing login/read access and all order data. Analytical statements must finish or be canceled by the database within 30s (1s delivery allowance); tenant-1 point reads must finish within 1000ms during concurrent analytics.',
     initial_state={'status': 'degraded', 'resource_contention': 'reporting_query_consuming_cpu', 'transaction_latency': 'high'},
-    expected_target={'status': 'recovered', 'resource_isolation': 'role_limits_applied', 'report_query': 'terminated_or_throttled', 'transaction_latency': 'normal'},
+    expected_target={'status': 'recovered', 'resource_isolation': 'replay_bounded', 'report_query': 'terminated_or_throttled', 'transaction_latency': 'normal'},
     background_workload=BackgroundWorkloadSpec(
         profiles=tuple(build_resource_throttling_noise_profiles('tenant_orders_simple')[:4]),
         worker_count=4,
@@ -237,10 +254,9 @@ _PGRESOURCEGOVERNANCERESOURCETHROTTLING_SIMPLE_CASE = PgResourceGovernanceResour
     noise_roles=('analytics_simple_user',),
     role_password='password',
     slow_queries=('SELECT amount FROM tenant_orders_simple WHERE id = 42;',),
-    report_role_connection_limit_max=2,
-    report_role_work_mem_max_mb=4,
     oltp_probe_latency_ms=1000,
     reference_report=_PGRESOURCEGOVERNANCERESOURCETHROTTLINGSCENARIO_CASE.reference_report,
+    # Historical diagnosis calibration; behavioral OP does not reuse old pass results.
     difficulty=DifficultyCalibration(
         diagnostic_depth=4,
         environmental_complexity=0.6,
@@ -301,6 +317,8 @@ class PgResourceGovernanceResourceThrottlingInjector(BaseFaultInjector):
         self.report_role = config["report_role"]
         self.table = config["table"]
         self.root_application_name = config["root_application_name"]
+        self.report_query = config["report_query"]
+        self.business_truth_sql = config["business_truth_sql"]
         self.noise_roles = tuple(config["noise_roles"])
         self.role_password = str(config["role_password"]).replace("'", "''")
         for identifier in (self.oltp_role, self.report_role, self.table, *self.noise_roles):
@@ -445,16 +463,7 @@ class PgResourceGovernanceResourceThrottlingInjector(BaseFaultInjector):
             conn.autocommit = True
             self._report_conn = conn
             with conn.cursor() as cur:
-                cur.execute("SET work_mem = '64MB';")
-                cur.execute("SET statement_timeout = '0';")
-                cur.execute(f"""
-                    SELECT sum((a.amount * b.amount)::numeric)
-                    FROM {self.table} a
-                    JOIN {self.table} b ON (a.tenant_id = b.tenant_id)
-                    JOIN generate_series(1, {1000 if self.table.endswith('_simple') else 250}) g ON true
-                    WHERE a.status IN ('PAID', 'PENDING')
-                      AND a.created_at > NOW() - INTERVAL '30 days';
-                """)
+                cur.execute(self.report_query)
         except Exception as exc:
             if self._stop_event is not None and not self._stop_event.is_set():
                 print(f"[FaultInjector:PgResourceGovernanceResourceThrottlingInjector] Report query stopped: {exc}")
@@ -470,7 +479,12 @@ class PgResourceGovernanceResourceThrottlingInjector(BaseFaultInjector):
         config = context.config
         env = context.env
         noise_apps = ("'bi-dashboard-refresh'", "'tenant-revenue-export-preview'", "'etl-ledger-backfill'", "'orders-api-live-touch'", "'analytics-nightly-maintenance'")
+        from src.database.query_results import capture_query_result_truth
+
         return {
+            "resource_throttling_business_truth": capture_query_result_truth(
+                env.execute_sql(self.business_truth_sql), ordered=True,
+            ),
             "active_sessions": env.execute_sql(
                 "SELECT pid, usename, application_name, state, left(query, 120) "
                 "FROM pg_stat_activity "
@@ -599,6 +613,8 @@ class PgResourceGovernanceResourceThrottlingScenario(PostgresScenario):
                     'root_application_name': case.root_application_name,
                     'noise_roles': case.noise_roles,
                     'role_password': case.role_password,
+                    'report_query': case.report_query,
+                    'business_truth_sql': case.business_truth_sql,
                 },
             ),
         )
