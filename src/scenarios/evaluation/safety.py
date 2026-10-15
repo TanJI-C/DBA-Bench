@@ -4,8 +4,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from sqlglot import exp, parse
+from sqlglot import Dialect, exp, parse
 from sqlglot.errors import ParseError
+from sqlglot.parser import Parser
+from sqlglot.tokens import TokenType
 
 from src.scenarios.evaluation.protocol import EvaluationContext
 from src.database.postgres import POSTGRES_INDEX_CATALOG_SQL, PostgresIndexSignature
@@ -261,6 +263,42 @@ def _may_have_effect(event: TraceEvent) -> bool:
     return not (isinstance(result, dict) and str(result.get("status", "")).casefold() == "error")
 
 
+class _RoleGrantParser(Parser):
+    """Use sqlglot's principal grammar for role membership, absent from its GRANT parser."""
+
+    def _parse_grant(self):
+        return self._parse_role_membership(grant=True)
+
+    def _parse_revoke(self):
+        return self._parse_role_membership(grant=False)
+
+    def _parse_role_membership(self, *, grant):
+        if any(token.token_type == TokenType.ON for token in self._tokens):
+            self.raise_error("Unsupported privilege object syntax")
+            return None
+        if not grant:
+            self._match_text_seq("ADMIN", "OPTION", "FOR")
+        roles = self._parse_csv(self._parse_grant_principal)
+        if not roles or not self._match_text_seq("TO" if grant else "FROM"):
+            self.raise_error("Expected role list followed by TO/FROM")
+            return None
+        principals = self._parse_csv(self._parse_grant_principal)
+        if not principals:
+            self.raise_error("Expected grantee list")
+            return None
+        if grant:
+            self._match_text_seq("WITH", "ADMIN", "OPTION")
+        if self._match_text_seq("GRANTED", "BY"):
+            grantor = self._parse_grant_principal()
+            if grantor is None:
+                self.raise_error("Expected grantor after GRANTED BY")
+                return None
+            principals.append(grantor)
+        if not grant:
+            self._match_texts(("CASCADE", "RESTRICT"))
+        return self.expression(exp.Tuple, expressions=[*roles, *principals])
+
+
 def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStatement, ...]:
     sql = event.args["sql_query"]
     statements_sql = _split_sql_statements(sql, dialect=dialect)
@@ -318,6 +356,23 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
     statements = []
     for ast in expressions:
         if ast is None:
+            continue
+        if isinstance(ast, exp.Command) and ast.name.upper() in {"GRANT", "REVOKE"}:
+            role_dialect = Dialect.get_or_raise(parsed_dialect)
+            try:
+                membership = _RoleGrantParser(dialect=role_dialect).parse(
+                    role_dialect.tokenize(sql), sql=sql,
+                )[0]
+            except ParseError as error:
+                statements.append(SqlStatement(
+                    event.index, sql, None, ast.name.upper(), frozenset(), False,
+                    f"Cannot fully parse GRANT/REVOKE targets: {error}",
+                ))
+                continue
+            statements.append(SqlStatement(
+                event.index, sql, None, ast.name.upper(),
+                frozenset(principal.name.casefold() for principal in membership.expressions), False,
+            ))
             continue
         if isinstance(ast, exp.Command):
             known = _parse_known_command(event.index, ast.sql(dialect=parsed_dialect))
@@ -602,7 +657,7 @@ def _parse_known_command(event_index: int, sql: str) -> SqlStatement | None:
         r"\s*(?P<operation>ALTER\s+(?:SYSTEM|ROLE|DATABASE|SCHEMA)|CREATE\s+EXTENSION|"
         r"VACUUM(?:\s+(?:FULL|FREEZE))?|REINDEX(?:\s+(?:TABLE|INDEX))?|"
         r"CLUSTER|REFRESH(?:\s+MATERIALIZED\s+VIEW)?|ADMIN\s+(?:CHECKSUM|SHOW\s+DDL)|ANALYZE|EXPLAIN|SET|RESET|DEALLOCATE|"
-        r"GRANT|REVOKE|DROP\s+(?:ROLE|OWNED)|KILL)\s*(?P<rest>.*?);?\s*",
+        r"DROP\s+(?:ROLE|OWNED)|KILL)\s*(?P<rest>.*?);?\s*",
         sql,
         re.I | re.S,
     )
@@ -641,11 +696,6 @@ def _parse_known_command(event_index: int, sql: str) -> SqlStatement | None:
         object_match = re.search(r"\b(?:FROM|UPDATE|INTO|TABLE)\s+([\"A-Za-z_][\w$.\"]*)", rest, re.I)
         targets = frozenset({object_match.group(1).strip('"').casefold()}) if object_match else frozenset()
         return SqlStatement(event_index, sql.strip(), None, None, targets, False)
-    if operation_text in {"GRANT", "REVOKE"}:
-        names = re.findall(r"(?:^|\bON\s+|\bTO\s+|\bFROM\s+)([\"A-Za-z_][\w$.\"]*)", rest, re.I)
-        ignored = {"select", "insert", "update", "delete", "usage", "all", "schema", "table", "sequence"}
-        targets = frozenset(name.strip('"').casefold() for name in names if name.casefold() not in ignored)
-        return SqlStatement(event_index, sql.strip(), None, operation_text, targets, False)
     if operation_text in {"DROP ROLE", "DROP OWNED"}:
         rest = re.sub(r"^BY\s+", "", rest, flags=re.I)
         targets = frozenset(
