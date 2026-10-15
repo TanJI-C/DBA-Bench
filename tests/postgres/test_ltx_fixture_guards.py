@@ -9,6 +9,7 @@ import json
 import sys
 import threading
 import time
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -83,6 +84,15 @@ class FixtureCountsFakeEnv:
         self.blocker_count = blocker_count
         self.decoy_count = decoy_count
         self.recovered = recovered
+        self.user = "postgres"
+        self.dbname = "testdb"
+
+    def open_workload_connection(self, application_name):
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+            300000 if self.recovered else 0, "configuration file",
+        )
+        return conn
 
     def execute_sql(self, sql):
         normalized = sql.casefold()
@@ -91,8 +101,6 @@ class FixtureCountsFakeEnv:
                 rows = [[self.decoy_count]]
             else:
                 rows = [[self.blocker_count]]
-        elif "idle_in_transaction_session_timeout" in normalized:
-            rows = [["5min" if self.recovered else "0"]]
         elif "n_dead_tup" in normalized:
             rows = [[0 if self.recovered else 1200]]
         else:
