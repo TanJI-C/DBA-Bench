@@ -87,7 +87,7 @@ standards, scenario contracts, and baseline documentation below.
 ## scenarios/postgresql/resource_governance
 - `docs/scenarios/postgresql/resource_governance/pg_resource_governance_audit_logging.contract.md`
 - `docs/scenarios/postgresql/resource_governance/pg_resource_governance_container_cpu_budget.contract.md`
-- `docs/scenarios/postgresql/resource_governance/pg_resource_governance_data_archiving.contract.md`
+- `docs/scenarios/postgresql/resource_governance/pg_resource_governance_data_archiving.contract.md` — Cold order archiving, explicit business-table protection, and unrestricted helper-table names.
 - `docs/scenarios/postgresql/resource_governance/pg_resource_governance_host_backup.contract.md`
 - `docs/scenarios/postgresql/resource_governance/pg_resource_governance_io_context_workload.contract.md`
 - `docs/scenarios/postgresql/resource_governance/pg_resource_governance_partition_cleanup.contract.md`

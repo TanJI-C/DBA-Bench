@@ -88,7 +88,7 @@ summary: 中文文档索引；docs/zh/ 是 docs/ 英文文档树的中文镜像�
 ## scenarios/postgresql/resource_governance
 - `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_audit_logging.contract.zh-CN.md`
 - `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_container_cpu_budget.contract.zh-CN.md`
-- `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_data_archiving.contract.zh-CN.md`
+- `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_data_archiving.contract.zh-CN.md` — 冷订单归档，保护业务表和重要基准表，普通辅助表不限制名称。
 - `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_host_backup.contract.zh-CN.md`
 - `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_io_context_workload.contract.zh-CN.md`
 - `docs/zh/scenarios/postgresql/resource_governance/pg_resource_governance_partition_cleanup.contract.zh-CN.md`
