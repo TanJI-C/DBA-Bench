@@ -1,6 +1,9 @@
 import re
+from contextlib import closing
 
-from src.scenarios.evaluation.outcome import action_result_text, execute_sql_scalar
+import psycopg2
+
+from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, action_result_text, execute_sql_scalar
 
 from .base import (
     HealthCheckEvaluator,
@@ -89,49 +92,38 @@ _DECOY_PRESERVED = SqlScalarVerifier(
 _IDLE_TIMEOUT_MIN_SECONDS = 30
 _IDLE_TIMEOUT_MAX_SECONDS = 15 * 60
 
-_IDLE_TIMEOUT_UNITS = {
-    "us": 1e-6,
-    "ms": 1e-3,
-    "s": 1.0,
-    "sec": 1.0,
-    "min": 60.0,
-    "h": 3600.0,
-    "d": 86400.0,
-}
 
+class IdleTransactionTimeoutVerifier(OutcomeVerifier):
+    check_id = "idle_transaction_timeout"
+    expected = f"idle_in_transaction_session_timeout within [{_IDLE_TIMEOUT_MIN_SECONDS}s, {_IDLE_TIMEOUT_MAX_SECONDS}s] on a fresh business login"
 
-def _idle_timeout_seconds(value: object) -> float:
-    """Parse a PostgreSQL interval rendering of the timeout GUC into seconds.
-
-    current_setting returns unit-suffixed renderings such as '2h', '5min',
-    '30s'; a bare number is the GUC's canonical millisecond value."""
-    text = str(value).strip().casefold()
-    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([a-z]*)", text)
-    if not match:
-        raise ValueError(
-            f"idle_in_transaction_session_timeout rendering is not a duration: {value!r}"
+    def verify(self, context):
+        env = context.case_run.env
+        try:
+            connection = env.open_workload_connection("evaluator-idle-transaction-timeout")
+        except psycopg2.OperationalError as exc:
+            return OutcomeCheck(
+                self.check_id, False, self.expected, {"connection_error": str(exc)},
+                (f"business login failed: role={env.user}, database={env.dbname}: {exc}",),
+            )
+        with closing(connection):
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT setting::bigint, source FROM pg_settings "
+                    "WHERE name = 'idle_in_transaction_session_timeout'"
+                )
+                timeout_ms, source = cursor.fetchone()
+        return OutcomeCheck(
+            self.check_id,
+            _IDLE_TIMEOUT_MIN_SECONDS * 1000 <= timeout_ms <= _IDLE_TIMEOUT_MAX_SECONDS * 1000,
+            self.expected,
+            {"timeout_ms": timeout_ms, "source": source, "role": env.user, "database": env.dbname},
+            ("fresh authenticated business login; pg_settings.idle_in_transaction_session_timeout (ms)",),
         )
-    amount = float(match.group(1))
-    unit = match.group(2)
-    if not unit:
-        return amount / 1000.0
-    if unit not in _IDLE_TIMEOUT_UNITS:
-        raise ValueError(
-            f"idle_in_transaction_session_timeout rendering has an unsupported unit: {value!r}"
-        )
-    return amount * _IDLE_TIMEOUT_UNITS[unit]
 
 
-_IDLE_TIMEOUT = SqlScalarVerifier(
-    "idle_transaction_timeout",
-    lambda case: "SELECT current_setting('idle_in_transaction_session_timeout')",
-    f"idle_in_transaction_session_timeout within [{_IDLE_TIMEOUT_MIN_SECONDS}s, {_IDLE_TIMEOUT_MAX_SECONDS}s]",
-    lambda actual, case: (
-        _IDLE_TIMEOUT_MIN_SECONDS
-        <= _idle_timeout_seconds(actual)
-        <= _IDLE_TIMEOUT_MAX_SECONDS
-    ),
-)
+_IDLE_TIMEOUT = IdleTransactionTimeoutVerifier()
 _CUSTOMER_DEAD = SqlScalarVerifier(
     "customer_dead_tuples_cleaned", lambda case: f"SELECT COALESCE(n_dead_tup,0) FROM pg_stat_user_tables WHERE relname='{case.table}'",
     "below injected dead tuple count", lambda actual, case: int(actual) < case.dead_tuple_rows,

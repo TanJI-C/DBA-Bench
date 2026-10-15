@@ -1,4 +1,6 @@
 import json
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -130,6 +132,8 @@ class HealthCheckFakeEnv:
     def __init__(self, case, *, recovered=True):
         self.case = case
         self.recovered = recovered
+        self.user = "postgres"
+        self.dbname = "testdb"
 
     def manage_instance(self, action, target=None, value=None):
         assert action == "validate_backup"
@@ -140,6 +144,13 @@ class HealthCheckFakeEnv:
             "missing_wal_segments": ([{"wal_file": self.case.missing_wal_file}] if self.recovered else []),
         }
         return json.dumps(payload)
+
+    def open_workload_connection(self, application_name):
+        conn = MagicMock()
+        conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+            300000 if self.recovered else 0, "configuration file",
+        )
+        return conn
 
     def execute_sql(self, sql):
         normalized = sql.casefold()
@@ -156,8 +167,6 @@ class HealthCheckFakeEnv:
                 rows = [[1]]
             else:
                 rows = [[0 if self.recovered else 1]]
-        elif "idle_in_transaction_session_timeout" in normalized:
-            rows = [["5min" if self.recovered else "0"]]
         elif "pending_restart" in normalized:
             rows = [
                 [name, self.case.old_baseline_params[name], "configuration file", False, self.case.memory_limit_mb]
@@ -410,17 +419,16 @@ def test_config_drift_verifier_reads_human_unit_settings():
     assert "current_setting(p.name)" in verifier.sql(config.cases[1])
 
 
-def test_long_transaction_timeout_verifier_reads_case_target():
+def test_long_transaction_timeout_verifier_reads_fresh_business_connection():
     scenario = _scenario("pg_health_check_long_running_tx")
     case = scenario.get_case("single_idle_transaction_cleanup_simple")
     verifier = case.evaluator(None).outcome_verifiers[2]
+    env = HealthCheckFakeEnv(case)
+    result = verifier.verify(SimpleNamespace(case_run=SimpleNamespace(env=env, case=case)))
 
-    assert "idle_in_transaction_session_timeout within" in verifier.expected
-    assert verifier.predicate(case.idle_timeout_value, case) is True
-    assert verifier.predicate("5min", case) is True
-    assert verifier.predicate("30s", case) is True
-    assert verifier.predicate("20min", case) is False
-    assert verifier.predicate("2h", case) is False
+    assert result.passed is True
+    assert result.actual["timeout_ms"] == 300000
+    assert "fresh business login" in result.expected
 
 
 @pytest.mark.parametrize("scenario_id,case_id", [item for item in CASES if item[1].endswith("_simple")])
