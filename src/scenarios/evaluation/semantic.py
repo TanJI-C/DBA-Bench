@@ -1,5 +1,4 @@
 import json
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Protocol
@@ -78,12 +77,15 @@ class OpenAISemanticDiagnosisJudge:
         model: str,
         timeout_seconds: float = 120.0,
         max_retries: int = 2,
+        max_tokens: int = 2048,
+        response_format: Mapping[str, str] | None = None,
     ):
         from openai import OpenAI
 
         self.model = model
         self.base_url = normalize_base_url(url)
-        self.api_key = api_key
+        self.max_tokens = max_tokens
+        self.response_format = response_format
         self.client = OpenAI(
             api_key=api_key,
             base_url=self.base_url,
@@ -115,6 +117,7 @@ class OpenAISemanticDiagnosisJudge:
             url=model_config["url"],
             api_key=model_config["api_key"],
             model=model,
+            **model_config.get("semantic_judge", {}),
         )
 
     def judge(
@@ -122,7 +125,6 @@ class OpenAISemanticDiagnosisJudge:
         expected: tuple["ExpectedCondition", ...],
         submitted: tuple[DiagnosisCondition, ...],
     ) -> SemanticJudgment:
-        require_semantic_model(self.base_url, self.model, self.api_key)
         request = {
             "expected_conditions": [
                 {
@@ -143,6 +145,9 @@ class OpenAISemanticDiagnosisJudge:
                 for index, item in enumerate(submitted)
             ],
         }
+        options = {}
+        if self.response_format is not None:
+            options["response_format"] = dict(self.response_format)
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -150,13 +155,24 @@ class OpenAISemanticDiagnosisJudge:
                 {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
             ],
             temperature=0,
-            max_tokens=2048,
-            response_format={"type": "json_object"},
+            max_tokens=self.max_tokens,
+            **options,
         )
-        content = response.choices[0].message.content
+        choice = response.choices[0]
+        if choice.finish_reason == "length":
+            raise ValueError(
+                "semantic diagnosis judge exhausted its output-token budget: "
+                f"model={self.model!r}, max_tokens={self.max_tokens}, "
+                f"finish_reason={choice.finish_reason!r}, usage={response.usage!r}; "
+                "increase semantic_judge.max_tokens and ensure the model context has room "
+                "for both reasoning and the final JSON judgment"
+            )
+        content = choice.message.content
         if not isinstance(content, str) or not content.strip():
             raise ValueError(
-                f"semantic diagnosis judge returned empty content: model={self.model!r}"
+                "semantic diagnosis judge returned empty content: "
+                f"model={self.model!r}, max_tokens={self.max_tokens}, "
+                f"finish_reason={choice.finish_reason!r}, usage={response.usage!r}"
             )
         payload = json.loads(content)
         conditions = _parse_judgments(payload)
@@ -251,11 +267,7 @@ class SemanticModelProbe:
 
     @property
     def ready(self) -> bool:
-        return self.status in {"ready", "catalog_forbidden"}
-
-
-class SemanticModelUnavailable(RuntimeError):
-    """The configured semantic model endpoint cannot serve the requested judge."""
+        return self.status == "ready"
 
 
 def probe_semantic_model(
@@ -265,6 +277,7 @@ def probe_semantic_model(
     *,
     timeout_seconds: float = 3.0,
 ) -> SemanticModelProbe:
+    """Inspect the model catalog for the local startup/status command only."""
     endpoint = f"{base_url.rstrip('/')}/models"
     request = Request(
         endpoint,
@@ -284,15 +297,6 @@ def probe_semantic_model(
                 model=model,
                 status="auth_failed",
                 detail=f"HTTP {exc.code} from {endpoint}",
-            )
-        if exc.code == 403:
-            return SemanticModelProbe(
-                base_url=base_url,
-                model=model,
-                status="catalog_forbidden",
-                detail=(
-                    f"HTTP {exc.code} from {endpoint}; proceeding to the configured chat endpoint"
-                ),
             )
         return SemanticModelProbe(
             base_url=base_url,
@@ -333,57 +337,6 @@ def probe_semantic_model(
         status="ready",
         detail=f"served_models={list(model_ids)!r}",
     )
-
-
-def require_semantic_model(
-    base_url: str,
-    model: str,
-    api_key: str,
-    *,
-    timeout_seconds: float = 3.0,
-) -> SemanticModelProbe:
-    probe = probe_semantic_model(
-        base_url,
-        model,
-        api_key,
-        timeout_seconds=timeout_seconds,
-    )
-    if probe.ready:
-        return probe
-    raise SemanticModelUnavailable(semantic_model_start_warning(probe))
-
-
-def semantic_model_start_warning(probe: SemanticModelProbe) -> str:
-    host, port = _host_port(probe.base_url)
-    command = " ".join((
-        "conda run -n aiops python scripts/start_dp_semantic_model.py",
-        f"--model {shlex.quote(probe.model)}",
-        f"--host {shlex.quote(host)}",
-        f"--port {port}",
-    ))
-    return (
-        "[WARNING] DP 语义匹配无法连接配置的语义模型 endpoint。"
-        f"status={probe.status}, detail={probe.detail}, base_url={probe.base_url!r}, "
-        f"model={probe.model!r}。\n"
-        "请在另一个终端启动模型：\n"
-        f"  {command}\n"
-        "如果 aiops 环境尚未安装 vLLM，先执行：\n"
-        "  conda run -n aiops pip install vllm\n"
-        "启动后检查模型是否就绪：\n"
-        f"  conda run -n aiops python scripts/start_dp_semantic_model.py --status "
-        f"--host {shlex.quote(host)} --port {port} --model {shlex.quote(probe.model)}\n"
-        "endpoint 必须支持 GET /v1/models，并返回完全一致的 model id。"
-        "语义匹配不会静默回退到 exact 关键字匹配。"
-    )
-
-
-def _host_port(base_url: str) -> tuple[str, int]:
-    parsed = urlsplit(base_url)
-    if parsed.hostname is None:
-        raise ValueError(f"semantic model base_url must contain a hostname: {base_url!r}")
-    if parsed.port is not None:
-        return parsed.hostname, parsed.port
-    return parsed.hostname, 443 if parsed.scheme == "https" else 80
 
 
 def normalize_base_url(url: str) -> str:

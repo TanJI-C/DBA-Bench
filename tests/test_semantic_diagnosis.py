@@ -2,6 +2,8 @@ import json
 from types import SimpleNamespace
 from urllib.error import HTTPError
 
+import httpx
+import openai
 import pytest
 
 from src.scenarios.evaluation.common import condition
@@ -20,10 +22,7 @@ from src.protocols.report import StructuredReport
 from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.semantic import (
-    SemanticModelProbe,
-    SemanticModelUnavailable,
     probe_semantic_model,
-    require_semantic_model,
 )
 from src.scenarios.runtime import orchestrator as orchestrator_module
 from src.scenarios.runtime.orchestrator import OrchestratorRunConfig
@@ -261,82 +260,148 @@ def test_semantic_judge_output_parser_rejects_unknown_shape():
         _parse_judgments({"matches": []})
 
 
-def test_openai_semantic_judge_uses_strict_json_request(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(
-        "src.scenarios.evaluation.semantic.require_semantic_model",
-        lambda *_args, **_kwargs: None,
+@pytest.fixture
+def semantic_gateway(monkeypatch):
+    """Exercise the real SDK and JSON wire format without a hosted model."""
+    gateway = SimpleNamespace(
+        requests=[],
+        catalog_status=200,
+        chat_status=200,
+        payload={
+            "id": "semantic-test",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "test-judge",
+            "choices": [{
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": json.dumps({
+                    "judgments": [{
+                        "condition_id": "stale_stats",
+                        "entailed_by": [0],
+                        "contradicted_by": [],
+                        "reason": "same meaning",
+                    }],
+                })},
+            }],
+            "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+        },
     )
 
-    class FakeCompletions:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return SimpleNamespace(
-                choices=[SimpleNamespace(
-                    message=SimpleNamespace(content=json.dumps({
-                        "judgments": [
-                            {
-                                "condition_id": "stale_stats",
-                                "entailed_by": [0],
-                                "contradicted_by": [],
-                                "reason": "same meaning",
-                            }
-                        ]
-                    }))
-                )],
-                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=7),
-            )
+    def handle(request):
+        gateway.requests.append(request)
+        if request.url.path == "/v1/models":
+            return httpx.Response(gateway.catalog_status, json={"data": []})
+        assert request.method == "POST"
+        assert request.url.path == "/v1/chat/completions"
+        if gateway.chat_status != 200:
+            return httpx.Response(gateway.chat_status, json={"error": {
+                "message": "configured judge rejected", "type": "test_error",
+            }})
+        return httpx.Response(200, json=gateway.payload)
 
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            captured["client"] = kwargs
-            self.chat = SimpleNamespace(completions=FakeCompletions())
-
-    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
-    judge = OpenAISemanticDiagnosisJudge(
-        url="http://127.0.0.1:8000/v1/chat/completions",
-        api_key="local",
-        model="Qwen3-4B",
-    )
-    result = judge.judge(
-        (EXPECTED[0],),
-        report("统计信息长期未更新").diagnosis.conditions,
-    )
-
-    assert result.model == "Qwen3-4B"
-    assert result.usage == {"input_tokens": 11, "output_tokens": 7}
-    assert captured["client"]["base_url"] == "http://127.0.0.1:8000/v1"
-    assert captured["temperature"] == 0
-    assert captured["response_format"] == {"type": "json_object"}
-    assert captured["messages"][0]["role"] == "system"
-
-
-def test_semantic_model_warning_contains_startup_and_status_guidance(monkeypatch):
-    monkeypatch.setattr(
-        "src.scenarios.evaluation.semantic.probe_semantic_model",
-        lambda *_args, **_kwargs: SemanticModelProbe(
-            base_url="http://127.0.0.1:8000/v1",
-            model="Qwen/Qwen3-4B-Instruct-2507",
-            status="unavailable",
-            detail="Connection refused",
-        ),
-    )
-
-    with pytest.raises(SemanticModelUnavailable) as exc_info:
-        require_semantic_model(
-            "http://127.0.0.1:8000/v1",
-            "Qwen/Qwen3-4B-Instruct-2507",
-            "local",
+    real_openai = openai.OpenAI
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        monkeypatch.setattr(
+            openai, "OpenAI",
+            lambda **kwargs: real_openai(**kwargs, http_client=client),
         )
-
-    message = str(exc_info.value)
-    assert "scripts/start_dp_semantic_model.py" in message
-    assert "--model Qwen/Qwen3-4B-Instruct-2507" in message
-    assert "--status" in message
-    assert "不会静默回退" in message
+        yield gateway
 
 
-def test_semantic_model_accepts_provider_catalog_forbidden(monkeypatch):
+def configured_judge(tmp_path, options):
+    path = tmp_path / "llm.json"
+    config = {
+        "url": "http://gateway.test/v1/chat/completions",
+        "api_key": "test-key",
+    }
+    if options is not None:
+        config["semantic_judge"] = options
+    path.write_text(json.dumps({"test-judge": config}))
+    return OpenAISemanticDiagnosisJudge.from_config(str(path), "test-judge")
+
+
+@pytest.mark.parametrize("catalog_status", [200, 403, 404])
+@pytest.mark.parametrize("options", [
+    None,
+    {},
+    {"max_tokens": 8192, "response_format": None},
+    {"max_tokens": 16384, "response_format": {"type": "json_object"}},
+])
+def test_semantic_judge_calls_chat_directly_with_configured_options(
+    semantic_gateway, tmp_path, catalog_status, options,
+):
+    semantic_gateway.catalog_status = catalog_status
+    judge = configured_judge(tmp_path, options)
+
+    result = SemanticDiagnosisMatcher(judge).match(
+        (EXPECTED[0],), report("统计信息长期未更新"),
+    )
+
+    assert result["DiagnosisPass"] is True
+    assert result["judge_usage"] == {"input_tokens": 11, "output_tokens": 7}
+    assert len(semantic_gateway.requests) == 1
+    request = semantic_gateway.requests[0]
+    assert request.headers["authorization"] == "Bearer test-key"
+    payload = json.loads(request.content)
+    options = options or {}
+    assert payload["model"] == "test-judge"
+    assert payload["max_tokens"] == options.get("max_tokens", 2048)
+    if options.get("response_format") is None:
+        assert "response_format" not in payload
+    else:
+        assert payload["response_format"] == options["response_format"]
+    assert payload["temperature"] == 0
+    assert payload["messages"][0]["role"] == "system"
+
+
+@pytest.mark.parametrize("content", [None, "", '{"judgments":', '{"judgments": []}'])
+def test_semantic_judge_rejects_token_exhaustion(semantic_gateway, tmp_path, content):
+    choice = semantic_gateway.payload["choices"][0]
+    choice["finish_reason"] = "length"
+    choice["message"]["content"] = content
+    judge = configured_judge(tmp_path, {"max_tokens": 32768})
+
+    with pytest.raises(ValueError, match="exhausted its output-token budget") as exc_info:
+        judge.judge((EXPECTED[0],), report("旧统计信息").diagnosis.conditions)
+
+    assert "model='test-judge'" in str(exc_info.value)
+    assert "max_tokens=32768" in str(exc_info.value)
+    assert "finish_reason='length'" in str(exc_info.value)
+    assert len(semantic_gateway.requests) == 1
+
+
+@pytest.mark.parametrize("content, error, message", [
+    ("", ValueError, "empty content"),
+    ("not JSON", json.JSONDecodeError, "Expecting value"),
+    ('{"matches": []}', ValueError, "exactly the judgments field"),
+])
+def test_semantic_judge_rejects_invalid_content(
+    semantic_gateway, tmp_path, content, error, message,
+):
+    semantic_gateway.payload["choices"][0]["message"]["content"] = content
+    judge = configured_judge(tmp_path, {})
+
+    with pytest.raises(error, match=message):
+        judge.judge((EXPECTED[0],), report("旧统计信息").diagnosis.conditions)
+
+
+@pytest.mark.parametrize("status, error", [
+    (401, openai.AuthenticationError),
+    (404, openai.NotFoundError),
+    (503, openai.InternalServerError),
+])
+def test_semantic_judge_propagates_chat_errors(semantic_gateway, tmp_path, status, error):
+    semantic_gateway.chat_status = status
+    judge = configured_judge(tmp_path, {"max_retries": 0})
+
+    with pytest.raises(error, match="configured judge rejected"):
+        SemanticDiagnosisMatcher(judge).match((EXPECTED[0],), report("旧统计信息"))
+
+    assert len(semantic_gateway.requests) == 1
+
+
+def test_local_model_catalog_forbidden_does_not_report_ready(monkeypatch):
     def catalog_request(*_args, **_kwargs):
         raise HTTPError("https://provider.example/v1/models", 403, "Forbidden", {}, None)
 
@@ -348,28 +413,9 @@ def test_semantic_model_accepts_provider_catalog_forbidden(monkeypatch):
         "configured-key",
     )
 
-    assert probe.status == "catalog_forbidden"
-    assert probe.ready is True
-
-
-def test_openai_semantic_judge_checks_endpoint_before_request(monkeypatch):
-    warning = SemanticModelUnavailable("[WARNING] start model")
-
-    def raise_warning(*_args, **_kwargs):
-        raise warning
-
-    monkeypatch.setattr(
-        "src.scenarios.evaluation.semantic.require_semantic_model",
-        raise_warning,
-    )
-    judge = OpenAISemanticDiagnosisJudge(
-        url="http://127.0.0.1:8000/v1",
-        api_key="local",
-        model="Qwen3-4B",
-    )
-
-    with pytest.raises(SemanticModelUnavailable, match="start model"):
-        judge.judge((EXPECTED[0],), report("旧统计信息").diagnosis.conditions)
+    assert probe.status == "unavailable"
+    assert probe.ready is False
+    assert "HTTP 403" in probe.detail
 
 
 def test_model_start_script_builds_vllm_command():

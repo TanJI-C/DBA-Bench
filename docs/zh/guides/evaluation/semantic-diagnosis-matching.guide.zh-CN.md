@@ -47,12 +47,26 @@ conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.p
   "Qwen/Qwen3-4B-Instruct-2507": {
     "url": "http://127.0.0.1:8000/v1",
     "api_key": "local",
-    "provider": "openai"
+    "provider": "openai",
+    "semantic_judge": {
+      "max_tokens": 2048,
+      "response_format": null
+    }
   }
 }
 ```
 
 不要把真实凭证提交到仓库。`url` 可以指向 vLLM 或其他兼容 `/chat/completions` 的服务。
+
+### Judge 请求设置
+
+可选的 `semantic_judge` 对象仅配置诊断 judge，独立于被评测 Agent：
+
+- `max_tokens`：输出 token 预算，默认 `2048`。对推理模型，该预算还包含推理 token。可按需设置为 `8192` 或 `16384` 等值；服务上下文窗口必须容纳输入加上该预算。本地启动脚本默认上下文窗口只有 `4096`，使用更大预算前须相应提高 `--max-model-len`。
+- `response_format`：默认不随请求发送，配置为 `null` 时也不发送。服务支持 JSON mode 时，可显式设置为 `{"type": "json_object"}`。两种模式均保留提示词中的 JSON 要求和严格的 JSON 校验。
+- `timeout_seconds` 和 `max_retries`：OpenAI SDK 的请求超时与重试次数，默认分别为 `120.0` 和 `2`。
+
+也可以直接向 `OpenAISemanticDiagnosisJudge(...)` 传入这些参数。不会自动改参数重试或退回精确匹配。收到 `finish_reason="length"` 时，即使内容是合法 JSON，也会在解析前拒绝；错误包含模型、配置的预算、结束原因和 token 用量。可增加预算或在模型服务端调整推理设置；更大的预算无法保证模型一定完成输出。
 
 ## 启动小模型
 
@@ -80,14 +94,14 @@ conda run -n aiops python scripts/start_dp_semantic_model.py \
   --model Qwen/Qwen3-4B-Instruct-2507 --detach
 ```
 
-状态检查：
+可选的本地模型目录检查：
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
   --status --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port 8000
 ```
 
-语义 judge 每次请求前都会调用 `GET /v1/models` 检查 endpoint 和模型 ID。模型未启动、端口不可达、鉴权失败或服务未加载目标模型时，评估会直接抛出包含上述启动命令和 status 命令的 warning；不会静默使用 exact matcher。
+启动和状态脚本通过 `GET /v1/models` 检查本地 vLLM 服务的模型目录；目录检查不能证明聊天请求一定成功。语义评估直接调用 `/chat/completions`，不查询 `/models`，因此网关返回空目录或未提供目录接口均不阻碍判分。实际聊天请求的连接、鉴权和模型错误直接向调用方抛出；不会静默使用 exact matcher。
 
 ## 判定协议
 
