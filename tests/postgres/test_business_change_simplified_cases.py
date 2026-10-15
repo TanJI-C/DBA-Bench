@@ -34,7 +34,7 @@ SCENARIOS = (
 )
 
 EXPECTED_DIFFICULTY = {
-    "order_line_gift_note_ddl_simple": (3, 6, 2, 0.25, "easy"),
+    "order_line_gift_note_ddl_simple": (3, 20, 78, 0.795918, "hard"),
     "customer_loyalty_decade_backfill_simple": (
         2,
         8,
@@ -93,7 +93,7 @@ class BusinessChangeFakeEnv:
         elif "not exists" in normalized and "release_batch_id" in normalized:
             rows = [[0 if self.recovered else 1]]
         elif "information_schema.columns" in normalized:
-            rows = [["text"]] if self.recovered else []
+            rows = [["text", "YES"]] if self.recovered else []
         else:
             rows = [[1]]
         return json.dumps({"status": "success", "result": rows})

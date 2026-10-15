@@ -11,6 +11,7 @@ from src.scenarios.evaluation.postgres.business_change import (
 )
 
 
+from src.database.sql import execute_json_payload
 from src.workloads.specs import WorkloadProfile
 
 from src.execution.specs import PostgresCaseRuntime, CaseResourceSpec
@@ -32,7 +33,6 @@ class PgBusinessChangeOnlineDdlCase(PostgresScenarioCase):
     workload_tag: str
     table: str
     target_column: str
-    slow_queries: tuple[str, ...]
     simulated_rows: int
     writer_threads: int
     writer_interval: float
@@ -40,14 +40,27 @@ class PgBusinessChangeOnlineDdlCase(PostgresScenarioCase):
     audit_table: str
     queue_table: str
 
+    @property
+    def release_precheck_sql(self) -> str:
+        return release_precheck_sql(self.table, self.target_column)
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PgBusinessChangeOnlineDdlForOrderLineDeliveryNoteDdlScenarioCase(PgBusinessChangeOnlineDdlCase):
     pass
 
-def build_online_ddl_noise_profiles(
-    table: str = "order_line",
-    audit_table: str = "order_line_audit_shadow",
-    queue_table: str = "order_note_backfill_queue",
+def release_precheck_sql(table: str, column: str) -> str:
+    return (
+        f"SELECT ol_o_id, {column} FROM public.{table} "
+        "WHERE ol_w_id = 1 AND ol_o_id = 42"
+    )
+
+
+def build_online_ddl_profiles(
+    *,
+    table: str,
+    target_column: str,
+    audit_table: str,
+    queue_table: str,
 ) -> List[WorkloadProfile]:
     """Business-shaped noise for the online DDL change scenario.
 
@@ -57,6 +70,12 @@ def build_online_ddl_noise_profiles(
     column, table size, and lock risk before changing schema.
     """
     return [
+        WorkloadProfile(
+            name="order_note_release_precheck",
+            sql=release_precheck_sql(table, target_column),
+            qps=1.0,
+            application_name="order-note-release-precheck",
+        ),
         WorkloadProfile(
             name="order_entry_latency_probe",
             sql=(
@@ -191,8 +210,8 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
     base_image_name='aiopsbench-pg-initialized:latest',
     workload_tag='initialized',
     title='Online schema change on a large hot PostgreSQL order_line table.',
-    alert='发布窗口告警：订单写入链路正在上线配送备注能力，应用映射字段为 ol_delivery_note。当前 order-entry 读写延迟 SLO 接近阈值，连接数、事务吞吐和发布预检任务同时升高。请确认应变更的在线业务对象，在不中断下单流量的前提下完成结构变更，并复查变更已生效。',
-    alert_en="Release window alert: the order write path is rolling out a delivery note capability, and the application maps it to the column ol_delivery_note. The order-entry read/write latency SLO is close to its threshold, and connections, transaction throughput and release pre-check tasks are rising at the same time. Identify the online business object that should be changed, complete the structural change without interrupting order traffic, and re-check that the change has taken effect.",
+    alert='发布窗口告警：配送备注功能的 order-note-release-precheck 持续失败，订单写入仍在进行，审计和回填任务也在运行。请调查数据库日志和线上业务结构，在不中断下单流量的前提下完成发布；备注需要支持可空的文字内容。变更须限制锁等待，保留既有订单数据，不得修改相邻审计及回填对象，最后确认原业务预检恢复。',
+    alert_en="Release window alert: order-note-release-precheck keeps failing for the delivery note release while order writes, audit and backfill tasks continue. Investigate database logs and the live business schema, and complete the release without interrupting order traffic. Notes must support nullable text. Bound lock waits, preserve existing order data, leave adjacent audit and backfill objects unchanged, and verify that the original business pre-check succeeds.",
     initial_state={'status': 'change_pending',
  'table': 'order_line',
  'workload': 'high_write_concurrency',
@@ -202,7 +221,10 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
  'target_column': 'ol_delivery_note',
  'required_strategy': 'safe_online_ddl'},
     background_workload=BackgroundWorkloadSpec(
-        profiles=tuple(build_online_ddl_noise_profiles()),
+        profiles=tuple(build_online_ddl_profiles(
+            table="order_line", target_column="ol_delivery_note",
+            audit_table="order_line_audit_shadow", queue_table="order_note_backfill_queue",
+        )),
         worker_count=2,
         seed=0,
         warmup_seconds=4,
@@ -210,7 +232,6 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
     runtime=PostgresCaseRuntime(resources=POSTGRES_RESOURCES),
     table='order_line',
     target_column='ol_delivery_note',
-    slow_queries=('ALTER TABLE order_line ADD COLUMN ol_delivery_note text;',),
     simulated_rows=100000000,
     writer_threads=3,
     writer_interval=0.05,
@@ -219,10 +240,9 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
     queue_table='order_note_backfill_queue',
     difficulty=DifficultyCalibration(
         diagnostic_depth=3,
-        environmental_complexity=0.416667,
+        environmental_complexity=0.7321428571428571,
         reference_run_ids=(
-            "reference-48__pg_business_change_online_ddl__"
-            "order_line_delivery_note_ddl__mock__r001",
+            "57768ec4-cbdd-4f39-89d2-e879579688a0",
         ),
     ),
 )
@@ -299,11 +319,11 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
         workload_tag="initialized",
         title="Simplified online nullable-column release on a moderately large hot order table.",
         alert=(
-            "发布窗口告警：订单链路正在上线礼赠备注能力，当前写入仍在持续，"
-            "发布预检观察到短暂锁竞争。请确认实际在线对象和缺失结构，"
-            "使用快速失败并可重试的方式完成变更，随后核验业务结构。"
+            "发布窗口告警：礼赠备注功能的 order-note-release-precheck 持续失败，订单写入仍在进行。"
+            "请调查数据库日志和线上业务结构，在不中断下单流量的前提下完成发布；备注需要支持可空的文字内容。"
+            "变更须限制锁等待，保留既有订单数据，不得修改相邻审计及回填对象，最后确认原业务预检恢复。"
         ),
-        alert_en="Release window alert: the order path is rolling out a gift note capability, writes are still ongoing, and the release pre-check observed brief lock contention. Identify the actual online object and the missing structure, complete the change in a fail-fast and retryable way, and then verify the business structure.",
+        alert_en="Release window alert: order-note-release-precheck keeps failing for the gift note release while order writes continue. Investigate database logs and the live business schema, and complete the release without interrupting order traffic. Notes must support nullable text. Bound lock waits, preserve existing order data, leave adjacent audit and backfill objects unchanged, and verify that the original business pre-check succeeds.",
         initial_state={
             "status": "change_pending",
             "workload": "steady_write_concurrency",
@@ -315,11 +335,12 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
         },
         background_workload=BackgroundWorkloadSpec(
             profiles=tuple(
-                build_online_ddl_noise_profiles(
+                build_online_ddl_profiles(
                     table="order_line",
+                    target_column="ol_gift_note",
                     audit_table="order_line_gift_audit_shadow",
                     queue_table="gift_note_release_queue",
-                )[:2]
+                )[:3]
             ),
             worker_count=1,
             seed=0x4101,
@@ -328,7 +349,6 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
         runtime=PostgresCaseRuntime(resources=POSTGRES_RESOURCES),
         table="order_line",
         target_column="ol_gift_note",
-        slow_queries=("ALTER TABLE order_line ADD COLUMN ol_gift_note text;",),
         simulated_rows=5000000,
         writer_threads=1,
         writer_interval=0.15,
@@ -337,11 +357,9 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
         queue_table="gift_note_release_queue",
         difficulty=DifficultyCalibration(
             diagnostic_depth=3,
-            environmental_complexity=0.25,
+            environmental_complexity=0.7959183673469388,
             reference_run_ids=(
-                "logs/traces/"
-                "run_pg_business_change_online_ddl_"
-                "order_line_gift_note_ddl_simple_MockLLMAgent.json",
+                "7e2f4468-2e16-4c1d-b211-248ec5d5739b",
             ),
         ),
     )
@@ -387,7 +405,7 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
         env = context.env
         self._configure(config, env)
         print(f"[FaultInjector:PgBusinessChangeOnlineDdlInjector] Preparing hot table {self.table}...")
-        env.execute_sql(f"""
+        self._execute_sql(f"""
             CREATE TABLE IF NOT EXISTS {self.table} (
                 ol_id bigserial PRIMARY KEY,
                 ol_w_id integer NOT NULL DEFAULT 1,
@@ -400,20 +418,23 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
                 ol_delivery_d timestamp NULL
             );
         """)
-        env.execute_sql(f"ALTER TABLE {self.table} DROP COLUMN IF EXISTS {self.target_column};")
-        env.execute_sql(f"""
+        self._execute_sql(f"ALTER TABLE {self.table} DROP COLUMN IF EXISTS {self.target_column};")
+        self._execute_sql(f"""
             INSERT INTO {self.table} (ol_w_id, ol_d_id, ol_o_id, ol_number, ol_i_id, ol_quantity, ol_amount)
             SELECT 1, (g % 10) + 1, g, (g % 15) + 1, (g % 100000) + 1, 5, 10.00
             FROM generate_series(1, 20000) AS g
             WHERE (SELECT count(*) FROM {self.table}) < 20000;
         """)
-        env.execute_sql(f"ANALYZE {self.table};")
-        env.execute_sql(
+        self._execute_sql(f"ANALYZE {self.table};")
+        self._execute_sql(
             f"UPDATE pg_class SET reltuples = {self.simulated_rows} "
             f"WHERE oid = '{self.table}'::regclass;"
         )
-        self._ensure_noise_objects(env)
+        self._ensure_noise_objects()
         self._start_runtime()
+
+    def _execute_sql(self, sql):
+        return execute_json_payload(self.env.execute_sql, sql, "online DDL fixture")
 
     def _configure(self, config: Mapping[str, object], env) -> None:
         self.env = env
@@ -540,9 +561,26 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
                 conn.close()
 
     def prepare_observability(self, context: FaultLifecycleContext):
-        config = context.config
+        from contextlib import closing
+        from psycopg2.errors import UndefinedColumn
+
         env = context.env
+        # Execute a real application request once before the Agent starts. The
+        # shared workload runner continues it throughout diagnosis and repair.
+        query = release_precheck_sql(self.table, self.target_column)
+        with closing(env.open_workload_connection("order-note-release-precheck")) as conn:
+            conn.autocommit = True
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(query)
+            except UndefinedColumn as exc:
+                precheck_error = {"sqlstate": exc.pgcode, "error": str(exc)}
+            else:
+                raise RuntimeError(
+                    f"online DDL pre-check unexpectedly succeeded before repair: sql={query!r}"
+                )
         return {
+            "release_precheck_failure": precheck_error,
             "qps": env.query_metrics("qps"),
             "active_connections": env.query_metrics("active_connections"),
             "table_estimate": env.execute_sql(
@@ -580,9 +618,9 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
             self.env.execute_sql(f"ALTER TABLE IF EXISTS {self.table} DROP COLUMN IF EXISTS {self.target_column};")
             self.env.execute_sql(f"ANALYZE {self.table};")
 
-    def _ensure_noise_objects(self, env):
+    def _ensure_noise_objects(self):
         """Create same-domain non-root-cause objects used by workload noise."""
-        env.execute_sql(f"""
+        self._execute_sql(f"""
             CREATE TABLE IF NOT EXISTS {self.audit_table} (
                 audit_id bigserial PRIMARY KEY,
                 ol_w_id integer NOT NULL DEFAULT 1,
@@ -594,7 +632,7 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
                 captured_at timestamp NOT NULL DEFAULT now()
             );
         """)
-        env.execute_sql(f"""
+        self._execute_sql(f"""
             INSERT INTO {self.audit_table} (ol_w_id, ol_d_id, ol_o_id, ol_amount, ol_delivery_d, ol_delivery_note)
             SELECT 1, (g % 10) + 1, g, 10.00,
                    CASE WHEN g % 3 = 0 THEN now() ELSE NULL END,
@@ -602,12 +640,12 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
             FROM generate_series(1, 8000) AS g
             WHERE (SELECT count(*) FROM {self.audit_table}) < 8000;
         """)
-        env.execute_sql(f"ANALYZE {self.audit_table};")
-        env.execute_sql(
+        self._execute_sql(f"ANALYZE {self.audit_table};")
+        self._execute_sql(
             f"UPDATE pg_class SET reltuples = {max(1000000, self.simulated_rows // 5)} "
             f"WHERE oid = '{self.audit_table}'::regclass;"
         )
-        env.execute_sql(f"""
+        self._execute_sql(f"""
             CREATE TABLE IF NOT EXISTS {self.queue_table} (
                 queue_id bigserial PRIMARY KEY,
                 order_id integer NOT NULL,
@@ -615,7 +653,7 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
                 updated_at timestamp NOT NULL DEFAULT now()
             );
         """)
-        env.execute_sql(f"""
+        self._execute_sql(f"""
             INSERT INTO {self.queue_table} (order_id, status, updated_at)
             SELECT g,
                    CASE WHEN g % 5 = 0 THEN 'retry' WHEN g % 2 = 0 THEN 'ready' ELSE 'pending' END,
@@ -623,7 +661,7 @@ class PgBusinessChangeOnlineDdlInjector(BaseFaultInjector):
             FROM generate_series(1, 3000) AS g
             WHERE (SELECT count(*) FROM {self.queue_table}) < 3000;
         """)
-        env.execute_sql(f"ANALYZE {self.queue_table};")
+        self._execute_sql(f"ANALYZE {self.queue_table};")
 
     def activate(self, context: FaultLifecycleContext):
         config = context.config
