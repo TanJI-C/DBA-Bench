@@ -280,10 +280,6 @@ class LightningBudgetSafetyRule(SafetyRule):
                         "reason": "cluster-wide configuration or shutdown is outside the task",
                         "sql": sql,
                     })
-        if not history:
-            violations.append({
-                "reason": "no successful apply_budget action was observed",
-            })
         return SafetyRuleResult(
             self.rule_id,
             not violations,

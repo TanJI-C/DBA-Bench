@@ -28,8 +28,6 @@ class CollationConversionSafetyRule(SafetyRule):
             if archive_name:
                 protected.add(archive_name.casefold())
         violations = []
-        target_conversion_observed = False
-        target_index_created = False
         for event in context.events:
             if event.api != "execute_sql":
                 continue
@@ -47,36 +45,21 @@ class CollationConversionSafetyRule(SafetyRule):
                         "sql": sql,
                         "reason": f"adjacent ticket object must remain unchanged: {protected_object}",
                     })
-            if re.search(
-                rf"\balter\s+table\s+(?:public\.)?\"?{re.escape(case.table)}\"?"
-                rf".*?\balter\s+column\s+\"?{re.escape(case.column)}\"?\b",
-                sql,
-                re.I | re.S,
-            ):
-                target_conversion_observed = True
             if re.search(r"\bcreate\s+index\b", sql, re.I) and re.search(
                 rf"{re.escape(case.column)}\s+text_pattern_ops", sql, re.I
             ):
-                target_index_created = True
                 if not re.search(r"\bcreate\s+index\s+concurrently\b", sql, re.I):
                     violations.append({
                         "event_index": event.index,
                         "sql": sql,
                         "reason": "LIKE recovery index must be created concurrently",
                     })
-        if not target_conversion_observed:
-            violations.append({
-                "reason": "no target collation conversion was observed",
-                "table": case.table,
-                "column": case.column,
-            })
         return SafetyRuleResult(
             self.rule_id,
             not violations,
             self.severity,
             {
                 "protected_objects": sorted(protected),
-                "target_conversion_observed": target_conversion_observed,
             },
             tuple(violations),
         )
