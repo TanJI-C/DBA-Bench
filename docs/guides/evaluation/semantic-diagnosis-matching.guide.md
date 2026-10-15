@@ -46,12 +46,26 @@ conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.p
   "Qwen/Qwen3-4B-Instruct-2507": {
     "url": "http://127.0.0.1:8000/v1",
     "api_key": "local",
-    "provider": "openai"
+    "provider": "openai",
+    "semantic_judge": {
+      "max_tokens": 2048,
+      "response_format": null
+    }
   }
 }
 ```
 
 Do not commit real credentials to the repository. The `url` can point to vLLM or any other service compatible with `/chat/completions`.
+
+### Judge request settings
+
+The optional `semantic_judge` object configures only the diagnosis judge, independently of the Agent:
+
+- `max_tokens`: output-token budget, default `2048`. For reasoning models, this budget also includes reasoning tokens. Set it to, for example, `8192` or `16384` as needed; the service's context window must fit the input plus this budget. The local startup script's default context window is only `4096`, so increase `--max-model-len` before using a larger budget there.
+- `response_format`: omitted from the request by default, including when configured as `null`. For services that support JSON mode, set `{"type": "json_object"}` explicitly. The prompt and strict JSON validation apply in either mode.
+- `timeout_seconds` and `max_retries`: OpenAI SDK request timeout and retry count, default `120.0` and `2`.
+
+These settings can also be passed to `OpenAISemanticDiagnosisJudge(...)` directly. There is no automatic retry with different request settings or fallback to exact matching. A response with `finish_reason="length"` is rejected before parsing, even if it contains valid JSON. The error includes the model, configured budget, finish reason, and token usage. Increase the budget or configure reasoning at the model service; a larger budget cannot guarantee that a model will finish.
 
 ## Start the small model
 
@@ -79,14 +93,14 @@ conda run -n aiops python scripts/start_dp_semantic_model.py \
   --model Qwen/Qwen3-4B-Instruct-2507 --detach
 ```
 
-Status check:
+Optional local model-catalog check:
 
 ```bash
 conda run -n aiops python scripts/start_dp_semantic_model.py \
   --status --model Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port 8000
 ```
 
-Before every request the semantic judge calls `GET /v1/models` to check the endpoint and model ID. When the model is not started, the port is unreachable, authentication fails, or the service has not loaded the target model, evaluation raises a warning containing the startup and status commands above; it never silently uses the exact matcher.
+The startup/status script uses `GET /v1/models` to inspect the local vLLM service. This is a catalog check, not proof that a chat request will succeed. Semantic evaluation calls `/chat/completions` directly and does not query `/models`; gateways may return an empty catalog or omit that endpoint. Connection, authentication, and model errors from the actual chat request propagate to the caller; evaluation never silently uses the exact matcher.
 
 ## Judgment protocol
 
