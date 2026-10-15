@@ -61,6 +61,7 @@ _TPCDS_BACKED_TESTS = frozenset(
     tests/postgres/test_resource_governance_lifecycle.py
     tests/postgres/test_scenario_environment_lifecycle.py
     tests/postgres/test_system_failure_evaluators.py
+    tests/postgres/test_temp_file_limit_scope.py
     tests/postgres/test_system_failure_noisy_neighbor_hardening.py
     tests/postgres/test_wal_checkpoint_storm_workload_profiles.py
     tests/test_case_attributes_consistency.py

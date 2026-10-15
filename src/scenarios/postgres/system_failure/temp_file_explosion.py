@@ -58,6 +58,7 @@ class PgSystemFailureTempFileExplosionCase(PostgresScenarioCase):
     workload_tag: str
     dataset_scale: int
     culprit_role: str
+    culprit_password: str
     culprit_application: str
     culprit_job: str
     required_temp_file_limit: str
@@ -139,6 +140,7 @@ _PGSYSTEMFAILURETEMPFILEEXPLOSIONSCENARIO_CASE = PgSystemFailureTempFileExplosio
  'required_temp_file_limit': '64MB'},
     background_workload=EMPTY_BACKGROUND_WORKLOAD,
     culprit_role='report_batch',
+    culprit_password='report_batch',
     culprit_application='batch_rollup_scheduler',
     culprit_job='nightly_margin_rollup',
     required_temp_file_limit='64MB',
@@ -258,6 +260,7 @@ _PGSYSTEMFAILURETEMPFILEEXPLOSIONSCENARIO_SIMPLE_CASE = (
             warmup_seconds=11,
         ),
         culprit_role='report_batch',
+        culprit_password='report_batch',
         culprit_application='batch_rollup_scheduler',
         culprit_job='daily_sales_rollup',
         required_temp_file_limit='64MB',
@@ -822,7 +825,7 @@ class PgSystemFailureTempFileExplosionScenario(PostgresScenario):
                     'sort_rows': case.sort_rows,
                     'failure_probe_rows': case.failure_probe_rows,
                     'culprit_role': case.culprit_role,
-                    'culprit_password': case.culprit_role,
+                    'culprit_password': case.culprit_password,
                     'culprit_application': case.culprit_application,
                     'culprit_job': case.culprit_job,
                     'required_temp_file_limit': case.required_temp_file_limit,

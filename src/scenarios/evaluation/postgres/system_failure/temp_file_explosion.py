@@ -1,16 +1,13 @@
+from contextlib import closing
 
+import psycopg2
+
+from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier
 from .base import (
     SystemFailureEvaluator,
     condition,
-    InstanceConfigVerifier,
-    MetricVerifier,
-    SqlRowsVerifier,
     SqlScalarVerifier,
-    ProtectedSqlTargetRule,
-    SafetyEngine,
-    TargetedSessionTerminationRule,
     SQL_PROBE,
-    _safety,
 )
 
 _TEMP_DP = (
@@ -20,18 +17,38 @@ _TEMP_DP = (
     condition("bounded_fix", "set report batch temp file limit", "limit culprit temp files to 64mb", critical=True),
 )
 
-_TEMP_LIMIT = SqlScalarVerifier(
-    "culprit_temp_file_limit",
-    lambda case: (
-        "SELECT count(*) FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole "
-        "CROSS JOIN LATERAL unnest(s.setconfig) cfg "
-        f"WHERE r.rolname = '{case.culprit_role}' AND lower(cfg) LIKE 'temp_file_limit=%' "
-        "AND pg_size_bytes(split_part(cfg, '=', 2)) "
-        "BETWEEN pg_size_bytes('32MB') AND pg_size_bytes('64MB')"
-    ),
-    1,
-    lambda actual, case: int(actual) == 1,
-)
+class TempFileLimitVerifier(OutcomeVerifier):
+    check_id = "culprit_temp_file_limit"
+
+    def verify(self, context):
+        env = context.case_run.env
+        case = context.case_run.case
+        expected = "32–64 MiB persistent temp_file_limit for the culprit role in the business database"
+        try:
+            connection = psycopg2.connect(
+                host=env.host, port=env.port, dbname=env.dbname,
+                user=case.culprit_role, password=case.culprit_password,
+                application_name="evaluator-temp-file-limit", connect_timeout=3,
+            )
+        except psycopg2.OperationalError as exc:
+            return OutcomeCheck(self.check_id, False, expected,
+                                {"connection_error": str(exc)},
+                                (f"report login failed: role={case.culprit_role}, database={env.dbname}: {exc}",))
+        with closing(connection):
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT setting::bigint, source FROM pg_settings WHERE name = 'temp_file_limit'")
+                limit_kb, source = cursor.fetchone()
+        return OutcomeCheck(
+            self.check_id,
+            32 * 1024 <= limit_kb <= 64 * 1024 and source in {"user", "database user"},
+            expected,
+            {"limit_kb": limit_kb, "source": source, "role": case.culprit_role, "database": env.dbname},
+            ("fresh authenticated report login; pg_settings.temp_file_limit (kB)",),
+        )
+
+
+_TEMP_LIMIT = TempFileLimitVerifier()
 
 _TEMP_SESSION_GONE = SqlScalarVerifier(
     "culprit_session_gone",
