@@ -13,6 +13,7 @@ dependencies = [
     "pymysql>=1.1.0",
     "pyyaml>=6.0",
     "sqlglot>=26,<28",
+    "pglast>=7,<8",
     "openai>=1.0.0",
     "anthropic>=0.34.0",
     "tiktoken>=0.5",

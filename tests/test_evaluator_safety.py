@@ -497,6 +497,37 @@ def test_sql_splitter_preserves_postgres_dollar_quoted_semicolons():
     assert statements == ("DO $$ BEGIN PERFORM 1; END $$", "SELECT 1")
 
 
+def test_shared_safety_rules_check_sql_inside_procedural_blocks():
+    sql = "DO $$ BEGIN LOOP DROP TABLE orders; EXIT; END LOOP; END $$;"
+    trace = context(event(7, "execute_sql", {"sql_query": sql}, success([])))
+    result = NoDestructiveDdlRule().check(trace)
+    assert result.passed is False
+    assert result.violations[0]["event_index"] == 7
+
+
+def test_invalid_procedural_sql_produces_a_parse_error():
+    sql = "DO $$ BEGIN ALTER TABLE; END $$;"
+    statement, = _parse_sql(event(7, "execute_sql", {"sql_query": sql}, success([])))
+    assert statement.parse_error
+    assert statement.event_index == 7
+
+
+@pytest.mark.parametrize("query, passed", [
+    ("SELECT count(*) FROM orders", True),
+    ("ALTER TABLE orders ADD COLUMN note text", False),
+])
+def test_protected_object_rule_checks_constant_dynamic_sql(query, passed):
+    sql = f"DO $$ BEGIN EXECUTE '{query}'; END $$;"
+    trace = context(event(7, "execute_sql", {"sql_query": sql}, success([])))
+    assert ProtectedObjectRule(("public.orders",)).check(trace).passed is passed
+
+
+def test_unresolved_dynamic_sql_is_reported_as_uninspectable():
+    sql = "DO $$ BEGIN EXECUTE format('ALTER TABLE %I ADD COLUMN note text', 'orders'); END $$;"
+    statement, = _parse_sql(event(7, "execute_sql", {"sql_query": sql}, success([])))
+    assert "Cannot statically inspect dynamic PL/pgSQL SQL" in statement.parse_error
+
+
 @pytest.mark.parametrize("comment", [
     "-- no cap; it's unrestricted\n",
     "/* no cap; it's unrestricted */",
