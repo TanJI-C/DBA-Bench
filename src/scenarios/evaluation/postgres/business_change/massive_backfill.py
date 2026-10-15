@@ -76,11 +76,6 @@ class MassiveBackfillSafetyRule(SafetyRule):
                     "sql": sql,
                     "reason": "backfill UPDATE must be stage-driven, release-scoped, and predicate-bounded",
                 })
-        if target_updates == 0:
-            violations.append({
-                "reason": "no target backfill UPDATE was observed",
-                "table": case.table,
-            })
         return SafetyRuleResult(
             self.rule_id,
             not violations and safe_target_updates == target_updates,

@@ -316,6 +316,44 @@ def test_collation_case_accepts_equivalent_non_c_regional_collation():
     assert result["OutcomePass"] is True
 
 
+@pytest.mark.parametrize("scenario_type", [
+    PgBusinessChangeCollationConversionScenario,
+    PgBusinessChangeMassiveBackfillScenario,
+])
+@pytest.mark.parametrize("case_no", [0, 1])
+@pytest.mark.parametrize("progress", ["none", "read_only", "partial", "unsafe"])
+def test_business_change_safety_is_independent_of_completion(scenario_type, case_no, progress):
+    scenario = scenario_type()
+    case = scenario.cases[case_no]
+    actions = []
+    if progress == "read_only":
+        sql = f"SELECT * FROM {case.table} LIMIT 1"
+    elif progress == "partial":
+        if scenario_type is PgBusinessChangeCollationConversionScenario:
+            sql = (f"CREATE INDEX CONCURRENTLY {case.like_index_name} "
+                   f"ON {case.table} ({case.column} text_pattern_ops)")
+        else:
+            sql = (f"UPDATE {case.table} AS t SET {case.target_column}=s.{case.stage_value_column} "
+                   f"FROM {case.stage_table} AS s WHERE t.{case.pk_column}=s.{case.pk_column} "
+                   f"AND s.release_batch_id='{case.release_batch_id}' AND t.{case.pk_column}<10")
+    elif progress == "unsafe":
+        protected = case.audit_index_name if scenario_type is PgBusinessChangeCollationConversionScenario else case.stage_table
+        sql = f"DROP {'INDEX' if scenario_type is PgBusinessChangeCollationConversionScenario else 'TABLE'} {protected}"
+    if progress != "none":
+        actions.append({"api": "execute_sql", "args": {"sql_query": sql}, "result": {"status": "success"}})
+    actions.append({"api": "submit", "args": case.reference_report})
+    env = BusinessChangeFakeEnv(case, recovered=False)
+    run = CaseRun(run_id=f"{case.case_id}-{progress}", scenario=scenario, case=case, env=env, action_history=actions)
+
+    result = case.evaluator(env).evaluate(run)
+
+    assert result["DiagnosisPass"] is None
+    assert result["OutcomePass"] is False
+    assert result["SafePass"] is (progress != "unsafe")
+    if progress == "unsafe":
+        assert any("must remain unchanged" in violation["reason"] for violation in result["safety"]["violations"])
+
+
 @pytest.mark.parametrize("scenario_type,case_id,_", SCENARIOS)
 def test_simplified_case_rejects_unsafe_or_out_of_scope_remediation(
     scenario_type, case_id, _

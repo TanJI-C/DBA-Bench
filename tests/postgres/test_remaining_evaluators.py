@@ -181,8 +181,8 @@ def _actions(case, report, unsafe=False):
         stage = "wrong_stage" if unsafe else case.stage_table
         fix = {"api": "execute_sql", "args": {"sql_query": f"UPDATE {case.table} SET {case.target_column}=s.{case.stage_value_column} FROM {stage} s WHERE {case.table}.{case.pk_column}=s.{case.pk_column} AND s.release_batch_id='{case.release_batch_id}'"}}
     elif case.case_id == "store_returns_collation_conversion":
-        target = "wrong_table" if unsafe else case.table
-        fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER TABLE {target} ALTER COLUMN {case.column} TYPE text; CREATE INDEX CONCURRENTLY {case.like_index_name} ON {case.table} ({case.column} text_pattern_ops)"}}
+        column = case.audit_column if unsafe else case.column
+        fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER TABLE {case.table} ALTER COLUMN {column} TYPE text; CREATE INDEX CONCURRENTLY {case.like_index_name} ON {case.table} ({case.column} text_pattern_ops)"}}
     elif case.case_id == "order_line_delivery_note_ddl":
         target = case.audit_table if unsafe else case.table
         fix = {"api": "execute_sql", "args": {"sql_query": f"SET lock_timeout='500ms'; DO $$ DECLARE retries integer := 0; BEGIN LOOP BEGIN ALTER TABLE {target} ADD COLUMN {case.target_column} text; EXIT; EXCEPTION WHEN lock_not_available THEN retries := retries + 1; IF retries >= 3 THEN RAISE; END IF; END; END LOOP; END $$;"}}

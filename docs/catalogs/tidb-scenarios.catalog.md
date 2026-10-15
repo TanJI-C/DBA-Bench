@@ -66,7 +66,7 @@ be inferred as `hard` from old documents or neighboring Cases.
 | `resource_governance` | `tidb_resource_governance_ru_budget_calibration_frozen_history` |  |
 | `resource_governance` | `tidb_resource_governance_br_slo_adaptive_throttling_frozen_history` |  |
 | `resource_governance` | `tidb_resource_governance_placement_policy` | `0:compliance_table_zone_migration [hard]`; |
-| `resource_governance` | `tidb_resource_governance_lightning_budget` | `0:lightning_import_budget [hard]`; |
+| `resource_governance` | `tidb_resource_governance_lightning_budget` | 0:lightning_import_budget [hard, D=5/C=0.86128]; 1:lightning_import_conservative_rebalance [easy, D=2/C=0.865297] |
 | `resource_governance` | `tidb_resource_governance_lightning_budget_frozen_history` |  |
 | `resource_governance` | `tidb_resource_governance_rg06` | `0:ticdc_checkpoint_sink_budget [hard]`; |
 | `resource_governance` | `tidb_resource_governance_empty_region_merge_budget` | `0:empty_region_merge_budget [hard]`; |
