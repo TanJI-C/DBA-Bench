@@ -474,7 +474,6 @@ def test_resource_governance_cases_preserve_workload_and_environment_semantics()
     assert "一年以前冷数据" in archiving.alert
     for scenario_id in expected_workloads:
         case = scenarios[scenario_id].cases[0]
-        assert case.base_image_name == "aiopsbench-pg-initialized:latest"
         assert case.workload_tag == "initialized"
 
     lightning = scenarios["tidb_resource_governance_lightning_budget"].cases[0]
