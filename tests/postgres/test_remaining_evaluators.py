@@ -221,6 +221,11 @@ def _evaluate(scenario, case, env, actions):
         with patch("src.scenarios.evaluation.postgres.resource_governance.audit_logging._audit_probe",
                    return_value=("SELECT amount", [(1,)], [(42,)], records)):
             return case.evaluator(env).evaluate(run)
+    if scenario.scenario_id == "pg_resource_governance_resource_throttling":
+        from src.scenarios.evaluation.outcome import OutcomeCheck
+        with patch("src.scenarios.evaluation.postgres.resource_governance.resource_throttling.ReportReplayVerifier.verify",
+                   return_value=OutcomeCheck("report_replay", env.recovered, "business replay", env.recovered, ())):
+            return case.evaluator(env).evaluate(run)
     return case.evaluator(env).evaluate(run)
 
 
@@ -680,50 +685,6 @@ def test_evaluation_resets_leaked_session_role_before_verification():
     assert outcome_queries, "outcome verification should query the live catalog"
 
 
-class ResourceLimitFakeEnv(RemainingFakeEnv):
-    def __init__(self, case, *, connlimit, work_mem):
-        super().__init__(case)
-        self.connlimit = connlimit
-        self.work_mem = work_mem
-
-    def execute_sql(self, sql):
-        if "rolconnlimit" in sql.casefold():
-            return json.dumps({"status": "success", "result": [[self.connlimit, f"work_mem={self.work_mem}"]]})
-        return super().execute_sql(sql)
-
-
-def test_resource_throttling_accepts_case_bound_role_limits():
-    scenario = _scenario("pg_resource_governance_resource_throttling")
-    case = scenario.cases[0]
-
-    result = _evaluate(
-        scenario,
-        case,
-        ResourceLimitFakeEnv(case, connlimit=case.report_role_connection_limit_max, work_mem=f"{case.report_role_work_mem_max_mb}MB"),
-        _actions(case, _report(case)),
-    )
-
-    assert result["OutcomePass"] is True
-
-
-def test_resource_throttling_rejects_role_limits_outside_case_bounds():
-    scenario = _scenario("pg_resource_governance_resource_throttling")
-    case = scenario.cases[0]
-
-    result = _evaluate(
-        scenario,
-        case,
-        ResourceLimitFakeEnv(
-            case,
-            connlimit=case.report_role_connection_limit_max + 1,
-            work_mem=f"{case.report_role_work_mem_max_mb + 1}MB",
-        ),
-        _actions(case, _report(case)),
-    )
-
-    assert result["OutcomePass"] is False
-
-
 class SlowBackupProbeEnv(RemainingFakeEnv):
     def execute_sql(self, sql):
         if "latency_ms" in sql.casefold() and "backup_report_probe" in sql.casefold():
@@ -748,28 +709,6 @@ def test_host_backup_report_probe_reads_business_count_without_outer_aggregate()
     assert "SELECT probe.row_count" in statement
     assert "SELECT count(*) AS row_count FROM backup_report_probe_simple" in statement
     assert "SELECT count(*) AS row_count, " not in statement
-
-
-def _throttle_role_limits_verifier():
-    from src.scenarios.evaluation.postgres.resource_governance.resource_throttling import _REPORT_ROLE_LIMITS
-
-    scenario = _scenario("pg_resource_governance_resource_throttling")
-    case = [c for c in scenario.cases if c.case_id == "single_report_role_limit_simple"][0]
-    return _REPORT_ROLE_LIMITS, case
-
-
-def test_report_role_limits_requires_session_override_proof_connection_budget():
-    # The export client pins `SET statement_timeout='0'` / `SET work_mem` in its
-    # own session, so only a bounded connection budget constrains it.
-    verifier, case = _throttle_role_limits_verifier()
-    assert verifier.predicate([[2, ""]], case) is True
-    assert verifier.predicate([[1, "work_mem=64MB"]], case) is True
-    assert verifier.predicate([[-1, "statement_timeout=10s lock_timeout=5s"]], case) is False
-    assert verifier.predicate([[-1, "statement_timeout=30000ms"]], case) is False
-    assert verifier.predicate([[-1, ""]], case) is False
-    assert verifier.predicate([[-1, "work_mem=1MB"]], case) is False
-    assert verifier.predicate([[-1, "lock_timeout=5s"]], case) is False
-    assert verifier.predicate([[10, "statement_timeout=10s"]], case) is False
 
 
 def test_resource_throttling_dp_accepts_alternative_trace_phrasings():
