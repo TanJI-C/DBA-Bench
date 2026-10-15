@@ -84,7 +84,6 @@ class OpenAISemanticDiagnosisJudge:
 
         self.model = model
         self.base_url = normalize_base_url(url)
-        self.api_key = api_key
         self.max_tokens = max_tokens
         self.response_format = response_format
         self.client = OpenAI(
@@ -268,7 +267,7 @@ class SemanticModelProbe:
 
     @property
     def ready(self) -> bool:
-        return self.status in {"ready", "catalog_forbidden"}
+        return self.status == "ready"
 
 
 def probe_semantic_model(
@@ -298,15 +297,6 @@ def probe_semantic_model(
                 model=model,
                 status="auth_failed",
                 detail=f"HTTP {exc.code} from {endpoint}",
-            )
-        if exc.code == 403:
-            return SemanticModelProbe(
-                base_url=base_url,
-                model=model,
-                status="catalog_forbidden",
-                detail=(
-                    f"HTTP {exc.code} from {endpoint}; proceeding to the configured chat endpoint"
-                ),
             )
         return SemanticModelProbe(
             base_url=base_url,

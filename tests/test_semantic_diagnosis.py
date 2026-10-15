@@ -401,7 +401,7 @@ def test_semantic_judge_propagates_chat_errors(semantic_gateway, tmp_path, statu
     assert len(semantic_gateway.requests) == 1
 
 
-def test_semantic_model_accepts_provider_catalog_forbidden(monkeypatch):
+def test_local_model_catalog_forbidden_does_not_report_ready(monkeypatch):
     def catalog_request(*_args, **_kwargs):
         raise HTTPError("https://provider.example/v1/models", 403, "Forbidden", {}, None)
 
@@ -413,8 +413,9 @@ def test_semantic_model_accepts_provider_catalog_forbidden(monkeypatch):
         "configured-key",
     )
 
-    assert probe.status == "catalog_forbidden"
-    assert probe.ready is True
+    assert probe.status == "unavailable"
+    assert probe.ready is False
+    assert "HTTP 403" in probe.detail
 
 
 def test_model_start_script_builds_vllm_command():
