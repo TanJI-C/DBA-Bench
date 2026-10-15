@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from pglast import parse_plpgsql
+from pglast.parser import ParseError as PlpgsqlParseError
 from sqlglot import Dialect, exp, parse
 from sqlglot.errors import ParseError, TokenError
 from sqlglot.parser import Parser
@@ -395,6 +397,30 @@ class _GrantTargetsParser(Parser):
         return parameter
 
 
+def _plpgsql_sql_queries(node):
+    """Extract SQL statements from PostgreSQL's parsed procedural tree."""
+    if isinstance(node, dict):
+        dynamic = node.get("PLpgSQL_stmt_dynexecute")
+        if dynamic is not None:
+            query = dynamic["query"]["PLpgSQL_expr"]["query"]
+            expression, = parse(query, read="postgres")
+            if not isinstance(expression, exp.Literal) or not expression.is_string:
+                # SP checks recognized unsafe actions; an opaque expression
+                # is not evidence that the executed SQL was unsafe.
+                return
+            yield expression.this
+            return
+        expression = node.get("PLpgSQL_expr")
+        # Other parse modes are scalar expressions or variable assignments.
+        if expression is not None and expression["parseMode"] == 0:
+            yield expression["query"]
+        for value in node.values():
+            yield from _plpgsql_sql_queries(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _plpgsql_sql_queries(value)
+
+
 def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStatement, ...]:
     sql = event.args["sql_query"]
     statements_sql = _split_sql_statements(sql, dialect=dialect)
@@ -415,6 +441,19 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
     if tokens:
         # Anchored safety rules must start at SQL, not at a leading comment.
         sql = sql[tokens[0].start:]
+    if dialect == "postgres" and tokens and tokens[0].text.upper() == "DO":
+        try:
+            block = parse_plpgsql(sql)
+            return tuple(
+                statement
+                for query in _plpgsql_sql_queries(block)
+                for statement in _parse_sql(
+                    TraceEvent(event.index, event.api, {"sql_query": query}, event.result),
+                    dialect=dialect,
+                )
+            )
+        except (PlpgsqlParseError, ParseError) as error:
+            return (SqlStatement(event.index, sql, None, "DO", frozenset(), False, str(error)),)
     if tokens and tokens[0].token_type in {TokenType.GRANT, TokenType.REVOKE}:
         operation = tokens[0].text.upper()
         try:

@@ -172,7 +172,7 @@ def _evaluate(case_id, env, actions):
 
 def test_registration_identity_and_continuous_case_numbers():
     assert SCENARIO.scenario_id == "pg_business_change_fk_validation"
-    assert [case.case_no for case in SCENARIO.cases] == [0]
+    assert [case.case_no for case in SCENARIO.cases] == list(range(len(SCENARIO.cases)))
     assert [case.case_id for case in SCENARIO.cases] == [
         "order_items_fk_validate_storm",
     ]

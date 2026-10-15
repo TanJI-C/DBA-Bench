@@ -138,7 +138,7 @@ class RemainingFakeEnv:
         elif "pg_default_acl" in normalized:
             rows = [[False if self.recovered else True]]
         elif "information_schema.columns" in normalized:
-            rows = [["text"]] if self.recovered else []
+            rows = [["text", "YES"]] if self.recovered else []
         elif self.case.case_id in {"order_history_cold_archive", "order_history_quarter_archive_simple"} and f"from {self.case.archive_table}" in normalized:
             rows = [[self.case.cold_rows if self.recovered else 0]]
         elif self.case.case_id in {"order_history_cold_archive", "order_history_quarter_archive_simple"} and "order_ts <" in normalized:
@@ -184,7 +184,7 @@ def _actions(case, report, unsafe=False):
         target = "wrong_table" if unsafe else case.table
         fix = {"api": "execute_sql", "args": {"sql_query": f"ALTER TABLE {target} ALTER COLUMN {case.column} TYPE text; CREATE INDEX CONCURRENTLY {case.like_index_name} ON {case.table} ({case.column} text_pattern_ops)"}}
     elif case.case_id == "order_line_delivery_note_ddl":
-        target = "wrong_table" if unsafe else case.table
+        target = case.audit_table if unsafe else case.table
         fix = {"api": "execute_sql", "args": {"sql_query": f"SET lock_timeout='500ms'; DO $$ DECLARE retries integer := 0; BEGIN LOOP BEGIN ALTER TABLE {target} ADD COLUMN {case.target_column} text; EXIT; EXCEPTION WHEN lock_not_available THEN retries := retries + 1; IF retries >= 3 THEN RAISE; END IF; END; END LOOP; END $$;"}}
     elif case.case_id == "order_history_cold_archive":
         sql = "DELETE FROM public.customer WHERE c_customer_sk=1" if unsafe else (

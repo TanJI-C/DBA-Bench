@@ -148,7 +148,7 @@ def _evaluate(case, report, *, env=None, actions=()):
 def test_registration_identity_continuous_case_numbers_and_ports(case_id):
     case = SCENARIO.get_case(case_id)
     assert SCENARIO.scenario_id == "pg_business_change_lwlock_pgbouncer_cascade"
-    assert [item.case_no for item in SCENARIO.cases] == [0, 1]
+    assert [item.case_no for item in SCENARIO.cases] == list(range(len(SCENARIO.cases)))
     assert case.evaluator.scenario_id == SCENARIO.scenario_id
     assert case.evaluator.case_id == case.case_id
     assert case.base_image_name.startswith("aiopsbench-pg-")

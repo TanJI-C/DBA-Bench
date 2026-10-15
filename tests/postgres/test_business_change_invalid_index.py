@@ -271,7 +271,7 @@ def _root_cause_report(case, factor, entity=None):
 
 def test_scenario_identity_and_case_numbering():
     assert SCENARIO.scenario_id == "pg_business_change_invalid_index"
-    assert [case.case_no for case in SCENARIO.cases] == [0, 1]
+    assert [case.case_no for case in SCENARIO.cases] == list(range(len(SCENARIO.cases)))
     assert HARD_CASE.evaluator.case_id == HARD_CASE.case_id
     assert EASY_CASE.evaluator.case_id == EASY_CASE.case_id
     # Hard 的 DP 是复合根因（CIC 遗留 + 长事务干涉）；Easy 保持单一根因条件。

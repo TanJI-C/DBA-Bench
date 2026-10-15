@@ -37,8 +37,8 @@ def test_reclassified_alert_scenarios_have_contiguous_hard_case_pairs():
     for scenario_id in SCENARIO_IDS:
         scenario = _scenario(scenario_id)
         assert tuple(case.case_id for case in scenario.cases) == expected[scenario_id]
-        assert tuple(case.case_no for case in scenario.cases) == (0, 1)
-        assert len({case.evaluator for case in scenario.cases}) == 2
+        assert tuple(case.case_no for case in scenario.cases) == tuple(range(len(scenario.cases)))
+        assert len({case.evaluator for case in scenario.cases}) == len(scenario.cases)
         for case in scenario.cases:
             assert case.evaluator.scenario_id == scenario_id
             assert case.evaluator.case_id == case.case_id

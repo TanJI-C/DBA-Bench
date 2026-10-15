@@ -72,17 +72,17 @@ END $$;
             ],
         },
         {
-            "thinking": "负载仍在运行，先查看 workload 噪声和发布预检活动，避免把审计/队列噪声误判成目标变更。",
+            "thinking": "查业务预检的真实失败 SQL，再结合工作负载区分发布请求与审计、队列活动。",
             "actions": [
-                {"api": "query_metrics", "args": {"metric_type": "workload_activity", "target": None, "limit": 10}},
+                {"api": "read_log", "args": {"log_type": "pg_log", "lines": 200}},
             ],
         },
         {
             "thinking": "确认目标列当前缺失，再继续确认 order_line 是大表并检查会放大 AccessExclusiveLock 风险的锁活动。",
             "actions": [
-                {"api": "execute_sql", "args": {"sql_query": f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table}' AND column_name = '{target_column}';"}},
-                {"api": "execute_sql", "args": {"sql_query": f"SELECT c.relname, c.reltuples::bigint AS estimated_rows, pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size FROM pg_class c WHERE c.oid = '{table}'::regclass;"}},
-                {"api": "execute_sql", "args": {"sql_query": f"SELECT l.locktype, l.mode, l.granted, a.state, a.wait_event_type, a.wait_event, a.query FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.relation = '{table}'::regclass OR a.query ILIKE '%{table}%';"}},
+                {"api": "execute_sql", "args": {"sql_query": "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position;"}},
+                {"api": "execute_sql", "args": {"sql_query": "SELECT c.relname, c.reltuples::bigint AS estimated_rows, pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname;"}},
+                {"api": "execute_sql", "args": {"sql_query": "SELECT a.application_name, l.relation::regclass::text, l.mode, l.granted, a.state, a.wait_event_type, a.wait_event, a.query FROM pg_stat_activity a LEFT JOIN pg_locks l ON l.pid = a.pid AND l.locktype = 'relation' WHERE a.datname = current_database() ORDER BY a.pid, l.relation, l.mode;"}},
             ],
         },
         {
@@ -95,6 +95,7 @@ END $$;
             "thinking": "DDL 已执行，查询系统目录确认新增列生效。",
             "actions": [
                 {"api": "execute_sql", "args": {"sql_query": f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '{table}' AND column_name = '{target_column}';"}},
+                {"api": "execute_sql", "args": {"sql_query": case.release_precheck_sql}},
             ],
         },
         {

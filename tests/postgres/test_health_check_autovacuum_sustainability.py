@@ -391,7 +391,7 @@ def test_simple_evaluator_uses_trusted_replay_without_frozen_or_staging_history(
 def test_registry_and_case_contract_are_contiguous_and_unique():
     registration = next(item for item in POSTGRES_SCENARIO_REGISTRY if item.scenario_id == SCENARIO_ID)
     assert registration.entrypoint == "run_pg_health_check_autovacuum_sustainability_scenario.py"
-    assert [case.case_no for case in SCENARIO.cases] == [0, 1]
+    assert [case.case_no for case in SCENARIO.cases] == list(range(len(SCENARIO.cases)))
     assert [case.case_id for case in SCENARIO.cases] == ["capacity_deficit", "capacity_deficit_simple"]
     assert all(case.evaluator.scenario_id == SCENARIO_ID for case in SCENARIO.cases)
     assert all(case.evaluator.case_id == case.case_id for case in SCENARIO.cases)

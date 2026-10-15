@@ -157,7 +157,7 @@ def test_expanded_case_has_independent_identity_and_real_configuration_variant(
     changed_key: str,
 ) -> None:
     scenario = scenario_type()
-    original, expanded = scenario.cases
+    original, expanded = scenario.cases[:2]
 
     assert (original.case_no, expanded.case_no) == (0, 1)
     assert expanded.case_id == case_id

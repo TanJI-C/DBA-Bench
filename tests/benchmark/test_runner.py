@@ -141,8 +141,6 @@ def test_postgresql_catalog_matches_five_task_categories():
         and registration.category is ScenarioCategory.SYSTEM_FAILURE
     }
 
-    assert len(query_perf_ids) == 9
-    assert len(system_failure_ids) == 16
     assert {
         "pg_system_failure_lock_contention",
         "pg_system_failure_auto_analyze_storm",

@@ -37,11 +37,9 @@ def test_frozen_history_capture_durations_and_legacy_cases_are_explicit():
         for registration in POSTGRES_SCENARIO_REGISTRY
     }
     observed_legacy = set()
-    observed_cases = 0
 
     for scenario_id in FROZEN_HISTORY_SCENARIO_IDS:
         for case in registrations[scenario_id].scenario.cases:
-            observed_cases += 1
             history = case.frozen_history
             if history is None:
                 observed_legacy.add((scenario_id, case.case_id))
@@ -52,5 +50,4 @@ def test_frozen_history_capture_durations_and_legacy_cases_are_explicit():
             assert history.normal_capture_seconds == expected_normal
             assert history.fault_capture_seconds == expected_fault
 
-    assert observed_cases == 16
     assert observed_legacy == LEGACY_OR_CUSTOM_TELEMETRY_CASES

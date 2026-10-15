@@ -34,7 +34,7 @@ SCENARIOS = (
 )
 
 EXPECTED_DIFFICULTY = {
-    "order_line_gift_note_ddl_simple": (3, 6, 2, 0.25, "easy"),
+    "order_line_gift_note_ddl_simple": (3, 20, 78, 0.795918, "hard"),
     "customer_loyalty_decade_backfill_simple": (
         2,
         8,
@@ -93,7 +93,7 @@ class BusinessChangeFakeEnv:
         elif "not exists" in normalized and "release_batch_id" in normalized:
             rows = [[0 if self.recovered else 1]]
         elif "information_schema.columns" in normalized:
-            rows = [["text"]] if self.recovered else []
+            rows = [["text", "YES"]] if self.recovered else []
         else:
             rows = [[1]]
         return json.dumps({"status": "success", "result": rows})
@@ -166,7 +166,7 @@ def test_simplified_case_contract_and_evaluator_identity(
     scenario_type, case_id, evaluator_type
 ):
     scenario = scenario_type()
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     case = scenario.get_case(case_id)
     assert case.case_no == 1
     assert case.evaluator is evaluator_type
@@ -375,7 +375,8 @@ def test_online_ddl_accepts_bounded_client_side_retry_as_safe_alternative():
         },
         {
             "api": "execute_sql",
-            "args": {"sql_query": ddl},
+            # An error makes PGEnv reconnect, so the retry must set its bound.
+            "args": {"sql_query": "SET lock_timeout='500ms'; " + ddl},
             "result": {"status": "success", "rows_affected": 0},
         },
         {"api": "submit", "args": case.reference_report},

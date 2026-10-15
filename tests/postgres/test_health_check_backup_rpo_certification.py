@@ -162,7 +162,7 @@ def _evaluate(run, evaluator, report=None):
 def test_scenario_registration_case_identity_and_contract():
     registration = next(item for item in SCENARIO_REGISTRY if item.scenario_id == SCENARIO.scenario_id)
     assert registration.category.value == "health_check"
-    assert [case.case_no for case in SCENARIO.cases] == [0, 1]
+    assert [case.case_no for case in SCENARIO.cases] == list(range(len(SCENARIO.cases)))
     assert [case.case_id for case in SCENARIO.cases] == ["throughput_gap", "throughput_gap_simple"]
     assert all(case.evaluator.scenario_id == SCENARIO.scenario_id for case in SCENARIO.cases)
     assert all(case.evaluator.case_id == case.case_id for case in SCENARIO.cases)

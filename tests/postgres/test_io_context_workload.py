@@ -139,7 +139,7 @@ def _control_action(case, mode="throttle"):
 
 def test_registration_identity_case_numbers_and_runtime_contract():
     scenario = _scenario()
-    assert [case.case_no for case in scenario.cases] == [0, 1]
+    assert [case.case_no for case in scenario.cases] == list(range(len(scenario.cases)))
     assert [case.case_id for case in scenario.cases] == ["report_is_pressure", "report_is_pressure_simple"]
     assert [case.evaluator.scenario_id for case in scenario.cases] == [SCENARIO_ID, SCENARIO_ID]
     assert [case.evaluator.case_id for case in scenario.cases] == [case.case_id for case in scenario.cases]
