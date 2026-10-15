@@ -375,7 +375,8 @@ def test_online_ddl_accepts_bounded_client_side_retry_as_safe_alternative():
         },
         {
             "api": "execute_sql",
-            "args": {"sql_query": ddl},
+            # An error makes PGEnv reconnect, so the retry must set its bound.
+            "args": {"sql_query": "SET lock_timeout='500ms'; " + ddl},
             "result": {"status": "success", "rows_affected": 0},
         },
         {"api": "submit", "args": case.reference_report},

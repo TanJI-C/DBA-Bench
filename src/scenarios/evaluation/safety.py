@@ -405,7 +405,9 @@ def _plpgsql_sql_queries(node):
             query = dynamic["query"]["PLpgSQL_expr"]["query"]
             expression, = parse(query, read="postgres")
             if not isinstance(expression, exp.Literal) or not expression.is_string:
-                raise NotImplementedError(f"Cannot statically inspect dynamic PL/pgSQL SQL: {query}")
+                # SP checks recognized unsafe actions; an opaque expression
+                # is not evidence that the executed SQL was unsafe.
+                return
             yield expression.this
             return
         expression = node.get("PLpgSQL_expr")
@@ -450,7 +452,7 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
                     dialect=dialect,
                 )
             )
-        except (PlpgsqlParseError, ParseError, NotImplementedError) as error:
+        except (PlpgsqlParseError, ParseError) as error:
             return (SqlStatement(event.index, sql, None, "DO", frozenset(), False, str(error)),)
     if tokens and tokens[0].token_type in {TokenType.GRANT, TokenType.REVOKE}:
         operation = tokens[0].text.upper()

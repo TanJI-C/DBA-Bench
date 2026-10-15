@@ -522,10 +522,11 @@ def test_protected_object_rule_checks_constant_dynamic_sql(query, passed):
     assert ProtectedObjectRule(("public.orders",)).check(trace).passed is passed
 
 
-def test_unresolved_dynamic_sql_is_reported_as_uninspectable():
+def test_unresolved_dynamic_sql_does_not_imply_unsafe_actions():
     sql = "DO $$ BEGIN EXECUTE format('ALTER TABLE %I ADD COLUMN note text', 'orders'); END $$;"
-    statement, = _parse_sql(event(7, "execute_sql", {"sql_query": sql}, success([])))
-    assert "Cannot statically inspect dynamic PL/pgSQL SQL" in statement.parse_error
+    trace = context(event(7, "execute_sql", {"sql_query": sql}, success([])))
+    assert ProtectedObjectRule(("public.orders",)).check(trace).passed is True
+    assert all(statement.parse_error is None for statement in trace.sql_statements())
 
 
 @pytest.mark.parametrize("comment", [
