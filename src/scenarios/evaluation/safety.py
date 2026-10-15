@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from sqlglot import Dialect, exp, parse
-from sqlglot.errors import ParseError
+from sqlglot.errors import ParseError, TokenError
 from sqlglot.parser import Parser
 from sqlglot.tokens import TokenType
 
@@ -263,40 +263,136 @@ def _may_have_effect(event: TraceEvent) -> bool:
     return not (isinstance(result, dict) and str(result.get("status", "")).casefold() == "error")
 
 
-class _RoleGrantParser(Parser):
-    """Use sqlglot's principal grammar for role membership, absent from its GRANT parser."""
+class _GrantTargetsParser(Parser):
+    """Extract authorization targets using sqlglot's token, name and type grammars."""
+
+    _OBJECT_KINDS = (
+        "FOREIGN DATA WRAPPER", "FOREIGN SERVER", "LARGE OBJECT", "DATABASE", "SCHEMA",
+        "TABLESPACE", "SEQUENCE", "FUNCTION", "PROCEDURE", "ROUTINE", "LANGUAGE",
+        "PARAMETER", "DOMAIN", "TYPE", "TABLE",
+    )
+    _ROUTINES = {"FUNCTION", "PROCEDURE", "ROUTINE"}
+
+    def _words(self, *words):
+        tokens = self._tokens[self._index:self._index + len(words)]
+        return (
+            len(tokens) == len(words)
+            and all(token.token_type not in {TokenType.IDENTIFIER, TokenType.STRING} for token in tokens)
+            and self._match_text_seq(*words)
+        )
+
+    def _expect_words(self, *words):
+        if not self._words(*words):
+            self.raise_error(f"Expected {' '.join(words)}")
 
     def _parse_grant(self):
-        return self._parse_role_membership(grant=True)
+        return self._parse_authorization(grant=True)
 
     def _parse_revoke(self):
-        return self._parse_role_membership(grant=False)
+        return self._parse_authorization(grant=False)
 
-    def _parse_role_membership(self, *, grant):
-        if any(token.token_type == TokenType.ON for token in self._tokens):
-            self.raise_error("Unsupported privilege object syntax")
-            return None
+    def _parse_authorization(self, *, grant):
+        privilege_grant = any(token.token_type == TokenType.ON for token in self._tokens)
         if not grant:
-            self._match_text_seq("ADMIN", "OPTION", "FOR")
-        roles = self._parse_csv(self._parse_grant_principal)
-        if not roles or not self._match_text_seq("TO" if grant else "FROM"):
-            self.raise_error("Expected role list followed by TO/FROM")
+            if privilege_grant:
+                self._words("GRANT", "OPTION", "FOR")
+            else:
+                any(self._words(kind, "OPTION", "FOR") for kind in ("ADMIN", "INHERIT", "SET"))
+        if privilege_grant:
+            self._parse_csv(self._parse_grant_privilege)
+            self._expect_words("ON")
+            if self._words("ALL"):
+                if not any(self._words(kind) for kind in (
+                    "TABLES", "SEQUENCES", "FUNCTIONS", "PROCEDURES", "ROUTINES",
+                )):
+                    self.raise_error("Expected TABLES/SEQUENCES/FUNCTIONS/PROCEDURES/ROUTINES after ON ALL")
+                self._expect_words("IN", "SCHEMA")
+                targets = self._parse_csv(self._parse_object)
+            else:
+                kind = next((kind for kind in self._OBJECT_KINDS if self._words(*kind.split())), None)
+                targets = self._parse_csv(lambda: self._parse_object(
+                    routine=kind in self._ROUTINES, numeric=kind == "LARGE OBJECT",
+                ))
+        elif not grant and self.dialect == Dialect.get_or_raise("mysql") and self._words("ALL"):
+            self._words("PRIVILEGES")
+            self._expect_words(",", "GRANT", "OPTION")
+            targets = [exp.Literal.string("*.*")]
+        else:
+            targets = self._parse_csv(self._parse_principal)
+        self._expect_words("TO" if grant else "FROM")
+        targets.extend(self._parse_csv(self._parse_principal))
+        if grant and self._words("WITH"):
+            if privilege_grant:
+                self._expect_words("GRANT", "OPTION")
+            else:
+                self._parse_csv(self._parse_role_option)
+        if self._words("GRANTED", "BY"):
+            targets.append(self._parse_principal())
+        if not grant:
+            self._words("CASCADE") or self._words("RESTRICT")
+        return self.expression(exp.Tuple, expressions=targets)
+
+    def _parse_role_option(self):
+        kind = next((kind for kind in ("ADMIN", "INHERIT", "SET") if self._words(kind)), None)
+        if kind is None or not (
+            (kind == "ADMIN" and self._words("OPTION"))
+            or self._words("TRUE") or self._words("FALSE")
+        ):
+            self.raise_error("Expected role ADMIN OPTION or ADMIN/INHERIT/SET TRUE/FALSE")
+        return exp.Literal.string(kind)
+
+    def _parse_principal(self):
+        self._words("GROUP") or self._words("ROLE")
+        principal = self._parse_id_var(any_token=False) or self._parse_string_as_identifier()
+        if principal is None:
+            self.raise_error("Expected authorization principal")
             return None
-        principals = self._parse_csv(self._parse_grant_principal)
-        if not principals:
-            self.raise_error("Expected grantee list")
-            return None
-        if grant:
-            self._match_text_seq("WITH", "ADMIN", "OPTION")
-        if self._match_text_seq("GRANTED", "BY"):
-            grantor = self._parse_grant_principal()
-            if grantor is None:
-                self.raise_error("Expected grantor after GRANTED BY")
+        name = principal.name.casefold()
+        if self._match(TokenType.PARAMETER):
+            if self.dialect != Dialect.get_or_raise("mysql"):
+                self.raise_error("Account host is only supported for MySQL/TiDB")
+            host = self._parse_id_var(any_token=False) or self._parse_string_as_identifier()
+            if host is None:
+                self.raise_error("Expected account host after @")
                 return None
-            principals.append(grantor)
-        if not grant:
-            self._match_texts(("CASCADE", "RESTRICT"))
-        return self.expression(exp.Tuple, expressions=[*roles, *principals])
+            # Quotes keep accounts distinct from a single identifier containing '@'.
+            name = "'{}'@'{}'".format(name.replace("'", "''"), host.name.casefold().replace("'", "''"))
+        return exp.Literal.string(name)
+
+    def _parse_object(self, *, routine=False, numeric=False):
+        if numeric:
+            number = self._parse_number()
+            if number is None:
+                self.raise_error("Expected large-object OID")
+                return None
+            return exp.Literal.string(number.name)
+        table = self._parse_table_parts(schema=True)
+        if routine and self._match(TokenType.L_PAREN):
+            if not self._match(TokenType.R_PAREN):
+                self._parse_csv(self._parse_signature_parameter)
+                self._match_r_paren()
+        return exp.Literal.string(".".join(part.name for part in table.parts).casefold())
+
+    def _parse_table_part(self, schema=False):
+        if self._match(TokenType.STAR):
+            return exp.Star()
+        return super()._parse_table_part(schema=schema)
+
+    def _parse_signature_parameter(self):
+        self._words("IN") or self._words("OUT") or self._words("INOUT") or self._words("VARIADIC")
+        start = self._index
+        parameter = self._parse_types()
+        if parameter is None:
+            self.raise_error("Expected routine argument type")
+            return None
+        # A leading identifier followed by a type is an argument name.
+        if self._index == start + 1 and self._curr and self._curr.token_type not in {
+            TokenType.COMMA, TokenType.R_PAREN,
+        } and self._tokens[start].token_type in {TokenType.VAR, TokenType.IDENTIFIER}:
+            parameter = self._parse_types()
+            if parameter is None:
+                self.raise_error("Expected type after routine argument name")
+        return parameter
 
 
 def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStatement, ...]:
@@ -311,6 +407,24 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
                 dialect=dialect,
             )
         )
+    grant_dialect = Dialect.get_or_raise(dialect)
+    try:
+        tokens = grant_dialect.tokenize(sql)
+    except TokenError as error:
+        return (SqlStatement(event.index, sql, None, None, frozenset(), False, str(error)),)
+    if tokens and tokens[0].token_type in {TokenType.GRANT, TokenType.REVOKE}:
+        operation = tokens[0].text.upper()
+        try:
+            authorization = _GrantTargetsParser(dialect=grant_dialect).parse(tokens, sql=sql)[0]
+        except ParseError as error:
+            return (SqlStatement(
+                event.index, sql, None, operation, frozenset(), False,
+                f"Cannot fully parse GRANT/REVOKE targets: {error}",
+            ),)
+        return (SqlStatement(
+            event.index, sql, None, operation,
+            frozenset(target.name for target in authorization.expressions), False,
+        ),)
     command = _parse_known_command(event.index, sql)
     if command is not None:
         return (command,)
@@ -356,23 +470,6 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
     statements = []
     for ast in expressions:
         if ast is None:
-            continue
-        if isinstance(ast, exp.Command) and ast.name.upper() in {"GRANT", "REVOKE"}:
-            role_dialect = Dialect.get_or_raise(parsed_dialect)
-            try:
-                membership = _RoleGrantParser(dialect=role_dialect).parse(
-                    role_dialect.tokenize(sql), sql=sql,
-                )[0]
-            except ParseError as error:
-                statements.append(SqlStatement(
-                    event.index, sql, None, ast.name.upper(), frozenset(), False,
-                    f"Cannot fully parse GRANT/REVOKE targets: {error}",
-                ))
-                continue
-            statements.append(SqlStatement(
-                event.index, sql, None, ast.name.upper(),
-                frozenset(principal.name.casefold() for principal in membership.expressions), False,
-            ))
             continue
         if isinstance(ast, exp.Command):
             known = _parse_known_command(event.index, ast.sql(dialect=parsed_dialect))
