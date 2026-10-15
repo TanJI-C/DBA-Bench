@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -80,6 +81,10 @@ def _report(case):
 
 
 class SystemFailureFakeEnv:
+    host = "localhost"
+    port = 5432
+    dbname = "testdb"
+
     def __init__(self, case, *, recovered=True):
         self.case = case
         self.recovered = recovered
@@ -410,7 +415,14 @@ def _actions(case, report, unsafe=False):
 def _evaluate(scenario, case, env, actions):
     run = CaseRun(run_id=f"test-{case.case_id}", scenario=scenario, case=case, env=env, action_history=actions)
     case.evaluator(env).capture_safety_baseline(run)
-    return case.evaluator(env).evaluate(run)
+    if scenario.scenario_id != "pg_system_failure_temp_file_explosion":
+        return case.evaluator(env).evaluate(run)
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value.fetchone.return_value = (
+        65536 if env.recovered else -1, "user",
+    )
+    with patch("src.scenarios.evaluation.postgres.system_failure.temp_file_explosion.psycopg2.connect", return_value=connection):
+        return case.evaluator(env).evaluate(run)
 
 
 def test_system_failure_outcomes_never_score_report_keywords():
