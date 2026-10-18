@@ -239,7 +239,7 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_CASE = PgBusinessChangeOnlineDdlForOrderLineD
     audit_table='order_line_audit_shadow',
     queue_table='order_note_backfill_queue',
     difficulty=DifficultyCalibration(
-        diagnostic_depth=3,
+        diagnostic_depth=2,
         environmental_complexity=0.7321428571428571,
         reference_run_ids=(
             "57768ec4-cbdd-4f39-89d2-e879579688a0",
@@ -356,7 +356,7 @@ _PGBUSINESSCHANGEONLINEDDLSCENARIO_SIMPLE_CASE = (
         audit_table="order_line_gift_audit_shadow",
         queue_table="gift_note_release_queue",
         difficulty=DifficultyCalibration(
-            diagnostic_depth=3,
+            diagnostic_depth=2,
             environmental_complexity=0.7959183673469388,
             reference_run_ids=(
                 "7e2f4468-2e16-4c1d-b211-248ec5d5739b",

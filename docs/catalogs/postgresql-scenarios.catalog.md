@@ -34,7 +34,7 @@ formal implementations, not historical hardening copies; Cases without `Difficul
 | `business_change` | `pg_business_change_io_saturation` | 0:reporting_maintenance_io_saturation [hard, D=6/C=0.578947]; 1:vacuum_report_io_victim_simple [hard, D=6/C=0.565]; 2:archive_backlog_io_pressure [easy, D=5/C=0.45] |
 | `business_change` | `pg_business_change_lwlock_pgbouncer_cascade` | 0:replica_lwlock_tipping [easy, D=4/C=0.272727]; 1:replica_lwlock_tipping_simple [easy, D=8/C=0.25] |
 | `business_change` | `pg_business_change_massive_backfill` | 0:customer_birth_decade_backfill [easy, D=2/C=0.266667]; 1:customer_loyalty_decade_backfill_simple [easy, D=2/C=0.5] |
-| `business_change` | `pg_business_change_online_ddl` | 0:order_line_delivery_note_ddl [hard, D=3/C=0.732143]; 1:order_line_gift_note_ddl_simple [hard, D=3/C=0.795918] |
+| `business_change` | `pg_business_change_online_ddl` | 0:order_line_delivery_note_ddl [easy, D=2/C=0.732143]; 1:order_line_gift_note_ddl_simple [easy, D=2/C=0.795918] |
 | `business_change` | `pg_business_change_partition_migration` | 0:payment_events_attach_stall [hard, D=4/C=0.522727]; 1:payment_events_attach_simple [easy, D=3/C=0.2] |
 | `health_check` | `pg_health_check_autovacuum_sustainability` | 0:capacity_deficit [hard, D=4/C=0.813333]; 1:capacity_deficit_simple [hard, D=3/C=0.678571] |
 | `health_check` | `pg_health_check_backup_recoverability` | 0:missing_wal_recovery_gap [hard, D=3/C=0.666667]; 1:single_missing_wal_gap_simple [easy, D=3/C=0.2] |
