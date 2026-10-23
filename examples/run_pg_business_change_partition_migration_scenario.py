@@ -16,6 +16,7 @@ from src.scenarios.postgres import (
     PgBusinessChangePartitionMigrationCase,
     PgBusinessChangePartitionMigrationScenario,
 )
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 _CHILD_PARTITION_BOUNDS = {
@@ -257,13 +258,9 @@ def run_mode(args, scenario, case, mode, container_name, run_config):
     else:
         agent = build_experiment_agent(model=args.model, config_path=args.config_path, use_native_tools=True)
     max_turns = {"mock": 12, "zero": 3, "llm": args.max_turns}[mode]
-    run_config.diagnosis_match_mode = (
-        args.diagnosis_match_mode or ("semantic" if mode == "llm" else "exact")
-    )
+    run_config.diagnosis_match_mode = args.diagnosis_match_mode
     run_config.diagnosis_semantic_model = args.diagnosis_semantic_model
-    run_config.diagnosis_semantic_config_path = (
-        args.diagnosis_semantic_config_path or args.config_path
-    )
+    run_config.diagnosis_semantic_config_path = args.diagnosis_semantic_config_path
     orchestrator = Orchestrator(env, scenario, case, agent, max_turns=max_turns, run_config=run_config)
     return orchestrator.run()
 
@@ -283,14 +280,7 @@ def main():
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
     parser.add_argument("--fault-snapshot-name")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default=None)
-    parser.add_argument("--diagnosis-semantic-model", default=None, help="Diagnosis judge model; defaults to --model")
-    parser.add_argument(
-        "--diagnosis-semantic-config",
-        "--diagnosis-semantic-config-path",
-        dest="diagnosis_semantic_config_path",
-        default=None,
-    )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     if args.max_turns > 30:
         raise ValueError("--max-turns must be <= 30")

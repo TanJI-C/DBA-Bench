@@ -78,7 +78,7 @@ class PgSystemFailureOomForRestartSharedBuffersOomSimpleEvaluatorCase(
             restart=True,
         )).evaluate(context, outcome_result)
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in self.diagnosis_conditions}
         matched = set()
         extras = set()

@@ -66,7 +66,7 @@ class RuntimeSpec:
     tidb_warm_start_timeout_sec: int = 300
     postgres_cold_start_timeout_sec: int = 600
     postgres_storage_root: str | None = None
-    diagnosis_match_mode: str = "exact"
+    diagnosis_match_mode: str = "semantic"
     diagnosis_semantic_model: str = "Qwen/Qwen3-4B-Instruct-2507"
     agent_language: str = "zh"
     isolation: IsolationPolicySpec | None = None

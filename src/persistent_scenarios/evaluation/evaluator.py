@@ -14,6 +14,8 @@ from typing import Any, Mapping
 
 from ..runtime.lifecycle import FailureClassification
 
+from src.scenarios.evaluation.config import DiagnosisEvaluationConfig
+
 from .contracts import EVALUATOR_VERSION, LedgerIncompleteError, SCHEMA_ID, SCHEMA_VERSION
 from .diagnosis import collect_report_diagnosis_texts, evaluate_diagnosis_contract
 from .events import build_event_observations
@@ -43,6 +45,9 @@ def _impact(run, objective_results) -> list[dict[str, object]]:
 
 class PersistentScenarioEvaluator:
     """Composes trusted run facts into a ``persistent_scenario_evaluation_v2`` result."""
+
+    def __init__(self, diagnosis_config: DiagnosisEvaluationConfig | None = None):
+        self.diagnosis_config = diagnosis_config
 
     def evaluate(self, persistent_scenario_run) -> dict[str, Any]:
         run = persistent_scenario_run
@@ -80,6 +85,7 @@ class PersistentScenarioEvaluator:
         diagnosis_pass, diagnosis_results = evaluate_diagnosis_contract(
             run.spec.diagnosis_contract,
             collect_report_diagnosis_texts(run.mailbox_history),
+            config=self.diagnosis_config,
         )
         safety_result = evaluate_safety(
             run.spec.safety_policy,

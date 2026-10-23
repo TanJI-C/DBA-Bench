@@ -1,7 +1,13 @@
-"""Opt-in host admission isolation for deployment unit tests."""
+"""Deterministic unit-test DP and opt-in host admission isolation."""
 import pytest
 
 from src.execution import host_ports
+
+
+@pytest.fixture(autouse=True)
+def deterministic_diagnosis_matching(monkeypatch):
+    """Unit tests select exact DP explicitly; semantic tests override this setting."""
+    monkeypatch.setenv("AIOPS_DP_MATCH_MODE", "exact")
 
 
 @pytest.fixture

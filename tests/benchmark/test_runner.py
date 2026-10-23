@@ -1391,6 +1391,9 @@ runtime:
     child = (
         "import json, os, pathlib; "
         f"assert os.environ['AIOPS_AGENT_LANGUAGE'] == {language!r}; "
+        "assert os.environ['AIOPS_DP_MATCH_MODE'] == 'semantic'; "
+        "assert os.environ['AIOPS_DP_SEMANTIC_MODEL'] == 'Qwen/Qwen3-4B-Instruct-2507'; "
+        "assert os.environ['AIOPS_DP_SEMANTIC_CONFIG'] == 'config/llm_config.json'; "
         "p=pathlib.Path(os.environ['AIOPS_TRACE_OUTPUT_DIR'])/os.environ['AIOPS_TRACE_FILENAME']; "
         "p.parent.mkdir(parents=True, exist_ok=True); "
         "p.write_text(json.dumps({'evaluation': {'DiagnosisPass': True, "
@@ -1844,3 +1847,19 @@ def test_aggregate_keeps_safe_pass_independent_from_outcome_pass():
 
     assert result["outcome_pass_rate"] == 0.5
     assert result["safe_pass_rate"] == 1.0
+
+
+def test_manifest_defaults_to_semantic_for_entrypoint_without_diagnosis_flags(tmp_path):
+    path = tmp_path / "default-semantic.yaml"
+    path.write_text("""
+experiment_id: semantic-default
+benchmark: {systems: [postgresql], categories: [system_failure], scenarios: [pg_system_failure_oom]}
+agents: [{id: agent, mode: llm, model: subject-model}]
+runtime: {llm_config: /tmp/judge-models.json}
+""")
+    manifest = load_manifest(path)
+    assert manifest.runtime.diagnosis_match_mode == "semantic"
+    assert manifest.runtime.diagnosis_semantic_model == "Qwen/Qwen3-4B-Instruct-2507"
+    command = build_command(plan_runs(manifest)[0], manifest)
+    assert "--diagnosis-match-mode" not in command
+    assert command[command.index("--model") + 1] == "subject-model"

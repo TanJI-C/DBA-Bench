@@ -22,6 +22,7 @@ from src.protocols.report import EMPTY_REPORT
 from src.execution.deployments.postgres import PGDockerDeployment
 from src.execution.environments.postgres import PGEnv
 from src.scenarios.runtime.config import required_run_timeout_seconds
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.postgres.health_check.autovacuum_sustainability import (
     PgHealthCheckAutovacuumSustainabilityScenario,
@@ -327,11 +328,9 @@ def main() -> None:
     parser.add_argument("--max-turns", type=int, default=24)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--cold-start-timeout", type=int, default=600)
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
-    parser.add_argument("--diagnosis-semantic-model", default=None, help="Diagnosis judge model; defaults to --model")
-    parser.add_argument("--diagnosis-semantic-config", default="config/llm_config.json")
     parser.add_argument("--fault-snapshot-mode", choices=("auto", "off", "save", "use"), default="auto")
     parser.add_argument("--fault-snapshot-name", default=None)
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     port = resolve_port(args.port)
     case = SCENARIO.get_case(args.case)
@@ -340,8 +339,8 @@ def main() -> None:
         fault_snapshot_name=args.fault_snapshot_name or fault_image_name(case),
         history_seed=case.background_workload.seed if args.seed is None else args.seed,
         diagnosis_match_mode=args.diagnosis_match_mode,
-        diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
-        diagnosis_semantic_config_path=args.diagnosis_semantic_config,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     signal.signal(signal.SIGALRM, lambda _signum, _frame: (_ for _ in ()).throw(TimeoutError("PG-HC-MF01 run timeout")))
     try:

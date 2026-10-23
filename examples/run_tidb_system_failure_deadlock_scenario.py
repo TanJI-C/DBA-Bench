@@ -9,6 +9,7 @@ from src.agents.factory import build_experiment_agent
 from src.protocols.report import EMPTY_REPORT
 from src.scenarios.tidb import TidbSystemFailureDeadlockScenario
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -190,6 +191,7 @@ def main():
     parser.add_argument("--model")
     parser.add_argument("--llm-config", "--config-path", dest="config_path", default="config/llm_config.json")
     parser.add_argument("--max-turns", type=int, default=16)
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
@@ -205,9 +207,9 @@ def main():
         agent = build_experiment_agent(model=args.model, config_path=args.config_path, use_native_tools=True)
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode="off",
-        diagnosis_match_mode="semantic" if args.mode == "llm" else "exact",
-        diagnosis_semantic_model=args.model,
-        diagnosis_semantic_config_path=args.config_path,
+        diagnosis_match_mode=args.diagnosis_match_mode,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     Orchestrator(env, scenario, case, agent, max_turns=args.max_turns, run_config=run_config).run()
 

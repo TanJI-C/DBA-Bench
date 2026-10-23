@@ -362,8 +362,12 @@ def test_stop_runtime_ignores_threads_that_were_not_started():
 
 
 def test_entrypoint_exposes_semantic_diagnosis_match_arguments():
-    source = __import__("pathlib").Path("examples/run_pg_resource_governance_io_context_workload_scenario.py").read_text()
-    assert "--diagnosis-match-mode" in source
+    from pathlib import Path
+    from src.benchmark.commands import script_options
+
+    path = Path("examples/run_pg_resource_governance_io_context_workload_scenario.py")
+    source = path.read_text()
+    assert "--diagnosis-match-mode" in script_options(path)
     assert "diagnosis_match_mode=args.diagnosis_match_mode" in source
 
 

@@ -10,10 +10,11 @@
     "provider": "anthropic",
     "context_window_tokens": 200000
   },
-  "local-qwen3-4b": {
+  "Qwen/Qwen3-4B-Instruct-2507": {
     "url": "http://127.0.0.1:8000/v1",
-    "api_key": "REPLACE_ME",
-    "context_window_tokens": 32768,
+    "api_key": "local",
+    "provider": "openai",
+    "context_window_tokens": 4096,
     "semantic_judge": {
       "max_tokens": 2048,
       "response_format": null

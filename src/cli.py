@@ -8,6 +8,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from .scenarios.evaluation.config import DiagnosisEvaluationConfig, add_diagnosis_arguments
 from .project_paths import DATASETS_ROOT, EXPERIMENTS_ROOT
 from .benchmark.dataset import (
     aggregate_dataset,
@@ -174,6 +175,7 @@ def run_persistent_scenario_command(
     model: str | None = None,
     llm_config: str = "config/llm_config.json",
     reasoning_effort: str | None = None,
+    diagnosis_config: DiagnosisEvaluationConfig | None = None,
 ) -> int:
     from src.agents.agent import LLMAgent
     from src.agents.persistent_scenario_agent import LLMPersistentScenarioAgent
@@ -252,6 +254,7 @@ def run_persistent_scenario_command(
         run_mode=run_mode,
         time_scale=time_scale,
         trusted_checkpoint_observer=trusted_checkpoint_observer,
+        diagnosis_config=diagnosis_config,
     )
     result = _run_persistent_scenario_engine(engine, output_dir)
     return 0 if result.get("valid") is True else 1
@@ -528,6 +531,7 @@ def parser() -> argparse.ArgumentParser:
     run_persistent_scenario.add_argument("--reasoning-effort", choices=["low", "medium", "high", "xhigh"])
     run_persistent_scenario.add_argument("--run-mode", choices=["formal", "development", "development_compressed", "calibration_failure_probe"], default="development")
     run_persistent_scenario.add_argument("--time-scale", type=float, default=1.0)
+    add_diagnosis_arguments(run_persistent_scenario)
     return root
 
 
@@ -559,6 +563,11 @@ def main(argv: list[str] | None = None) -> int:
             run_mode=args.run_mode,
             time_scale=args.time_scale,
             reasoning_effort=args.reasoning_effort,
+            diagnosis_config=DiagnosisEvaluationConfig(
+                diagnosis_match_mode=args.diagnosis_match_mode,
+                diagnosis_semantic_model=args.diagnosis_semantic_model,
+                diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
+            ),
         )
     if args.command == "experiment":
         if args.experiment_command == "plan":

@@ -83,6 +83,25 @@ Participants cannot take each other's reserved ports during deployment or rebuil
 programs do not hold these locks; a later external listener can still cause Docker publication to
 fail. That failure is exposed without silently retrying another port.
 
+### Diagnosis judge
+
+Diagnosis Pass defaults to Semantic DP for bounded and Persistent Scenarios.
+`runtime.diagnosis_semantic_model` selects the judge independently of `agents[].model`,
+from the models in `runtime.llm_config`:
+
+```yaml
+runtime:
+  llm_config: config/llm_config.json
+  diagnosis_semantic_model: Qwen/Qwen3-4B-Instruct-2507
+```
+
+The default model key above targets the local service in the example config. Use
+an external model key to call its API, or set `runtime.diagnosis_match_mode: exact`
+for deterministic scoring without a model service. See the
+[semantic DP guide](../evaluation/semantic-diagnosis-matching.guide.md) for setup,
+provider support, and request settings. Manifest selections override inherited
+`AIOPS_DP_*` settings in child processes.
+
 ### Agent-facing language
 
 Set `runtime.agent_language` to `zh` (default) or `en`:

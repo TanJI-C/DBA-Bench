@@ -14,6 +14,7 @@ from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.deployments.tidb_support import lightning_job_id
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbResourceGovernanceLightningBudgetFrozenHistoryScenario
 
@@ -112,6 +113,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--storage-key")
     parser.add_argument("--storage-root")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     if (args.storage_key is None) != (args.storage_root is None):
         parser.error("--storage-key and --storage-root must be supplied together")
@@ -149,7 +151,9 @@ def main() -> None:
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode="off",
             history_seed=args.seed,
-            diagnosis_match_mode="exact",
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
         ).run()
     if args.mode == "mock":

@@ -1,4 +1,3 @@
-import ast
 import inspect
 import json
 from pathlib import Path
@@ -846,17 +845,10 @@ def test_hc05_monitor_stop_wait_covers_sql_read_timeout(monkeypatch):
 
 
 def test_hc05_entrypoint_requires_case_and_exposes_semantic_mode():
+    from src.benchmark.commands import script_options
+
     entry = Path(__file__).parents[2] / "examples" / "run_tidb_health_check_ticdc_replication_trend_scenario.py"
-    tree = ast.parse(entry.read_text(encoding="utf-8"))
-    arguments = {
-        node.args[0].value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "add_argument"
-        and node.args
-        and isinstance(node.args[0], ast.Constant)
-    }
+    arguments = script_options(entry)
     assert {
         "--case",
         "--mode",
@@ -873,13 +865,33 @@ def test_hc05_entrypoint_exposes_zero_calibration_mode():
     assert '"zero"' in source
 
 
-def test_hc05_entrypoint_keeps_semantic_judge_explicit():
-    entry = Path(__file__).parents[2] / "examples" / "run_tidb_health_check_ticdc_replication_trend_scenario.py"
-    source = entry.read_text(encoding="utf-8")
-    assert 'default=os.environ.get("AIOPS_DP_MATCH_MODE", "exact")' in source
-    assert 'parser.add_argument("--diagnosis-semantic-model")' in source
-    assert "or args.model" in source
-    assert 'or "config/llm_config.json"' in source
+@pytest.mark.parametrize("mode", ["mock", "zero", "llm"])
+@pytest.mark.parametrize("judge_model", [None, "external-judge"])
+def test_hc05_entrypoint_keeps_semantic_judge_independent(monkeypatch, mode, judge_model):
+    from examples import run_tidb_health_check_ticdc_replication_trend_scenario as entry
+    from src.scenarios.evaluation.semantic import DEFAULT_SEMANTIC_MODEL
+
+    for key in ("AIOPS_DP_MATCH_MODE", "AIOPS_DP_SEMANTIC_MODEL", "AIOPS_DP_SEMANTIC_CONFIG"):
+        monkeypatch.delenv(key, raising=False)
+    argv = ["scenario", "--case", CASE_ID, "--mode", mode, "--model", "agent-model"]
+    if judge_model is not None:
+        argv += ["--diagnosis-semantic-model", judge_model]
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(entry, "TiDBEnv", lambda **kwargs: object())
+    monkeypatch.setattr(entry, "build_experiment_agent", lambda **kwargs: object())
+    configs = []
+
+    def orchestrator(*args, run_config, **kwargs):
+        configs.append(run_config)
+        return SimpleNamespace(run=lambda: {"DiagnosisPass": True, "OutcomePass": True, "SafePass": True})
+
+    monkeypatch.setattr(entry, "Orchestrator", orchestrator)
+    entry.main()
+
+    config, = configs
+    assert config.diagnosis_match_mode == "semantic"
+    assert config.diagnosis_semantic_model == (judge_model or DEFAULT_SEMANTIC_MODEL)
+    assert config.diagnosis_semantic_config_path == "config/llm_config.json"
 
 
 def test_hc05_case1_focused_history_window_and_scope():

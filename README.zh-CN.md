@@ -20,7 +20,7 @@
 DBA-Bench 让 Agent 在真实数据库环境里完成运维任务，并由数据库系统本身给出判定：
 
 - **五阶段故障生命周期**：故障注入 → 检测 → 诊断 → 修复 → 恢复，trace 记录逐阶段证据。
-- **DP/OP/SP 评估合同**：诊断点、操作点、安全点逐 Case 声明，评分是合同而非主观判断；支持（但不依赖）LLM judge 语义判分。
+- **DP/OP/SP 评估合同**：诊断点、操作点、安全点逐 Case 声明，评分是合同而非主观判断；Diagnosis Pass 默认由 `llm_config.json` 选择的本地或外部模型进行语义判分，可显式使用 exact 匹配。详见[语义 DP 指南](docs/zh/guides/evaluation/semantic-diagnosis-matching.guide.zh-CN.md)。
 - **难度校准**：Case 提供 Easy/Hard 双难度，附模型实测证据。
 - **Persistent 长时程任务**：事件单调到达、多轮告警/巡检会话、检查点、逆向能力清理。
 - **业务真值对比**：以业务查询结果快照对真值，不用代理指标。

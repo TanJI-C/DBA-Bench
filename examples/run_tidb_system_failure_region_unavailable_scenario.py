@@ -10,6 +10,7 @@ from src.agents.factory import build_experiment_agent
 from src.protocols.report import StructuredReport
 from src.scenarios.tidb import TidbSystemFailureRegionUnavailableScenario
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -266,6 +267,7 @@ def main() -> None:
     parser.add_argument("--container-name", default="tidb-region-unavailable")
     parser.add_argument("--fault-snapshot-mode", choices=("auto", "off", "save", "use"), default="auto")
     parser.add_argument("--skip-affected-restart", action="store_true")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
@@ -338,9 +340,9 @@ def main() -> None:
         max_turns=args.max_turns,
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode=args.fault_snapshot_mode,
-            diagnosis_match_mode="semantic" if args.mode == "llm" else "exact",
-            diagnosis_semantic_model=args.model,
-            diagnosis_semantic_config_path=args.config_path,
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock":

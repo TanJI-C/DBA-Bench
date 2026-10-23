@@ -422,7 +422,9 @@ def test_orchestrator_uses_env_tool_profile():
         alert = "alert"
 
     class DummyEvaluator:
-        def __init__(self, env):
+        diagnosis_applicable = True
+
+        def __init__(self, env, *, diagnosis_matcher):
             self.env = env
 
     DummyCase.evaluator = DummyEvaluator

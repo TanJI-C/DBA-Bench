@@ -31,7 +31,9 @@ CONTEXTS = []
 
 
 class FakeEvaluator:
-    def __init__(self, env):
+    diagnosis_applicable = True
+
+    def __init__(self, env, *, diagnosis_matcher):
         self.env = env
 
     def capture_safety_baseline(self, case_run):

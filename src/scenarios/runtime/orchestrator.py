@@ -5,15 +5,14 @@ import time
 import uuid
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional
 
 from src.agent_language import agent_text
 from src.agents.prompt_manager import PromptManager
 from src.execution.deployments.tidb_support import lightning_decoy_job_id
 from src.protocols.report import parse_submission_report
-from src.scenarios.evaluation.diagnosis import ExactDiagnosisMatcher, SemanticDiagnosisMatcher
-from src.scenarios.evaluation.semantic import OpenAISemanticDiagnosisJudge
+from src.scenarios.evaluation.config import DiagnosisEvaluationConfig
 from src.workloads.specs import BackgroundWorkloadStartPhase
 from src.scenarios.base import CaseRun, InjectionRecord, InjectionState
 from src.scenarios.runtime.env_gateway import EnvGateway
@@ -413,54 +412,20 @@ def normalize_submission_report(submission: Mapping[str, Any]) -> Any:
 
 
 @dataclass
-class OrchestratorRunConfig:
+class OrchestratorRunConfig(DiagnosisEvaluationConfig):
     fault_snapshot_mode: str = "auto"
     fault_snapshot_name: Optional[str] = None
     runtime_warmup_seconds: Optional[float] = None
     history_seed: Optional[int] = None
-    diagnosis_match_mode: str = field(
-        default_factory=lambda: os.environ.get("AIOPS_DP_MATCH_MODE", "exact")
-    )
-    diagnosis_semantic_model: str = field(
-        default_factory=lambda: os.environ.get(
-            "AIOPS_DP_SEMANTIC_MODEL",
-            "Qwen/Qwen3-4B-Instruct-2507",
-        )
-    )
-    diagnosis_semantic_config_path: str = field(
-        default_factory=lambda: os.environ.get(
-            "AIOPS_DP_SEMANTIC_CONFIG",
-            "config/llm_config.json",
-        )
-    )
 
     def __post_init__(self):
+        super().__post_init__()
         if self.fault_snapshot_mode not in {"auto", "off", "save", "use"}:
             raise ValueError(
                 f"Unsupported fault snapshot mode: {self.fault_snapshot_mode!r}"
             )
-        if self.diagnosis_match_mode not in {"exact", "semantic"}:
-            raise ValueError(
-                f"Unsupported diagnosis match mode: {self.diagnosis_match_mode!r}; "
-                "expected='exact' or 'semantic'"
-            )
-        if not self.diagnosis_semantic_model.strip():
-            raise ValueError("diagnosis_semantic_model must be non-empty")
         if self.history_seed is not None and not isinstance(self.history_seed, int):
             raise TypeError(f"history_seed must be an integer when provided: history_seed={self.history_seed!r}")
-
-    def build_diagnosis_matcher(self):
-        if self.diagnosis_match_mode == "exact":
-            return ExactDiagnosisMatcher()
-        if self.diagnosis_match_mode == "semantic":
-            judge = OpenAISemanticDiagnosisJudge.from_config(
-                self.diagnosis_semantic_config_path,
-                self.diagnosis_semantic_model,
-            )
-            return SemanticDiagnosisMatcher(judge)
-        raise AssertionError(
-            f"unreachable diagnosis_match_mode={self.diagnosis_match_mode!r}"
-        )
 
     def mark_snapshot_saved(self, snapshot_name: str) -> None:
         self.fault_snapshot_mode = "use"
@@ -485,13 +450,11 @@ class Orchestrator:
         self.scenario = scenario
         self.case = case
         self.run_config = run_config or OrchestratorRunConfig()
-        if self.run_config.diagnosis_match_mode == "exact":
-            self.evaluator = case.evaluator(env)
-        else:
-            self.evaluator = case.evaluator(
-                env,
-                diagnosis_matcher=self.run_config.build_diagnosis_matcher(),
-            )
+        self.evaluator = case.evaluator(
+            env, diagnosis_matcher=self.run_config.build_diagnosis_matcher(
+                applicable=case.evaluator.diagnosis_applicable,
+            ),
+        )
         self.agent = agent
         required_tool_profile = getattr(agent, "required_tool_profile", None)
         if required_tool_profile is not None:

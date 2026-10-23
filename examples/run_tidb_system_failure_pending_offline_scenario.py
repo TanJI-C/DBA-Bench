@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb.system_failure.pending_offline import (
     SF07_GLOBAL_SCOPE_TABLE,
@@ -452,19 +453,7 @@ def main():
     parser.add_argument("--max-turns", type=int, default=96)
     parser.add_argument("--port", type=int, default=4500)
     parser.add_argument("--container-name", default="tidb-sf07-online-unsafe-recovery")
-    parser.add_argument(
-        "--diagnosis-match-mode",
-        choices=("exact", "semantic"),
-        default=os.environ.get("AIOPS_DP_MATCH_MODE", "exact"),
-    )
-    parser.add_argument(
-        "--diagnosis-semantic-model",
-        default=os.environ.get("AIOPS_DP_SEMANTIC_MODEL"),
-    )
-    parser.add_argument(
-        "--diagnosis-semantic-config-path",
-        default=os.environ.get("AIOPS_DP_SEMANTIC_CONFIG"),
-    )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = SCENARIO.get_case(args.case)
@@ -490,8 +479,8 @@ def main():
         max_turns=args.max_turns,
         run_config=OrchestratorRunConfig(
             diagnosis_match_mode=args.diagnosis_match_mode,
-            diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
-            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path or args.config_path,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock" and (result["DiagnosisPass"], result["OutcomePass"], result["SafePass"]) != (True, True, True):

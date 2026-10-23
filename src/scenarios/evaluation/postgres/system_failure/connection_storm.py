@@ -126,7 +126,7 @@ class PgSystemFailureConnectionStormForCheckoutPoolLeakSimpleEvaluatorCase(Syste
         _healthy_sessions_preserved_verifier(),
     )
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         report = context.report
         expected = {item.condition_id: item for item in _SIMPLE_CONNECTION_DP}
         matched = set()

@@ -302,7 +302,10 @@ def test_exporter_records_model_provenance(tmp_path):
 def test_orchestrator_uses_experiment_run_id_for_case_run(monkeypatch):
     monkeypatch.setenv("AIOPS_RUN_ID", "experiment-run-1")
 
-    evaluator = type("Evaluator", (), {"__init__": lambda self, env: None})
+    evaluator = type("Evaluator", (), {
+        "diagnosis_applicable": True,
+        "__init__": lambda self, env, *, diagnosis_matcher: None,
+    })
 
     orchestrator = Orchestrator(
         env=object(),

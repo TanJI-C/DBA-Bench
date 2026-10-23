@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from .backend.postgres.backend import PostgresPersistentScenarioBackend
     from .backend.tidb.assembly import TiDBPersistentScenarioBackend
 
+from src.scenarios.evaluation.config import DiagnosisEvaluationConfig
+
 from .evaluation import PersistentScenarioEvaluator
 from .model.loader import load_persistent_scenario
 from .model.spec import PersistentScenarioSpec
@@ -53,8 +55,10 @@ def build_tidb_backend(spec: "PersistentScenarioSpec") -> "TiDBPersistentScenari
     return build_assembly_tidb_backend(spec, environment_provider=provider)
 
 
-def build_persistent_scenario_evaluator() -> PersistentScenarioEvaluator:
-    return PersistentScenarioEvaluator()
+def build_persistent_scenario_evaluator(
+    diagnosis_config: DiagnosisEvaluationConfig | None = None,
+) -> PersistentScenarioEvaluator:
+    return PersistentScenarioEvaluator(diagnosis_config=diagnosis_config)
 
 
 def build_real_clock() -> Clock:
@@ -76,12 +80,13 @@ def build_persistent_scenario_engine(
     evaluation_mode: str = "persistent_scenario",
     gate_name: str | None = None,
     trusted_checkpoint_observer=None,
+    diagnosis_config: DiagnosisEvaluationConfig | None = None,
 ) -> PersistentScenarioEngine:
     return PersistentScenarioEngine(
         spec,
         backend,
         agent_factory,
-        evaluation_provider=build_persistent_scenario_evaluator(),
+        evaluation_provider=build_persistent_scenario_evaluator(diagnosis_config),
         run_id=run_id,
         port=port,
         clock=clock,

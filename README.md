@@ -31,7 +31,7 @@ Most agent benchmarks grade a final answer. Database operations are graded by th
 and DBA-Bench exploits that end to end:
 
 - **Full fault lifecycle** — every case runs through five phases: fault injection → detection → diagnosis → remediation → recovery, with per-phase evidence in the trace.
-- **DP / OP / SP evaluation contract** — Diagnosis Point, Operation Point, and Safety Point are declared per case, so scoring is a contract, not a vibe. Semantic judgment by an LLM judge is supported but never required.
+- **DP / OP / SP evaluation contract** — Diagnosis Point, Operation Point, and Safety Point are declared per case, so scoring is a contract, not a vibe. Diagnosis Pass defaults to semantic judgment with a local or external model from `llm_config.json`; exact matching is available explicitly. See the [semantic DP guide](docs/guides/evaluation/semantic-diagnosis-matching.guide.md).
 - **Calibrated difficulty** — cases ship as Easy/Hard pairs with recorded model evidence, not a single "can it fix it" binary.
 - **Persistent long-horizon episodes** — asynchronous, long-running operations tasks with monotonic event arrival, fresh alert/inspection sessions, checkpoints, and reverse-order capability cleanup.
 - **Business-grounded ground truth** — outcome checks compare real business-query result snapshots against expected values, not proxy metrics.

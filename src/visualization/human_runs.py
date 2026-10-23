@@ -53,7 +53,7 @@ class HumanRuns:
             experiment_id = 'human-' + uuid4().hex[:12]
             runtime = {'concurrency': 1, 'timeout_seconds': 14400,
                        'port_base': int(body['port_base']), 'container_prefix': experiment_id,
-                       'fault_snapshot': 'off', 'diagnosis_match_mode': 'exact'}
+                       'fault_snapshot': 'off'}
             if r.system.value == 'postgresql':
                 runtime['isolation'] = {'numa_policy': 'separate'}
                 cpuset_cpus = body['cpuset_cpus'].strip()

@@ -11,6 +11,7 @@ from src.agents.factory import build_experiment_agent
 from src.protocols.report import StructuredReport
 from src.scenarios.tidb import TidbQueryPerfSetAutocommitStormScenario
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -260,7 +261,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=4700)
     parser.add_argument("--container-name", default="tidb-set-autocommit-v3")
     parser.add_argument("--fault-snapshot-mode", choices=("auto", "off", "save", "use"), default="off")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
@@ -315,6 +316,8 @@ def main() -> None:
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode=args.fault_snapshot_mode,
             diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if (

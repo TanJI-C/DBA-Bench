@@ -257,11 +257,6 @@ def build_scenario_command(
                 "--diagnosis-semantic-config",
                 manifest.runtime.llm_config,
             ])
-    elif manifest.runtime.diagnosis_match_mode != "exact":
-        raise ValueError(
-            f"Scenario script {spec.script} must expose --diagnosis-match-mode for "
-            f"diagnosis_match_mode={manifest.runtime.diagnosis_match_mode!r}"
-        )
     if "--warm-start-timeout" in options:
         command.extend(["--warm-start-timeout", str(manifest.runtime.tidb_warm_start_timeout_sec)])
     return command

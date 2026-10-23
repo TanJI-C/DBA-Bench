@@ -39,6 +39,12 @@ internal event_id list or a reply to every injected event. An explanation may co
 causes and their interactions, must cite real observable evidence, and DP must not be back-derived
 from remediation actions.
 
+Declared diagnosis contracts default to Semantic DP using a local or external judge
+selected from `llm_config.json`. Completed mailbox reports (diagnosis plus summary)
+are the judge input. Explicit `diagnosis_match_mode="exact"` selects deterministic
+alias matching; an empty diagnosis contract needs no judge request. See the
+[semantic DP guide](../../guides/evaluation/semantic-diagnosis-matching.guide.md).
+
 An Event is an external disturbance and business change, not a question waiting to be answered.
 EventResults store applied/prevented, observations, and correlated impact, and do not enter an
 all-event conjunction. Alert closure, mailbox completion rate, and the number of events handled do

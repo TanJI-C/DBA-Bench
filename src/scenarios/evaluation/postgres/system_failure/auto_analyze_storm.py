@@ -155,7 +155,7 @@ class PgSystemFailureAutoAnalyzeStormForSalesTablesAutoAnalyzeStormEvaluatorCase
         SQL_PROBE,
     )
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in _HARDENED_ANALYZE_DP}
         matched = set()
         extras = set()
@@ -292,7 +292,7 @@ class PgSystemFailureAutoAnalyzeStormForStoreSalesAutoAnalyzeStormSimpleEvaluato
         SQL_PROBE,
     )
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in _SIMPLE_ANALYZE_DP}
         matched = set()
         extras = set()

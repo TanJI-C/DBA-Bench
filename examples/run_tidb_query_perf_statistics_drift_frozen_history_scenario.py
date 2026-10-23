@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbQueryPerfStatisticsDriftFrozenHistoryScenario
 from src.scenarios.tidb.query_perf.statistics_drift_frozen_history import BENIGN_COMPACTION_TABLE
@@ -137,13 +138,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=26920)
     parser.add_argument("--container-name", default="tidb-mf-qp02-statistics-drift")
     parser.add_argument("--seed", type=int, required=True)
-    parser.add_argument(
-        "--diagnosis-match-mode",
-        choices=("exact", "semantic"),
-        default=os.environ.get("AIOPS_DP_MATCH_MODE", "exact"),
-    )
-    parser.add_argument("--diagnosis-semantic-model")
-    parser.add_argument("--diagnosis-semantic-config")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = SCENARIO.get_case(args.case)
@@ -174,10 +169,8 @@ def main() -> None:
     )
     if args.mode == "mock":
         agent = StatisticsDriftFrozenHistoryMockAgent(case)
-        diagnosis_match_mode = "exact"
     elif args.mode == "zero":
         agent = StatisticsDriftFrozenHistoryZeroAgent()
-        diagnosis_match_mode = "exact"
     else:
         if not args.model:
             raise ValueError("--model is required when --mode=llm")
@@ -187,7 +180,6 @@ def main() -> None:
             use_native_tools=True,
             max_output_tokens=args.max_output_tokens,
         )
-        diagnosis_match_mode = args.diagnosis_match_mode
 
     result = Orchestrator(
         env,
@@ -198,17 +190,9 @@ def main() -> None:
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode="off",
             history_seed=args.seed,
-            diagnosis_match_mode=diagnosis_match_mode,
-            diagnosis_semantic_model=(
-                args.diagnosis_semantic_model
-                or os.environ.get("AIOPS_DP_SEMANTIC_MODEL")
-                or args.model
-            ),
-            diagnosis_semantic_config_path=(
-                args.diagnosis_semantic_config
-                or os.environ.get("AIOPS_DP_SEMANTIC_CONFIG")
-                or args.config_path
-            ),
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock":

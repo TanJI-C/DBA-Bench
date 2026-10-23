@@ -679,9 +679,7 @@ class _PgQueryPerfMissingIndexEvaluator(QueryPerfEvaluator):
         ),
     )
 
-    def DiagnosisPassFunc(self, context: EvaluationContext) -> dict[str, object]:
-        if self.diagnosis_matcher.mode == "semantic":
-            return super().DiagnosisPassFunc(context)
+    def _match_exact_diagnosis(self, context: EvaluationContext) -> dict[str, object]:
         return _DIAGNOSIS_MATCHER.match(
             context.report,
             applicable=self.diagnosis_applicable,

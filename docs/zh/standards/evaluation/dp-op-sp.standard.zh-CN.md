@@ -80,9 +80,9 @@ DP 只读最终结构化报告的 `diagnosis`。不能从 action history、工�
 
 DP 必须支持两条匹配路径：
 
-1. **关键字/精确路径**：默认运行路径。提交的 `type`、`factor`、`entity` 与可读 alias 做
+1. **关键字/精确路径**：通过 `diagnosis_match_mode="exact"` 显式选择。提交的 `type`、`factor`、`entity` 与可读 alias 做
    确定性匹配，适合 mock、回归测试和需要稳定复现的场景。
-2. **语义路径**：显式选择 semantic matcher，由语义 judge 判断提交内容是否表达同一根因。
+2. **语义路径**：默认运行路径。通过 `llm_config.json` 选择本地或外部语义 judge，判断提交内容是否表达同一根因。
    语义判断失败、配置缺失、响应格式错误或条件索引非法时直接报错，不静默退回精确匹配。
 
 两条路径必须共用同一份 `ExpectedCondition.aliases` 和 `contradictions`。不要另造

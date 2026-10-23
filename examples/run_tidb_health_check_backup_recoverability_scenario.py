@@ -9,6 +9,7 @@ from src.agents.agent import MockLLMAgent
 from src.scenarios.tidb import TidbHealthCheckBackupRecoverabilityScenario
 from src.agents.factory import build_experiment_agent
 from src.scenarios.tidb.health_check.runtime.backup_recoverability import BackupRecoverabilityEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -235,9 +236,7 @@ def main() -> None:
     parser.add_argument("--max-output-tokens", type=int, default=None)
     parser.add_argument("--port", type=int, default=28660)
     parser.add_argument("--container-name", default="aiopsbench-tidb-hc04-repairable")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
-    parser.add_argument("--diagnosis-semantic-model")
-    parser.add_argument("--diagnosis-semantic-config-path")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
@@ -256,7 +255,6 @@ def main() -> None:
             use_native_tools=True,
             max_output_tokens=args.max_output_tokens,
         )
-    semantic_model = args.diagnosis_semantic_model or OrchestratorRunConfig().diagnosis_semantic_model
     result = Orchestrator(
         env,
         scenario,
@@ -265,8 +263,8 @@ def main() -> None:
         max_turns=args.max_turns,
         run_config=OrchestratorRunConfig(
             diagnosis_match_mode=args.diagnosis_match_mode,
-            diagnosis_semantic_model=semantic_model,
-            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path or args.config_path,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock" and (

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbBusinessChangeTimezoneDdlBackpressureFrozenHistoryScenario
 
@@ -237,9 +238,7 @@ def main() -> None:
     parser.add_argument("--max-output-tokens", type=int)
     parser.add_argument("--port", type=int, default=4000)
     parser.add_argument("--container-name", default="tidb-mf-timezone-ddl")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
-    parser.add_argument("--diagnosis-semantic-model", default=None, help="Diagnosis judge model; defaults to --model")
-    parser.add_argument("--diagnosis-semantic-config-path", default="config/llm_config.json")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = SCENARIO.get_case(args.case)
@@ -269,7 +268,7 @@ def main() -> None:
             fault_snapshot_mode="off",
             history_seed=args.seed,
             diagnosis_match_mode=args.diagnosis_match_mode,
-            diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
             diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
