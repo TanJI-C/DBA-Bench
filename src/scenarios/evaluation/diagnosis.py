@@ -12,6 +12,7 @@ from src.execution.history.records import (
 from src.scenarios.evaluation.semantic import (
     SemanticDiagnosisJudge,
     SemanticJudgment,
+    validate_semantic_judgment,
 )
 from src.protocols.report import DiagnosisCondition, StructuredReport
 
@@ -536,23 +537,7 @@ class SemanticDiagnosisMatcher:
     ) -> dict:
         submitted = report.diagnosis.conditions
         judgments = {item.condition_id: item for item in judgment.conditions}
-        expected_ids = {item.condition_id for item in expected}
-        if set(judgments) != expected_ids:
-            raise ValueError(
-                "semantic diagnosis judgment must contain every expected condition exactly once: "
-                f"expected={sorted(expected_ids)!r}, actual={sorted(judgments)!r}"
-            )
-        invalid_indexes = sorted({
-            index
-            for item in judgment.conditions
-            for index in (*item.entailed_by, *item.contradicted_by)
-            if index < 0 or index >= len(submitted)
-        })
-        if invalid_indexes:
-            raise ValueError(
-                "semantic diagnosis judgment referenced invalid submitted condition indexes: "
-                f"indexes={invalid_indexes!r}, submitted_count={len(submitted)}"
-            )
+        validate_semantic_judgment(expected, len(submitted), judgment)
         matched = [item.condition_id for item in expected if judgments[item.condition_id].entailed_by]
         missing = [item.condition_id for item in expected if item.condition_id not in matched]
         missing_evidence = [

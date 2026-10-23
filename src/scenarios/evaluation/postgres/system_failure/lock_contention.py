@@ -551,7 +551,7 @@ class PgSystemFailureLockContentionForCustomerRowLockQueueEvaluatorCase(SystemFa
     )
     final_state_safety_verifiers = (_ProtectedChainsPreservedVerifier(),)
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         # 语义等价 matcher：严格的 exact 匹配会拒绝语义等价的完整诊断
         # （措辞未命中 exact 别名时 4 条件全 miss）。本 matcher 保留全部原别名的短语
         # 包含匹配，并叠加语义标记；4 个条件 id 与 critical 语义不变。
@@ -734,5 +734,5 @@ class PgSystemFailureLockContentionForCustomerProfileLockQueueSimpleEvaluatorCas
         _REPORTING_DECOY_PRESERVED,
     )
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         return _simple_lock_diagnosis(context.report)

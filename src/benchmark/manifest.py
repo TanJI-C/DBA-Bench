@@ -357,7 +357,7 @@ def load_manifest(path: str | Path) -> ExperimentManifest:
             str(runtime_data["postgres_storage_root"])
             if runtime_data.get("postgres_storage_root") is not None else None
         ),
-        diagnosis_match_mode=str(runtime_data.get("diagnosis_match_mode", "exact")),
+        diagnosis_match_mode=str(runtime_data.get("diagnosis_match_mode", "semantic")),
         diagnosis_semantic_model=str(
             runtime_data.get("diagnosis_semantic_model", "Qwen/Qwen3-4B-Instruct-2507")
         ),

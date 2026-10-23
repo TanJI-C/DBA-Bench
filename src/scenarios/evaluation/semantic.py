@@ -93,58 +93,12 @@ class OpenAISemanticDiagnosisJudge:
             max_retries=max_retries,
         )
 
-    @classmethod
-    def from_config(
-        cls,
-        config_path: str,
-        model: str,
-    ) -> "OpenAISemanticDiagnosisJudge":
-        path = Path(config_path)
-        config = json.loads(path.read_text(encoding="utf-8"))
-        if model not in config:
-            raise KeyError(
-                f"semantic diagnosis model {model!r} is not configured in {str(path)!r}: "
-                f"available={sorted(config)!r}"
-            )
-        model_config = config[model]
-        provider = model_config.get("provider", "openai").casefold()
-        if provider != "openai":
-            raise ValueError(
-                "semantic diagnosis judge requires an OpenAI-compatible endpoint: "
-                f"model={model!r}, provider={provider!r}"
-            )
-        return cls(
-            url=model_config["url"],
-            api_key=model_config["api_key"],
-            model=model,
-            **model_config.get("semantic_judge", {}),
-        )
-
     def judge(
         self,
         expected: tuple["ExpectedCondition", ...],
         submitted: tuple[DiagnosisCondition, ...],
     ) -> SemanticJudgment:
-        request = {
-            "expected_conditions": [
-                {
-                    "condition_id": item.condition_id,
-                    "acceptable_meanings": sorted(item.aliases),
-                    "contradictory_meanings": sorted(item.contradictions),
-                }
-                for item in expected
-            ],
-            "submitted_conditions": [
-                {
-                    "index": index,
-                    "type": item.type,
-                    "factor": item.factor,
-                    "entity": item.entity,
-                    "evidence": list(item.evidence),
-                }
-                for index, item in enumerate(submitted)
-            ],
-        }
+        request = _semantic_request(expected, submitted)
         options = {}
         if self.response_format is not None:
             options["response_format"] = dict(self.response_format)
@@ -188,6 +142,111 @@ class OpenAISemanticDiagnosisJudge:
                 "input_tokens": int(usage.prompt_tokens),
                 "output_tokens": int(usage.completion_tokens),
             },
+        )
+
+
+def _semantic_request(expected, submitted) -> dict:
+    return {
+        "expected_conditions": [
+            {
+                "condition_id": item.condition_id,
+                "acceptable_meanings": sorted(item.aliases),
+                "contradictory_meanings": sorted(item.contradictions),
+            }
+            for item in expected
+        ],
+        "submitted_conditions": [
+            {
+                "index": index,
+                "type": item.type,
+                "factor": item.factor,
+                "entity": item.entity,
+                "evidence": list(item.evidence),
+            }
+            for index, item in enumerate(submitted)
+        ],
+    }
+
+
+class AnthropicSemanticDiagnosisJudge:
+    def __init__(
+        self, *, url: str, api_key: str, model: str,
+        timeout_seconds: float = 120.0, max_retries: int = 2, max_tokens: int = 2048,
+    ):
+        from anthropic import Anthropic
+
+        self.model = model
+        self.max_tokens = max_tokens
+        self.client = Anthropic(
+            api_key=api_key, base_url=url.rstrip("/").removesuffix("/messages").removesuffix("/v1"),
+            timeout=timeout_seconds, max_retries=max_retries,
+        )
+
+    def judge(self, expected, submitted) -> SemanticJudgment:
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=SEMANTIC_JUDGE_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": json.dumps(_semantic_request(expected, submitted), ensure_ascii=False)}],
+        )
+        if response.stop_reason == "max_tokens":
+            raise ValueError(
+                "semantic diagnosis judge exhausted its output-token budget: "
+                f"model={self.model!r}, max_tokens={self.max_tokens}, "
+                f"stop_reason={response.stop_reason!r}, usage={response.usage!r}"
+            )
+        content = "".join(block.text for block in response.content if block.type == "text")
+        if not content.strip():
+            raise ValueError(
+                "semantic diagnosis judge returned empty content: "
+                f"model={self.model!r}, stop_reason={response.stop_reason!r}, usage={response.usage!r}"
+            )
+        usage = response.usage
+        if usage is None:
+            raise ValueError(f"semantic diagnosis judge response has no usage: model={self.model!r}")
+        return SemanticJudgment(
+            model=self.model, conditions=_parse_judgments(json.loads(content)),
+            usage={"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
+        )
+
+
+def semantic_judge_from_config(config_path: str, model: str) -> SemanticDiagnosisJudge:
+    path = Path(config_path)
+    config = json.loads(path.read_text(encoding="utf-8"))
+    if model not in config:
+        raise KeyError(
+            f"semantic diagnosis model {model!r} is not configured in {str(path)!r}: "
+            f"available={sorted(config)!r}"
+        )
+    model_config = config[model]
+    provider = model_config.get("provider", "openai").casefold()
+    judges = {"openai": OpenAISemanticDiagnosisJudge, "anthropic": AnthropicSemanticDiagnosisJudge}
+    if provider not in judges:
+        raise ValueError(f"Unsupported semantic diagnosis provider: model={model!r}, provider={provider!r}")
+    return judges[provider](
+        url=model_config["url"], api_key=model_config["api_key"], model=model,
+        **model_config.get("semantic_judge", {}),
+    )
+
+
+def validate_semantic_judgment(expected, submitted_count: int, judgment: SemanticJudgment) -> None:
+    judgments = {item.condition_id: item for item in judgment.conditions}
+    expected_ids = {item.condition_id for item in expected}
+    if set(judgments) != expected_ids or len(judgments) != len(judgment.conditions):
+        raise ValueError(
+            "semantic diagnosis judgment must contain every expected condition exactly once: "
+            f"expected={sorted(expected_ids)!r}, actual={[item.condition_id for item in judgment.conditions]!r}"
+        )
+    invalid_indexes = sorted({
+        index
+        for item in judgment.conditions
+        for index in (*item.entailed_by, *item.contradicted_by)
+        if index < 0 or index >= submitted_count
+    })
+    if invalid_indexes:
+        raise ValueError(
+            "semantic diagnosis judgment referenced invalid submitted condition indexes: "
+            f"indexes={invalid_indexes!r}, submitted_count={submitted_count}"
         )
 
 

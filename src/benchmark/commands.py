@@ -19,7 +19,13 @@ def script_options(script_path: Path) -> set[str]:
     tree = ast.parse(script_path.read_text(encoding="utf-8"), filename=str(script_path))
     options = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id == "add_diagnosis_arguments":
+            from src.scenarios.evaluation import config
+
+            options.update(script_options(Path(config.__file__)))
+        if not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr == "add_argument":
             options.update(

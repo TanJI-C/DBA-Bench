@@ -667,6 +667,9 @@ class ExperimentRunner:
             env.pop(key, None)
         env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
         env.update({
+            "AIOPS_DP_MATCH_MODE": self.manifest.runtime.diagnosis_match_mode,
+            "AIOPS_DP_SEMANTIC_MODEL": self.manifest.runtime.diagnosis_semantic_model,
+            "AIOPS_DP_SEMANTIC_CONFIG": self.manifest.runtime.llm_config,
             "AIOPS_EXPERIMENT_ID": spec.experiment_id,
             "AIOPS_RUN_ID": spec.run_id,
             "AIOPS_AGENT_ID": spec.agent.id,

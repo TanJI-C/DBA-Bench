@@ -119,6 +119,9 @@ def test_persistent_scenario_command_uses_v2_cli_and_manifest_runtime(tmp_path):
     assert command[command.index("--max-turns") + 1] == "7"
     assert command[command.index("--run-mode") + 1] == "development"
     assert command[command.index("--time-scale") + 1] == "1.0"
+    assert command[command.index("--diagnosis-match-mode") + 1] == "semantic"
+    assert command[command.index("--diagnosis-semantic-model") + 1] == manifest.runtime.diagnosis_semantic_model
+    assert command[command.index("--diagnosis-semantic-config") + 1] == manifest.runtime.llm_config
 
 
 def test_persistent_scenario_plan_carries_declared_node_resources(tmp_path):

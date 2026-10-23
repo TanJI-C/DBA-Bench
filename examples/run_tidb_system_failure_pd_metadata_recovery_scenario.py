@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbSystemFailurePdTotalMetadataLossRecoveryScenario
 from src.scenarios.tidb.system_failure.pd_total_metadata_loss_recovery import (
@@ -368,14 +369,7 @@ def main() -> None:
             "不会切换 source、collection 或 index。"
         ),
     )
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default=None)
-    parser.add_argument("--diagnosis-semantic-model", default=None, help="Diagnosis judge model; defaults to --model")
-    parser.add_argument(
-        "--diagnosis-semantic-config",
-        "--diagnosis-semantic-config-path",
-        dest="diagnosis_semantic_config_path",
-        default=None,
-    )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     knowledge_condition = os.environ.get("AIOPS_K03_KNOWLEDGE_CONDITION", args.knowledge_condition)
     if knowledge_condition not in {"unified", "none"}:
@@ -400,7 +394,6 @@ def main() -> None:
             config_path=args.llm_config,
             use_native_tools=True,
         )
-    diagnosis_match_mode = args.diagnosis_match_mode or ("semantic" if args.mode == "llm" else "exact")
     result = Orchestrator(
         env,
         SCENARIO,
@@ -409,9 +402,9 @@ def main() -> None:
         max_turns=args.max_turns,
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode="off",
-            diagnosis_match_mode=diagnosis_match_mode,
-            diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
-            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path or args.llm_config,
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock":

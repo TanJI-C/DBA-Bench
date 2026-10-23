@@ -10,6 +10,7 @@ from src.agents.agent import MockLLMAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
 from src.execution.history.metrics import format_utc_timestamp
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb.resource_governance.ru_budget_calibration_frozen_history import (
     TidbResourceGovernanceRuBudgetCalibrationFrozenHistoryScenario,
@@ -147,6 +148,7 @@ def main() -> None:
     parser.add_argument("--storage-root")
     parser.add_argument("--cold-start-timeout", type=int, default=1800)
     parser.add_argument("--warm-start-timeout", type=int, default=300)
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     if (args.storage_key is None) != (args.storage_root is None):
@@ -180,7 +182,9 @@ def main() -> None:
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode="off",
             history_seed=args.seed,
-            diagnosis_match_mode="exact",
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     if args.mode == "mock":

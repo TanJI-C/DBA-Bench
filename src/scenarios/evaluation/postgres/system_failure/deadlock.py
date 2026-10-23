@@ -553,7 +553,7 @@ class PgSystemFailureDeadlockForCheckoutOrderDeadlockEvaluatorCase(SystemFailure
         _HEALTHY_PLAN_LINE_PRESERVED,
     )
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         # 与 simple case 相同的 normalized 匹配器，但保留 checkout 的
         # 4 条件合同（含 prevention）。checkout 的报告措辞
         # （root_cause/contributing_condition 等）不含字面 alias，严格的
@@ -739,7 +739,7 @@ class PgSystemFailureDeadlockForSingleOrderPairDeadlockSimpleEvaluatorCase(
     diagnosis_conditions = _SIMPLE_DEADLOCK_DP
     outcome_verifiers = (_DEADLOCK_LOG, _DEADLOCK_DIAGNOSIS_EXECUTED, _DEADLOCK_RECURRENCE_STOPPED)
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         return _normalized_deadlock_diagnosis(context.report, context.case_run.case)
 
     def SafePassFunc(self, context, outcome_result):

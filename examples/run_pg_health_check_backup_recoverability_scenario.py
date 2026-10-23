@@ -13,6 +13,7 @@ from src.agents.factory import build_experiment_agent
 from src.protocols.report import EMPTY_REPORT
 from src.scenarios.postgres import PgHealthCheckBackupRecoverabilityScenario
 from src.execution.environments.postgres import PGEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -287,21 +288,19 @@ def main():
     parser.add_argument("--max-turns", type=int, default=20)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
     parser.add_argument("--fault-snapshot-name")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
-    parser.add_argument("--diagnosis-semantic-model")
-    parser.add_argument("--diagnosis-semantic-config")
     scenario_definition = PgHealthCheckBackupRecoverabilityScenario()
     parser.add_argument(
         "--case", required=True,
         choices=[case.case_id for case in scenario_definition.cases],
     )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode=args.fault_snapshot_mode,
         fault_snapshot_name=args.fault_snapshot_name,
         diagnosis_match_mode=args.diagnosis_match_mode,
-        diagnosis_semantic_model=args.diagnosis_semantic_model or OrchestratorRunConfig().diagnosis_semantic_model,
-        diagnosis_semantic_config_path=args.diagnosis_semantic_config or args.config_path,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     case = scenario_definition.get_case(args.case)
 

@@ -29,6 +29,11 @@ DiagnosisPass = 单独声明的事故解释合同；默认不要求注入事件�
 
 保持 `valid` 和独立 DP/OP/SP；没有 ScenarioPass 或加权总分。没有诊断交付要求时 DP=None（N/A），不是默认失败；需要诊断时按业务事故因果解释验收，不要求内部 event_id 列表或每个注入事件都收到回复。解释可覆盖多个根因和相互作用，必须引用真实可见证据，不能由修复动作反推 DP。
 
+已声明的诊断合同默认使用 Semantic DP，由 `llm_config.json` 选择本地或外部 judge。
+输入为已完成 mailbox 报告的 diagnosis 加 summary。显式设置 `diagnosis_match_mode="exact"`
+可使用确定性 alias 匹配；空诊断合同不需要 judge 请求。详见
+[语义 DP 指南](../../guides/evaluation/semantic-diagnosis-matching.guide.zh-CN.md)。
+
 Event 是外部扰动和业务变化，不是待答题。EventResults 保存 applied/prevented、观测和关联影响，不进入全事件合取。告警关闭、mailbox 完成率、事件处理次数不决定 OP。
 
 ## 3. 按业务负载定义服务承诺

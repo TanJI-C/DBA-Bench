@@ -12,6 +12,7 @@ from src.protocols.report import EMPTY_REPORT
 from src.scenarios.postgres import PgQueryPerfStaleStatisticsScenario
 from src.execution.deployments.postgres import PGDockerDeployment
 from src.execution.environments.postgres import PGEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.workloads.tpcds import TPCDSXWorkload
 
@@ -567,34 +568,19 @@ def main():
                         help="PGEnv tool_profile forwarded to --agent dbot. Default: general_knowledge.")
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
     parser.add_argument("--fault-snapshot-name")
-    parser.add_argument(
-        "--diagnosis-match-mode",
-        choices=["exact", "semantic"],
-        default="exact",
-        help="DP matching strategy: exact alias matching or semantic judge.",
-    )
-    parser.add_argument(
-        "--diagnosis-semantic-model",
-        default=None,
-        help="Judge model key in --diagnosis-semantic-config used by semantic DP matching; defaults to --model.",
-    )
-    parser.add_argument(
-        "--diagnosis-semantic-config",
-        default="config/llm_config.json",
-        help="LLM config file that must contain --diagnosis-semantic-model.",
-    )
     scenario_definition = PgQueryPerfStaleStatisticsScenario()
     parser.add_argument(
         "--case", required=True,
         choices=[case.case_id for case in scenario_definition.cases],
     )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode=args.fault_snapshot_mode,
         fault_snapshot_name=args.fault_snapshot_name,
         diagnosis_match_mode=args.diagnosis_match_mode,
-        diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
-        diagnosis_semantic_config_path=args.diagnosis_semantic_config,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
 
     if args.max_turns > 30:

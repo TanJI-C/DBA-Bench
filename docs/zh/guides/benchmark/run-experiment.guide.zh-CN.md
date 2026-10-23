@@ -53,6 +53,22 @@ TiDB QP 场景的 PD/TiKV 数据通过镜像组复用，仍按独立 Compose pro
 组进入隔离调度。完整配置见
 `experiments/pg_system_failure_parallel.example.yaml`。
 
+### 诊断 judge
+
+bounded 与 Persistent Scenario 的 Diagnosis Pass 默认使用 Semantic DP。
+`runtime.diagnosis_semantic_model` 从 `runtime.llm_config` 中选择 judge，独立于 `agents[].model`：
+
+```yaml
+runtime:
+  llm_config: config/llm_config.json
+  diagnosis_semantic_model: Qwen/Qwen3-4B-Instruct-2507
+```
+
+上述默认模型名对应示例配置中的本地服务。选择外部模型名即可调用其 API；
+设置 `runtime.diagnosis_match_mode: exact` 可进行无需模型服务的确定性评估。
+启动方式、provider 支持与请求参数见[语义 DP 指南](../evaluation/semantic-diagnosis-matching.guide.zh-CN.md)。
+manifest 的选择会覆盖子进程继承的 `AIOPS_DP_*` 配置。
+
 ### Agent 侧文本语言
 
 `runtime.agent_language` 可选 `zh`（默认）或 `en`：

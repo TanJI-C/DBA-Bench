@@ -5,42 +5,23 @@ status: canonical
 audience: [authoring, reviewer, maintainer]
 exposure: public
 scope: [shared, scenario, persistent-scenario]
-summary: Describes the exact and semantic DP matcher configuration, validation protocol, and non-fallback behavior.
+summary: Configures default Semantic Diagnosis Pass with local or external judges, explicit exact mode, and strict validation.
 source_of_truth: code
 related: [standard.evaluation.dp-op-sp]
 language: zh-CN
 ---
 
-# DP 语义匹配指南
+# Semantic Diagnosis Pass
 
-本文是 semantic matcher 的实现说明。DP 的总体设计、精确/语义两条路径共用的条件协议，以及
-DP 与 OP/SP 的边界，统一以 [DP、OP、SP 设计原则](../../../standards/evaluation/dp-op-sp.standard.md) 为准。
+bounded Scenario 和 Persistent Scenario 的 Diagnosis Pass 默认使用 `semantic`。
+通过 `llm_config.json` 中的模型名选择本地小模型或外部大模型；judge 与被测 Agent 的模型独立。
+提交格式及 OP/SP 合同保持原有语义，评估边界见
+[DP/OP/SP 标准](../../standards/evaluation/dp-op-sp.standard.zh-CN.md)。
 
-DP 默认使用 `exact` matcher，继续按场景 evaluator 声明的 alias 精确匹配。需要评估开放表达时，将 `OrchestratorRunConfig.diagnosis_match_mode` 设为 `semantic`；语义模式不改变 Agent 的提交 schema，也不把候选根因类别暴露给 Agent。
+## 选择 judge
 
-## 使用方式
-
-程序化运行时显式设置：
-
-```python
-run_config = OrchestratorRunConfig(
-    diagnosis_match_mode="semantic",
-    diagnosis_semantic_model="Qwen/Qwen3-4B-Instruct-2507",
-    diagnosis_semantic_config_path="config/llm_config.json",
-)
-```
-
-所有现有场景入口也可以通过环境变量切换，不需要逐个修改入口脚本：
-
-```bash
-export AIOPS_DP_MATCH_MODE=semantic
-export AIOPS_DP_SEMANTIC_MODEL=Qwen/Qwen3-4B-Instruct-2507
-export AIOPS_DP_SEMANTIC_CONFIG=config/llm_config.json
-conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.py \
-  --mode mock --case branch_order_distribution_shift
-```
-
-`AIOPS_DP_MATCH_MODE` 只能是 `exact` 或 `semantic`。未设置时为 `exact`。语义模式选择模型后，配置文件必须存在对应的 OpenAI-compatible 配置：
+将 `config/llm_config.example.json` 复制为 `config/llm_config.json`，配置所需的模型。
+本地与外部模型使用同一个选择入口：
 
 ```json
 {
@@ -48,25 +29,89 @@ conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.p
     "url": "http://127.0.0.1:8000/v1",
     "api_key": "local",
     "provider": "openai",
-    "semantic_judge": {
-      "max_tokens": 2048,
-      "response_format": null
-    }
+    "semantic_judge": {"max_tokens": 2048}
+  },
+  "your-external-judge": {
+    "url": "https://your-gateway.example/v1/chat/completions",
+    "api_key": "REPLACE_ME",
+    "provider": "openai",
+    "semantic_judge": {"max_tokens": 8192}
   }
 }
 ```
 
-不要把真实凭证提交到仓库。`url` 可以指向 vLLM 或其他兼容 `/chat/completions` 的服务。
+本地模式需要先启动 vLLM 等 OpenAI-compatible 服务，方法见下文。
+默认 judge 模型名为 `Qwen/Qwen3-4B-Instruct-2507`，必须与服务实际提供的模型名一致。
+如果服务使用本地 checkpoint 路径作为模型名，配置 key 也使用该路径。
+外部模式可直接选择配置文件中已有的模型。原生 Anthropic 接口使用
+`provider: anthropic`，URL 例如 `https://api.anthropic.com/v1/messages`；
+OpenAI-compatible 接口使用 `provider: openai`，也是 provider 的默认值。
+不要提交真实凭证。
 
-### Judge 请求设置
+所有场景入口都支持通过环境变量选择：
 
-可选的 `semantic_judge` 对象仅配置诊断 judge，独立于被评测 Agent：
+```bash
+export AIOPS_DP_SEMANTIC_MODEL=your-external-judge
+export AIOPS_DP_SEMANTIC_CONFIG=config/llm_config.json
+conda run -n aiops python examples/run_pg_query_perf_stale_statistics_scenario.py \
+  --mode llm --model your-agent-model --case branch_order_distribution_shift
+```
 
-- `max_tokens`：输出 token 预算，默认 `2048`。对推理模型，该预算还包含推理 token。可按需设置为 `8192` 或 `16384` 等值；服务上下文窗口必须容纳输入加上该预算。本地启动脚本默认上下文窗口只有 `4096`，使用更大预算前须相应提高 `--max-model-len`。
-- `response_format`：默认不随请求发送，配置为 `null` 时也不发送。服务支持 JSON mode 时，可显式设置为 `{"type": "json_object"}`。两种模式均保留提示词中的 JSON 要求和严格的 JSON 校验。
-- `timeout_seconds` 和 `max_retries`：OpenAI SDK 的请求超时与重试次数，默认分别为 `120.0` 和 `2`。
+提供诊断 CLI 参数的入口也可使用 `--diagnosis-semantic-model your-external-judge`
+和 `--diagnosis-semantic-config config/llm_config.json`，显式 CLI 参数优先于环境变量。
+不传 judge 模型时使用 judge 默认配置，不再复用 Agent 的 `--model`。
+`aiopsbench persistent-scenario run <definition.yaml>` 也支持这些参数。
 
-也可以直接向 `OpenAISemanticDiagnosisJudge(...)` 传入这些参数。不会自动改参数重试或退回精确匹配。收到 `finish_reason="length"` 时，即使内容是合法 JSON，也会在解析前拒绝；错误包含模型、配置的预算、结束原因和 token 用量。可增加预算或在模型服务端调整推理设置；更大的预算无法保证模型一定完成输出。
+bounded Scenario 的程序化调用：
+
+```python
+from src.scenarios.runtime.orchestrator import OrchestratorRunConfig
+
+run_config = OrchestratorRunConfig(
+    diagnosis_semantic_model="your-external-judge",
+    diagnosis_semantic_config_path="config/llm_config.json",
+)
+```
+
+Persistent evaluator 和 `build_persistent_scenario_engine` 接受
+`diagnosis_config=DiagnosisEvaluationConfig(...)`；该类定义在
+`src.scenarios.evaluation.config`，使用相同字段与默认值。
+
+## Benchmark manifest
+
+```yaml
+runtime:
+  llm_config: config/llm_config.json
+  diagnosis_match_mode: semantic
+  diagnosis_semantic_model: your-external-judge
+```
+
+省略最后两个字段时，默认使用本地 Qwen 模型的 Semantic DP。
+runner 将 manifest 的选择传给每个子进程，包括没有诊断 CLI 参数的脚本，
+并覆盖父进程继承的 `AIOPS_DP_*` 配置。bounded 和 persistent 目标均适用。
+被测 Agent 的模型仍由 `agents[].model` 选择。
+
+## 显式使用 exact
+
+确定性的 mock 或回归测试可在 manifest 中设置 `diagnosis_match_mode: exact`，
+直接运行时使用 `AIOPS_DP_MATCH_MODE=exact`，或在支持该参数的入口传入
+`--diagnosis-match-mode exact`。程序化运行可设置
+`OrchestratorRunConfig(diagnosis_match_mode="exact")`。
+exact 模式不需要 judge 模型或凭证。`mock`、`zero`、`llm` 等 Agent 模式不会隐式改变 DP 模式。
+
+## Judge 请求设置
+
+模型配置中的可选 `semantic_judge` 对象仅作用于 DP：
+
+- `max_tokens`：输出预算，默认 `2048`。推理 token 也可能占用该预算；按需增加，
+  并确保上下文容得下输入和输出。本地启动脚本默认上下文为 `4096`。
+- `timeout_seconds` 与 `max_retries`：SDK 请求超时和重试次数，两种 provider 默认均为 `120.0` 和 `2`。
+- `response_format`：仅 OpenAI-compatible 服务支持，默认或配置为 `null` 时不发送。
+  服务支持 JSON mode 时可设置 `{"type": "json_object"}`。
+
+截断响应（`finish_reason="length"` 或 `stop_reason="max_tokens"`）即使文本是合法 JSON 也会拒绝。
+配置缺失、不支持的 provider、认证失败、JSON 格式错误、缺失或重复条件 ID、非法报告索引均直接报错。
+发生失败时不会换请求参数或自动退回 exact。
 
 ## 启动小模型
 
@@ -105,16 +150,14 @@ conda run -n aiops python scripts/start_dp_semantic_model.py \
 
 ## 判定协议
 
-语义 judge 收到场景 evaluator 的隐藏 `ExpectedCondition` 和 Agent 提交的 `diagnosis.conditions`，对每个隐藏检查点返回：
+两种 provider SDK 使用相同的隐藏预期条件和提交报告内容。judge 为每个预期条件返回
+`entailed_by`、`contradicted_by` 与 `reason`。bounded Scenario 的索引指向提交的诊断条件；
+Persistent Scenario 的索引指向已完成的 mailbox 报告。Persistent 沿用结构化诊断加 summary 的
+报告范围，不从修复动作推断诊断。空的 persistent 诊断合同仍为 `DiagnosisPass=None`，不请求 judge。
 
-- `entailed_by`：支持该检查点的 submitted condition 下标；
-- `contradicted_by`：与该检查点矛盾的 submitted condition 下标；
-- `reason`：一句简短理由。
+Case 的确定性诊断归一化应实现于 `BaseEvaluator._match_exact_diagnosis`。
+两种模式共用的证据校验可覆盖 `DiagnosisPassFunc` 并先调用 `super()`，确保不绕过所选语义 matcher。
 
-judge 必须一次返回全部隐藏检查点。返回缺字段、重复 ID、非法下标、空内容或 API 错误都会直接抛错；不会退回 `exact` matcher。
-
-语义模式只替换 DP。OP 仍通过环境重新验证，SP 仍读取规范化 trace。
-
-## 当前限制
-
-本阶段只完成接口和离线契约测试；模型服务联调后还需要用同义、症状冒充根因、因果方向相反和噪声根因样本进行校准。
+结果记录 `matching_mode`、`judge_model`、`judge_usage` 与逐条件 `semantic_judgments`。
+OP 与 SP 继续独立验收。离线测试覆盖默认配置、同义改写、矛盾、端点选择、请求失败和非法输出；
+模型自身准确率仍需用有代表性的诊断样本校准，这些测试不衡量准确率。

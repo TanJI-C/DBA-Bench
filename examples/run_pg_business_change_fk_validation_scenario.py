@@ -11,6 +11,7 @@ from src.agents.factory import build_experiment_agent
 from src.scenarios.postgres import PgBusinessChangeFkValidationScenario
 from src.execution.deployments.postgres import PGDockerDeployment
 from src.execution.environments.postgres import PGEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -279,20 +280,16 @@ def main():
     parser.add_argument("--max-turns", type=int, default=30)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
     parser.add_argument("--fault-snapshot-name")
-    parser.add_argument("--diagnosis-match-mode", choices=("exact", "semantic"), default="exact")
-    parser.add_argument("--diagnosis-semantic-model")
-    parser.add_argument("--diagnosis-semantic-config")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     if args.max_turns > 30:
         raise ValueError("--max-turns must be <= 30")
-    if args.mode != "llm" and args.diagnosis_match_mode == "semantic":
-        raise ValueError("semantic diagnosis matching requires --mode llm")
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode=args.fault_snapshot_mode,
         fault_snapshot_name=args.fault_snapshot_name,
         diagnosis_match_mode=args.diagnosis_match_mode,
-        diagnosis_semantic_model=args.diagnosis_semantic_model or OrchestratorRunConfig().diagnosis_semantic_model,
-        diagnosis_semantic_config_path=args.diagnosis_semantic_config or args.config_path,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     case = scenario.get_case(args.case)
     modes = ("mock", "zero", "llm") if args.mode == "all" else (args.mode,)

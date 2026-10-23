@@ -48,7 +48,7 @@ class PgSystemFailureIoCheckpointSpikesForSingleCheckoutCheckpointSpikeSimpleEva
     diagnosis_conditions = _CHECKPOINT_DP[:3]
     outcome_verifiers = (_CHECKPOINT_CONFIG, SQL_PROBE)
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in self.diagnosis_conditions}
         matched = set()
         extras = set()

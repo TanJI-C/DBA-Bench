@@ -70,7 +70,7 @@ class PgSystemFailureTempFileExplosionForDailySalesTempExhaustionSimpleEvaluator
     case_id = "daily_sales_temp_exhaustion_simple"
     diagnosis_conditions = _TEMP_DP[:3]
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in self.diagnosis_conditions}
         matched = set()
         extras = set()

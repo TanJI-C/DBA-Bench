@@ -1214,7 +1214,10 @@ def test_entrypoint_requires_case_and_explicit_port_and_names_are_isolated():
     source = inspect.getsource(entry.main)
     assert 'parser.add_argument("--case", required=True' in source
     assert 'parser.add_argument("--port", required=True' in source
-    assert 'parser.add_argument("--diagnosis-match-mode"' in source
+    from pathlib import Path
+    from src.benchmark.commands import script_options
+
+    assert "--diagnosis-match-mode" in script_options(Path(entry.__file__))
     container, network, volume = entry._names(SIMPLE.case_id, "mock")
     assert all("pg-hc-mf01" in name and SIMPLE.case_id in name for name in (container, network, volume))
     long_container, long_network, long_volume = entry._names(

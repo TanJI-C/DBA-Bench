@@ -112,11 +112,11 @@ with `DiagnosisPass=None` on success; do not invent a root cause just to obtain 
 
 DP must support two matching paths:
 
-1. **Keyword/exact path**: the default run path. The submitted `type`, `factor`, and `entity` are
-   deterministically matched against readable aliases, suitable for mocks, regression tests, and
+1. **Keyword/exact path**: explicitly selected with `diagnosis_match_mode="exact"`.
+   The submitted `type`, `factor`, and `entity` are deterministically matched against readable aliases, suitable for mocks, regression tests, and
    scenarios that need stable reproducibility.
-2. **Semantic path**: a semantic matcher is explicitly selected, and a semantic judge decides
-   whether the submission expresses the same root cause. Semantic judgment failures, missing
+2. **Semantic path**: the default run path. A local or external semantic judge selected from
+   `llm_config.json` decides whether the submission expresses the same root cause. Semantic judgment failures, missing
    configuration, malformed responses, or an invalid condition index must raise an error
    immediately, not silently fall back to exact matching.
 

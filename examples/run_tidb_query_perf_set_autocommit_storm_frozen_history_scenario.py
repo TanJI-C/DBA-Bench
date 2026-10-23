@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbQueryPerfSetAutocommitStormFrozenHistoryScenario
 from src.scenarios.tidb.query_perf.set_autocommit_storm_frozen_history import _REFERENCE_REPORT
@@ -266,6 +267,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=4700)
     parser.add_argument("--container-name", default="tidb-mf-set-autocommit-set-autocommit-frozen-history")
     parser.add_argument("--fault-snapshot-mode", choices=("off",), default="off")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = SCENARIO.get_case(args.case)
@@ -289,7 +291,9 @@ def main() -> None:
         run_config=OrchestratorRunConfig(
             fault_snapshot_mode=args.fault_snapshot_mode,
             history_seed=args.seed,
-            diagnosis_match_mode="exact",
+            diagnosis_match_mode=args.diagnosis_match_mode,
+            diagnosis_semantic_model=args.diagnosis_semantic_model,
+            diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
         ),
     ).run()
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))

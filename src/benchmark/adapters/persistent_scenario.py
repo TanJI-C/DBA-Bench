@@ -108,6 +108,12 @@ def build_persistent_scenario_command(
     if spec.agent.model:
         command.extend(["--model", spec.agent.model])
     command.extend(["--llm-config", manifest.runtime.llm_config])
+    command.extend(["--diagnosis-match-mode", manifest.runtime.diagnosis_match_mode])
+    if manifest.runtime.diagnosis_match_mode == "semantic":
+        command.extend([
+            "--diagnosis-semantic-model", manifest.runtime.diagnosis_semantic_model,
+            "--diagnosis-semantic-config", manifest.runtime.llm_config,
+        ])
     command.extend(["--max-turns", str(spec.agent.max_turns)])
     if spec.agent.max_output_tokens is not None:
         command.extend(["--max-output-tokens", str(spec.agent.max_output_tokens)])

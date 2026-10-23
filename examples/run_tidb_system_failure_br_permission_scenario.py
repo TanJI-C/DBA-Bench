@@ -8,6 +8,7 @@ from src.agents.agent import MockLLMAgent
 from src.scenarios.tidb import TidbSystemFailureBrPermissionScenario
 from src.agents.factory import build_experiment_agent
 from src.scenarios.tidb.system_failure.runtime.br_permission import BrPermissionEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -355,6 +356,7 @@ def main():
     parser.add_argument("--max-output-tokens", type=int, default=None)
     parser.add_argument("--port", type=int, default=4620)
     parser.add_argument("--container-name", default="aiopsbench-tidb-sf06-br-permission")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = scenario.get_case(args.case)
@@ -380,7 +382,11 @@ def main():
             use_native_tools=True,
             max_output_tokens=args.max_output_tokens,
         )
-    run_config = OrchestratorRunConfig(diagnosis_match_mode="exact")
+    run_config = OrchestratorRunConfig(
+        diagnosis_match_mode=args.diagnosis_match_mode,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
+    )
     result = Orchestrator(
         env,
         scenario,

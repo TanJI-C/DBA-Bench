@@ -7,9 +7,9 @@ from src.scenarios.evaluation.protocol import EvaluationContext
 from src.protocols.report import parse_submission_report
 from src.scenarios.evaluation.diagnosis import (
     DiagnosisMatchingStrategy,
-    ExactDiagnosisMatcher,
     ExpectedCondition,
 )
+from src.scenarios.evaluation.config import DiagnosisEvaluationConfig
 from src.scenarios.evaluation.efficiency import EfficiencyCalculator
 from src.scenarios.evaluation.outcome import CompositeOutcomeVerifier, OutcomeVerifier
 from src.scenarios.evaluation.safety import (
@@ -43,7 +43,10 @@ class BaseEvaluator(ABC):
 
     def __init__(self, env: object, diagnosis_matcher: DiagnosisMatchingStrategy | None = None):
         self.env = env
-        self.diagnosis_matcher = diagnosis_matcher or ExactDiagnosisMatcher()
+        self.diagnosis_matcher = (
+            diagnosis_matcher if diagnosis_matcher is not None
+            else DiagnosisEvaluationConfig().build_diagnosis_matcher()
+        )
 
     def evaluate(self, case_run: "CaseRun") -> dict[str, Any]:
         if case_run.case.evaluator is not type(self):
@@ -112,6 +115,15 @@ class BaseEvaluator(ABC):
                 continue
 
     def DiagnosisPassFunc(self, context: EvaluationContext) -> dict[str, Any]:
+        if self.diagnosis_matcher.mode == "exact":
+            return self._match_exact_diagnosis(context)
+        return self._match_diagnosis(context)
+
+    def _match_exact_diagnosis(self, context: EvaluationContext) -> dict[str, Any]:
+        """Scenario-specific deterministic normalization belongs only in this hook."""
+        return self._match_diagnosis(context)
+
+    def _match_diagnosis(self, context: EvaluationContext) -> dict[str, Any]:
         return self.diagnosis_matcher.match(
             self.diagnosis_conditions,
             context.report,

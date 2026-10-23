@@ -190,7 +190,7 @@ class PgSystemFailurePageCorruptionForInvoicePageCorruptionTriageSimpleEvaluator
     )
     outcome_verifiers = (_RECOVERED_QUERY, _HEALTHY_QUERY, _CORRUPT_EVIDENCE_PRESERVED, _SERVICE_INDEX_PRESERVED, _RECOVERY_BUSINESS_CHECK, _RECOVERY_SUM_CHECK)
 
-    def DiagnosisPassFunc(self, context):
+    def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in self.diagnosis_conditions}
         matched = set()
         extras = set()

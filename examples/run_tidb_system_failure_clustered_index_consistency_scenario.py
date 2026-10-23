@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.agent import BaseAgent
 from src.agents.factory import build_experiment_agent
 from src.execution.environments.tidb import TiDBEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 from src.scenarios.tidb import TidbSystemFailureClusteredIndexConsistencyScenario
 
@@ -332,6 +333,7 @@ def main() -> None:
     parser.add_argument("--max-turns", type=int, default=60)
     parser.add_argument("--port", type=int, default=48640)
     parser.add_argument("--container-name", default="tidb-system-failure-k12")
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
 
     case = SCENARIO.get_case(args.case)
@@ -349,9 +351,9 @@ def main() -> None:
         )
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode="off",
-        diagnosis_match_mode="semantic" if args.mode == "llm" else "exact",
-        diagnosis_semantic_model=args.model,
-        diagnosis_semantic_config_path=args.config_path,
+        diagnosis_match_mode=args.diagnosis_match_mode,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     result = Orchestrator(
         env,

@@ -14,6 +14,7 @@ from src.agents.factory import build_experiment_agent
 from src.scenarios.postgres import PgSystemFailureConnectionBloatScenario
 from src.execution.deployments.postgres import PGDockerDeployment
 from src.execution.environments.postgres import PGEnv
+from src.scenarios.evaluation.config import add_diagnosis_arguments
 from src.scenarios.runtime.orchestrator import Orchestrator, OrchestratorRunConfig
 
 
@@ -373,9 +374,6 @@ def main():
     parser.add_argument("--max-output-tokens", type=int, default=None)
     parser.add_argument("--fault-snapshot-mode", choices=["auto", "off", "save", "use"], default="auto")
     parser.add_argument("--fault-snapshot-name")
-    parser.add_argument("--diagnosis-match-mode", choices=["exact", "semantic"], default="exact")
-    parser.add_argument("--diagnosis-semantic-model", default=None, help="Diagnosis judge model; defaults to --model")
-    parser.add_argument("--diagnosis-semantic-config-path", default=None)
     parser.add_argument("--dbaiops-graph", default="data/knowledge_graph/pg_experience_graph.json",
                         help="Knowledge graph path used by --agent dbaiops.")
     parser.add_argument("--dbot-tool-profile", default="general_knowledge",
@@ -385,14 +383,15 @@ def main():
         "--case", required=True,
         choices=[case.case_id for case in scenario_definition.cases],
     )
+    add_diagnosis_arguments(parser)
     args = parser.parse_args()
     run_config = OrchestratorRunConfig(
         fault_snapshot_mode=args.fault_snapshot_mode,
         fault_snapshot_name=args.fault_snapshot_name,
         runtime_warmup_seconds=3,
         diagnosis_match_mode=args.diagnosis_match_mode,
-        diagnosis_semantic_model=args.diagnosis_semantic_model or args.model,
-        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path or args.config_path,
+        diagnosis_semantic_model=args.diagnosis_semantic_model,
+        diagnosis_semantic_config_path=args.diagnosis_semantic_config_path,
     )
     container_prefix = f"{args.container_name}-{args.case}"
 

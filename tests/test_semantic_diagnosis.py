@@ -13,7 +13,7 @@ from src.scenarios.evaluation.diagnosis import (
     SemanticDiagnosisMatcher,
 )
 from src.scenarios.evaluation.semantic import (
-    OpenAISemanticDiagnosisJudge,
+    semantic_judge_from_config,
     SemanticConditionJudgment,
     SemanticJudgment,
     _parse_judgments,
@@ -24,7 +24,6 @@ from src.scenarios.base import CaseRun
 from src.scenarios.evaluation.semantic import (
     probe_semantic_model,
 )
-from src.scenarios.runtime import orchestrator as orchestrator_module
 from src.scenarios.runtime.orchestrator import OrchestratorRunConfig
 from src.scenarios.runtime.orchestrator import Orchestrator
 from scripts.start_dp_semantic_model import build_vllm_command, parser as model_parser
@@ -176,7 +175,7 @@ def test_semantic_matcher_rejects_invalid_submitted_index():
         SemanticDiagnosisMatcher(judge).match(EXPECTED, report("旧统计信息"))
 
 
-def test_exact_matcher_remains_default_and_does_not_infer_a_paraphrase():
+def test_explicit_exact_matcher_does_not_infer_a_paraphrase():
     result = ExactDiagnosisMatcher().match(EXPECTED, report("大量写入后没有 ANALYZE，优化器仍使用旧统计信息"))
 
     assert result["matching_mode"] == "exact"
@@ -318,7 +317,7 @@ def configured_judge(tmp_path, options):
     if options is not None:
         config["semantic_judge"] = options
     path.write_text(json.dumps({"test-judge": config}))
-    return OpenAISemanticDiagnosisJudge.from_config(str(path), "test-judge")
+    return semantic_judge_from_config(str(path), "test-judge")
 
 
 @pytest.mark.parametrize("catalog_status", [200, 403, 404])
@@ -464,9 +463,8 @@ def test_orchestrator_injects_semantic_matcher(monkeypatch):
     case = scenario.cases[0]
     fake_judge = FakeJudge(SemanticJudgment(model="fake", conditions=(), usage={}))
     monkeypatch.setattr(
-        orchestrator_module.OpenAISemanticDiagnosisJudge,
-        "from_config",
-        classmethod(lambda cls, path, model: fake_judge),
+        "src.scenarios.evaluation.config.semantic_judge_from_config",
+        lambda path, model: fake_judge,
     )
 
     orchestrator = Orchestrator(
@@ -517,4 +515,206 @@ def test_semantic_judge_config_requires_declared_model(tmp_path):
     path.write_text(json.dumps({"other": {"url": "http://localhost:8000/v1", "api_key": "local"}}))
 
     with pytest.raises(KeyError, match="Qwen3-4B"):
-        OpenAISemanticDiagnosisJudge.from_config(str(path), "Qwen3-4B")
+        semantic_judge_from_config(str(path), "Qwen3-4B")
+
+
+def test_semantic_is_the_default_for_run_config_and_cli(monkeypatch):
+    import argparse
+    from src.cli import parser as cli_parser
+    from src.scenarios.evaluation.config import add_diagnosis_arguments
+    from src.scenarios.evaluation.semantic import DEFAULT_SEMANTIC_MODEL
+
+    for key in ("AIOPS_DP_MATCH_MODE", "AIOPS_DP_SEMANTIC_MODEL", "AIOPS_DP_SEMANTIC_CONFIG"):
+        monkeypatch.delenv(key, raising=False)
+    config = OrchestratorRunConfig()
+    parser = argparse.ArgumentParser()
+    add_diagnosis_arguments(parser)
+    args = parser.parse_args([])
+    persistent_args = cli_parser().parse_args(["persistent-scenario", "run", "episode.yaml"])
+
+    assert config.diagnosis_match_mode == args.diagnosis_match_mode == persistent_args.diagnosis_match_mode == "semantic"
+    assert config.diagnosis_semantic_model == args.diagnosis_semantic_model == DEFAULT_SEMANTIC_MODEL
+
+
+@pytest.mark.parametrize("model,url", [
+    ("Qwen/Qwen3-4B-Instruct-2507", "http://127.0.0.1:8000/v1"),
+    ("external-large-judge", "https://gateway.test/v1/chat/completions"),
+])
+def test_default_evaluator_requests_selected_local_or_external_judge(
+    monkeypatch, tmp_path, semantic_gateway, model, url,
+):
+    from src.scenarios.evaluation.base import BaseEvaluator
+
+    class Evaluator(BaseEvaluator):
+        diagnosis_conditions = (EXPECTED[0],)
+
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_MODEL", model)
+    path = tmp_path / "llm_config.json"
+    path.write_text(json.dumps({model: {
+        "url": url, "api_key": "test-secret", "provider": "openai",
+    }}))
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_CONFIG", str(path))
+    evaluator = Evaluator(object())
+    context = SimpleNamespace(report=report("数据分布发生变化，但优化器依然根据过时的采样选计划"))
+
+    result = evaluator.DiagnosisPassFunc(context)
+
+    assert result["DiagnosisPass"] is True
+    assert result["matching_mode"] == "semantic"
+    assert result["judge_model"] == model
+    request, = semantic_gateway.requests
+    assert str(request.url) == url.removesuffix("/chat/completions").rstrip("/") + "/chat/completions"
+    assert request.headers["authorization"] == "Bearer test-secret"
+    assert json.loads(request.content)["model"] == model
+    assert result["judge_usage"] == {"input_tokens": 11, "output_tokens": 7}
+    assert "test-secret" not in json.dumps(result)
+
+
+def test_default_semantic_never_falls_back_when_config_is_missing(monkeypatch, tmp_path):
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    config = OrchestratorRunConfig(diagnosis_semantic_config_path=str(tmp_path / "missing.json"))
+    with pytest.raises(FileNotFoundError, match="missing.json"):
+        config.build_diagnosis_matcher()
+
+
+def test_judge_cli_selection_is_independent_of_agent_model(monkeypatch):
+    import argparse
+    from src.scenarios.evaluation.config import add_diagnosis_arguments
+
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_MODEL", "local-judge")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model")
+    add_diagnosis_arguments(parser)
+    args = parser.parse_args(["--model", "agent-model"])
+    assert args.diagnosis_semantic_model == "local-judge"
+    args = parser.parse_args(["--model", "agent-model", "--diagnosis-semantic-model", "external-judge"])
+    assert args.diagnosis_match_mode == "semantic"
+    assert args.diagnosis_semantic_model == "external-judge"
+
+
+@pytest.mark.parametrize("contradicted,entailed,passed", [([], [0], True), ([0], [0], False), ([], [], False)])
+def test_persistent_contract_uses_default_semantic_judge(
+    monkeypatch, contradicted, entailed, passed,
+):
+    from src.persistent_scenarios.evaluation.diagnosis import evaluate_diagnosis_contract
+    from src.persistent_scenarios.model.spec import DiagnosisContract, DiagnosisIncidentSpec, ExpectedDiagnosisConditionSpec
+
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    contract = DiagnosisContract(incidents=(DiagnosisIncidentSpec(
+        incident_id="incident-1", statement="checkout latency", conditions=(ExpectedDiagnosisConditionSpec(
+            condition_id="stale_stats", aliases=("stale statistics after bulk writes",),
+        ),),
+    ),))
+    judge = FakeJudge(SemanticJudgment(model="external-judge", conditions=(SemanticConditionJudgment(
+        condition_id="stale_stats", entailed_by=tuple(entailed), contradicted_by=tuple(contradicted), reason="meaning checked",
+    ),), usage={"input_tokens": 9, "output_tokens": 4}))
+
+    actual, results = evaluate_diagnosis_contract(contract, ("Planner still estimates the old distribution.",), judge=judge)
+
+    assert actual is passed
+    assert results[0]["matching_mode"] == "semantic"
+    assert results[0]["judge_model"] == "external-judge"
+    assert results[0]["report_text_count"] == 1
+
+
+def test_persistent_semantic_rejects_invalid_judge_indexes(monkeypatch):
+    from src.persistent_scenarios.evaluation.diagnosis import evaluate_diagnosis_contract
+    from tests.persistent_scenarios._evaluation_factories import diagnosis_contract, incident, condition as expected_condition
+
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    contract = diagnosis_contract(incidents=[incident(conditions=[expected_condition("c1", aliases=("stale statistics",))])])
+    judge = FakeJudge(SemanticJudgment(model="judge", conditions=(SemanticConditionJudgment(
+        condition_id="c1", entailed_by=(2,), contradicted_by=(), reason="invalid index",
+    ),), usage={}))
+    with pytest.raises(ValueError, match="invalid submitted condition indexes"):
+        evaluate_diagnosis_contract(contract, ("one report",), judge=judge)
+
+
+def test_persistent_empty_contract_needs_no_judge(monkeypatch):
+    from src.persistent_scenarios.evaluation.diagnosis import evaluate_diagnosis_contract
+    from src.persistent_scenarios.model.spec import DiagnosisContract
+
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_CONFIG", "/missing.json")
+    assert evaluate_diagnosis_contract(DiagnosisContract(), ()) == (None, [])
+
+
+@pytest.mark.parametrize("stop_reason,text,error", [
+    ("end_turn", None, None),
+    ("max_tokens", None, "output-token budget"),
+    ("end_turn", "", "empty content"),
+    ("end_turn", "not JSON", "Expecting value"),
+])
+def test_external_anthropic_judge_uses_native_api(
+    monkeypatch, tmp_path, stop_reason, text, error,
+):
+    import anthropic
+
+    requests = []
+    judgment = json.dumps({"judgments": [{
+        "condition_id": "stale_stats", "entailed_by": [0],
+        "contradicted_by": [], "reason": "same causal explanation",
+    }]})
+    def handle(request):
+        requests.append(request)
+        assert request.url.path == "/v1/messages"
+        assert request.headers["x-api-key"] == "test-key"
+        return httpx.Response(200, json={
+            "id": "msg-judge", "type": "message", "role": "assistant", "model": "external-claude",
+            "content": [{"type": "text", "text": judgment if text is None else text}],
+            "stop_reason": stop_reason, "stop_sequence": None,
+            "usage": {"input_tokens": 12, "output_tokens": 8},
+        })
+    path = tmp_path / "llm_config.json"
+    path.write_text(json.dumps({"external-claude": {
+        "provider": "anthropic", "url": "https://gateway.test/v1/messages", "api_key": "test-key",
+        "semantic_judge": {"max_tokens": 4096, "max_retries": 0},
+    }}))
+    real_client = anthropic.Anthropic
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        monkeypatch.setattr(anthropic, "Anthropic", lambda **kwargs: real_client(**kwargs, http_client=client))
+        judge = semantic_judge_from_config(str(path), "external-claude")
+        if error:
+            with pytest.raises(ValueError, match=error):
+                SemanticDiagnosisMatcher(judge).match((EXPECTED[0],), report("过时的统计信息误导了执行计划"))
+        else:
+            result = SemanticDiagnosisMatcher(judge).match((EXPECTED[0],), report("过时的统计信息误导了执行计划"))
+            assert result["DiagnosisPass"] is True
+            assert result["judge_usage"] == {"input_tokens": 12, "output_tokens": 8}
+    request, = requests
+    payload = json.loads(request.content)
+    assert payload["model"] == "external-claude"
+    assert payload["max_tokens"] == 4096
+    assert "expected_conditions" in payload["messages"][0]["content"]
+
+
+def test_unknown_judge_provider_fails_with_model_context(tmp_path):
+    path = tmp_path / "llm_config.json"
+    path.write_text(json.dumps({"judge": {"provider": "unknown"}}))
+    with pytest.raises(ValueError, match="model='judge', provider='unknown'"):
+        semantic_judge_from_config(str(path), "judge")
+
+
+@pytest.mark.parametrize("scenario,case", [
+    (scenario, case) for scenario in ALL_SCENARIOS for case in scenario.cases
+], ids=[
+    f"{scenario.scenario_id}/{case.case_id}" for scenario in ALL_SCENARIOS for case in scenario.cases
+])
+def test_every_case_routes_semantic_diagnosis_to_the_selected_judge(scenario, case):
+    class ReachedSemanticJudge(Exception):
+        pass
+
+    class Matcher:
+        mode = "semantic"
+
+        def match(self, expected, submitted_report, applicable=True):
+            assert isinstance(expected, tuple)
+            raise ReachedSemanticJudge
+
+    evaluator = case.evaluator(object(), diagnosis_matcher=Matcher())
+    case_run = CaseRun(run_id="semantic-routing", scenario=scenario, case=case, env=object())
+    context = EvaluationContext(case_run, report("用不同措辞解释同一根因"))
+    with pytest.raises(ReachedSemanticJudge):
+        evaluator.DiagnosisPassFunc(context)
