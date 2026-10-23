@@ -45,7 +45,9 @@ class BaseEvaluator(ABC):
         self.env = env
         self.diagnosis_matcher = (
             diagnosis_matcher if diagnosis_matcher is not None
-            else DiagnosisEvaluationConfig().build_diagnosis_matcher()
+            else DiagnosisEvaluationConfig().build_diagnosis_matcher(
+                applicable=self.diagnosis_applicable,
+            )
         )
 
     def evaluate(self, case_run: "CaseRun") -> dict[str, Any]:

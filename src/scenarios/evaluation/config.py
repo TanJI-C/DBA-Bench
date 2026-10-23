@@ -4,7 +4,7 @@ import argparse
 import os
 from dataclasses import dataclass, field
 
-from .diagnosis import ExactDiagnosisMatcher, SemanticDiagnosisMatcher
+from .diagnosis import ExactDiagnosisMatcher, NotApplicableDiagnosisMatcher, SemanticDiagnosisMatcher
 from .semantic import DEFAULT_SEMANTIC_MODEL, semantic_judge_from_config
 
 
@@ -35,7 +35,9 @@ class DiagnosisEvaluationConfig:
         if not self.diagnosis_semantic_model.strip():
             raise ValueError("diagnosis_semantic_model must be non-empty")
 
-    def build_diagnosis_matcher(self):
+    def build_diagnosis_matcher(self, *, applicable: bool = True):
+        if not applicable:
+            return NotApplicableDiagnosisMatcher(self.diagnosis_match_mode)
         if self.diagnosis_match_mode == "exact":
             return ExactDiagnosisMatcher()
         if self.diagnosis_match_mode == "semantic":

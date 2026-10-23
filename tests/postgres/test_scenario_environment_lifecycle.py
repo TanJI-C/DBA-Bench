@@ -31,6 +31,8 @@ CONTEXTS = []
 
 
 class FakeEvaluator:
+    diagnosis_applicable = True
+
     def __init__(self, env, *, diagnosis_matcher):
         self.env = env
 

@@ -459,7 +459,7 @@ def test_run_config_can_select_semantic_mode_from_environment(monkeypatch):
 
 
 def test_orchestrator_injects_semantic_matcher(monkeypatch):
-    scenario = next(item for item in ALL_SCENARIOS if item.scenario_id == "demo")
+    scenario = next(item for item in ALL_SCENARIOS if item.scenario_id == "pg_query_perf_missing_index")
     case = scenario.cases[0]
     fake_judge = FakeJudge(SemanticJudgment(model="fake", conditions=(), usage={}))
     monkeypatch.setattr(
@@ -476,6 +476,47 @@ def test_orchestrator_injects_semantic_matcher(monkeypatch):
     )
 
     assert orchestrator.evaluator.diagnosis_matcher.mode == "semantic"
+    assert orchestrator.evaluator.diagnosis_matcher.judge is fake_judge
+
+
+@pytest.mark.parametrize("scenario,case", [
+    (scenario, case) for scenario in ALL_SCENARIOS for case in scenario.cases
+    if not case.evaluator.diagnosis_applicable
+], ids=lambda item: item.scenario_id if hasattr(item, "scenario_id") else item.case_id)
+@pytest.mark.parametrize("entrypoint", ["evaluator", "orchestrator"])
+@pytest.mark.parametrize("config_exists", [False, True], ids=["missing-config", "no-judge-model"])
+def test_not_applicable_diagnosis_needs_no_judge_config(
+    monkeypatch, tmp_path, scenario, case, entrypoint, config_exists,
+):
+    monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
+    monkeypatch.delenv("AIOPS_DP_SEMANTIC_MODEL", raising=False)
+    config_path = tmp_path / "llm_config.json"
+    if config_exists:
+        config_path.write_text("{}")
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_CONFIG", str(config_path))
+
+    def unexpected_judge_init(path, model):
+        pytest.fail(f"N/A diagnosis must not initialize judge: {path=}, {model=}")
+
+    monkeypatch.setattr(
+        "src.scenarios.evaluation.config.semantic_judge_from_config",
+        unexpected_judge_init,
+    )
+    if entrypoint == "orchestrator":
+        orchestrator = Orchestrator(object(), scenario, case, agent=None)
+        evaluator = orchestrator.evaluator
+        case_run = orchestrator.case_run
+    else:
+        evaluator = case.evaluator(object())
+        case_run = CaseRun(run_id="not-applicable", scenario=scenario, case=case, env=object())
+
+    result = evaluator.DiagnosisPassFunc(EvaluationContext(case_run, report()))
+
+    assert result["DiagnosisPass"] is None
+    assert result["diagnosis_applicable"] is False
+    assert result["matching_mode"] == "semantic"
+    assert "judge_model" not in result
+    assert "judge_usage" not in result
 
 
 def test_missing_index_specialized_matcher_honors_semantic_mode():
@@ -571,11 +612,19 @@ def test_default_evaluator_requests_selected_local_or_external_judge(
     assert "test-secret" not in json.dumps(result)
 
 
-def test_default_semantic_never_falls_back_when_config_is_missing(monkeypatch, tmp_path):
+@pytest.mark.parametrize("entrypoint", ["config", "evaluator", "orchestrator"])
+def test_default_semantic_never_falls_back_when_config_is_missing(monkeypatch, tmp_path, entrypoint):
     monkeypatch.delenv("AIOPS_DP_MATCH_MODE", raising=False)
-    config = OrchestratorRunConfig(diagnosis_semantic_config_path=str(tmp_path / "missing.json"))
+    monkeypatch.setenv("AIOPS_DP_SEMANTIC_CONFIG", str(tmp_path / "missing.json"))
+    scenario = next(item for item in ALL_SCENARIOS if item.scenario_id == "pg_query_perf_missing_index")
+    case = scenario.cases[0]
     with pytest.raises(FileNotFoundError, match="missing.json"):
-        config.build_diagnosis_matcher()
+        if entrypoint == "config":
+            OrchestratorRunConfig().build_diagnosis_matcher()
+        elif entrypoint == "evaluator":
+            case.evaluator(object())
+        else:
+            Orchestrator(object(), scenario, case, agent=None)
 
 
 def test_judge_cli_selection_is_independent_of_agent_model(monkeypatch):

@@ -369,6 +369,21 @@ class DiagnosisMatchingStrategy(Protocol):
         raise NotImplementedError
 
 
+class NotApplicableDiagnosisMatcher:
+    """Return the N/A contract without constructing a diagnosis judge."""
+
+    def __init__(self, mode: str):
+        self.mode = mode
+
+    def match(
+        self,
+        expected: tuple[ExpectedCondition, ...],
+        report: StructuredReport,
+        applicable: bool = True,
+    ) -> dict:
+        return _not_applicable_result(self.mode, report)
+
+
 class ExactDiagnosisMatcher:
     mode = "exact"
 

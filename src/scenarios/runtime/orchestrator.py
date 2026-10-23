@@ -451,7 +451,9 @@ class Orchestrator:
         self.case = case
         self.run_config = run_config or OrchestratorRunConfig()
         self.evaluator = case.evaluator(
-            env, diagnosis_matcher=self.run_config.build_diagnosis_matcher(),
+            env, diagnosis_matcher=self.run_config.build_diagnosis_matcher(
+                applicable=case.evaluator.diagnosis_applicable,
+            ),
         )
         self.agent = agent
         required_tool_profile = getattr(agent, "required_tool_profile", None)
