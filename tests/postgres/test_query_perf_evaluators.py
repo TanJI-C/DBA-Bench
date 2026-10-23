@@ -87,6 +87,10 @@ def _report(case):
 
 
 class QueryPerfFakeEnv:
+    host = "test-host"
+    port = 5432
+    dbname = "test"
+
     def __init__(
         self,
         case,
@@ -316,6 +320,47 @@ def _evaluate(scenario, case, env, actions):
     evaluator = case.evaluator(env)
     evaluator.capture_safety_baseline(run)
     return evaluator.evaluate(run)
+
+
+@pytest.fixture(autouse=True)
+def business_login(monkeypatch):
+    """Keep the management and fresh business connections distinct in unit tests."""
+    from contextlib import contextmanager
+    from src.scenarios.evaluation.postgres.query_perf import suboptimal_join
+
+    connections = []
+
+    class Login:
+        def __init__(self, **kwargs):
+            self.credentials = kwargs
+            self.closed = False
+            connections.append(self)
+
+        @contextmanager
+        def cursor(self):
+            yield self
+
+        def execute(self, sql, params=None):
+            if sql.startswith("SELECT name, setting"):
+                self.rows = [[name, "on", "database user"] for name in params[0]]
+            else:
+                self.rows = json.loads(self.env.execute_sql(sql))["result"]
+
+        def fetchall(self):
+            return self.rows
+
+        def close(self):
+            self.closed = True
+
+    original = suboptimal_join.BusinessJoinPlanVerifier.verify
+
+    def verify(verifier, context):
+        Login.env = context.case_run.env
+        return original(verifier, context)
+
+    monkeypatch.setattr(suboptimal_join.psycopg2, "connect", Login)
+    monkeypatch.setattr(suboptimal_join.BusinessJoinPlanVerifier, "verify", verify)
+    return connections
 
 
 @pytest.mark.parametrize("scenario_id", SCENARIOS)
