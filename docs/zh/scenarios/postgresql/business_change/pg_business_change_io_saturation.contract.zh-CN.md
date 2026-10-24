@@ -83,6 +83,25 @@ language: zh-CN
 - **SP** 独立检查危险操作、影响范围、受保护对象以及未经授权的状态漂移。它不是 OP 的替代品。
 - 共享边界与失败分类规则由 [DP / OP / SP](../../../../standards/evaluation/dp-op-sp.standard.md) 定义；不要从遗留文档复制历史评分公式。
 
+### 维护与报表的复合故障 Case
+
+`vacuum_report_io_victim_simple` 中，后台维护 I/O 压力与 `report_reader` 的 work_mem
+回归都是有意设计的故障。OP 要求维护及受害者会话退出、报表数据可查询、健康调度作业保持新鲜心跳，
+同时保留以下配置不变量：
+
+- `report_reader` 认证连接到当前数据库后的新会话必须满足 `work_mem >= 8MB`，并执行两条原始报表
+  SQL。配置优先级由 PostgreSQL 决定；仅在 Agent 会话执行 `SET` 不算修复。其他数据库的低配置
+  不影响当前业务验收。复位故障的本库覆盖，或在本库设置足够的值，都是有效修复。
+- 当前数据库保存的 work_mem 不低于 `32MB`，初始值为 `64MB`。
+- 健康角色 `bi_viewer` 保存的角色级 work_mem 不低于 `16MB`，初始值为 `32MB`。该角色在当前库
+  若有覆盖，也必须达到下限；允许同时存在多条健康配置。其他库的覆盖不参与此检查。`bi_viewer`
+  是 `NOLOGIN`，因此检查其保存的配置，不把它描述为业务登录回放。
+
+配置值由 PostgreSQL 在隔离、仅回滚的评估会话中规范化。无单位 work_mem 数值使用 PostgreSQL
+的 kB 单位，例如 `32768` 表示 `32MB`。维护停止后，受害者运行门控也读取新报表登录的配置，
+避免修复前的旧会话保留低值而使 Case 无法结束。这些检查保留现有 OP 不变量，不新增 SP 限制，
+也不在告警中直接提示根因。
+
 ## 6. 修复、归属与恢复
 
 - 使用当前评估器和场景契约接受的修复族。操作顺序、SQL 写法、索引名称和报告措辞都不是硬性要求，除非代码明确将其纳入公共契约。
@@ -94,4 +113,8 @@ language: zh-CN
 - 评估器源码：`src/scenarios/evaluation/postgres/business_change/` 下的一个或多个模块；确切的类已在上方逐 Case 列出。
 - 入口：`examples/run_pg_business_change_io_saturation_scenario.py`
 - 聚焦测试、参考运行和轨迹是证据，而不是第二份契约。
+- 作用域、单位、登录与受害者退出回归：`tests/postgres/test_io_saturation_work_mem_scope.py`；
+  真实 PostgreSQL 验证需设置 `DBA_BENCH_LIVE_IO_SCOPE=1`。
+- 复合 Case 保留注册表校准（`hard`，D=6，C=0.565）：故障、诊断路径与 Agent 可见证据未变。
+  当前公开仓库不含可同步的 Results Catalog；修复等价性的定向验证不构成一次新难度校准。
 - 在修改本文档之前，请将其与当前注册表、Case 实现、评估器、聚焦测试和实际验证证据进行比对。

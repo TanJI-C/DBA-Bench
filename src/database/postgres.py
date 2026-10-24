@@ -12,6 +12,46 @@ import json
 import re
 from typing import Any, Iterator, Optional
 
+import psycopg2
+
+
+def connect_postgres_role(env, role: str, application_name: str):
+    """Open an authenticated login without inheriting the Agent's SQL session settings."""
+    return psycopg2.connect(
+        host=env.host, port=env.port, dbname=env.dbname,
+        user=role, password=env.password, connect_timeout=3,
+        application_name=application_name,
+    )
+
+
+def postgres_work_mem_bytes(cursor) -> int:
+    """Read PostgreSQL's canonical kB value, including login configuration precedence."""
+    cursor.execute("SELECT setting::bigint * 1024 FROM pg_settings WHERE name = 'work_mem'")
+    return cursor.fetchone()[0]
+
+
+def postgres_stored_work_mem_bytes(cursor, *, database: str | None, role: str | None) -> int | None:
+    """Read one exact catalog scope; normalize with PostgreSQL inside a rollback-only transaction.
+
+    None means this scope has no stored work_mem. The caller owns the transaction and must
+    roll it back: set_config below is only for interpreting PostgreSQL units, not a repair.
+    """
+    cursor.execute(
+        "SELECT split_part(cfg, '=', 2) FROM pg_db_role_setting s, unnest(s.setconfig) cfg "
+        "WHERE s.setdatabase = CASE WHEN %s IS NULL THEN 0 "
+        "ELSE (SELECT oid FROM pg_database WHERE datname = %s) END "
+        "AND s.setrole = CASE WHEN %s IS NULL THEN 0 "
+        "ELSE (SELECT oid FROM pg_roles WHERE rolname = %s) END "
+        "AND cfg LIKE 'work_mem=%%'",
+        (database, database, role, role),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    cursor.execute("SELECT set_config('work_mem', %s, true)", (row[0],))
+    return postgres_work_mem_bytes(cursor)
+
+
 # The text-form regex is used only for the fallback below; structured
 # EXPLAIN (FORMAT JSON) output is walked by `_walk_json_values`.
 _EXEC_TIME_RE_TEXT = re.compile(r"Execution Time:\s*([0-9.]+)\s*ms", re.IGNORECASE)

@@ -1,5 +1,6 @@
 import json
 import runpy
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -7,6 +8,29 @@ from src.scenarios import ALL_SCENARIOS
 from src.scenarios.base import CaseRun
 from src.scenarios.runtime.env_gateway import EnvGateway
 from src.scenarios.runtime.orchestrator import Orchestrator
+from src.scenarios.evaluation.postgres.business_change import io_saturation as io_op
+
+
+@pytest.fixture(autouse=True)
+def io_login_probes(monkeypatch):
+    """These semantic/safety fakes expose final state; scope is tested against live PG."""
+    def connect(env, role, application_name):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.env = env
+
+        def execute(sql, params=None):
+            if sql == "SELECT pg_size_bytes(%s)":
+                cursor.fetchone.return_value = ({"8MB": 8, "16MB": 16, "32MB": 32}[params[0]] * 1024**2,)
+
+        cursor.execute.side_effect = execute
+        return connection
+
+    monkeypatch.setattr(io_op, "connect_postgres_role", connect)
+    monkeypatch.setattr(io_op, "postgres_work_mem_bytes",
+                        lambda cur: 64 * 1024**2 if cur.env.culprit_restored else 64 * 1024)
+    monkeypatch.setattr(io_op, "postgres_stored_work_mem_bytes",
+                        lambda cur, **scope: 64 * 1024**2 if cur.env.healthy_preserved else None)
 
 
 def _scenario(scenario_id):
@@ -71,6 +95,8 @@ class AlertCausalityFakeEnv:
     def __init__(self, case, *, target_count=0, secondary_count=0, healthy_slot=1, table_rows=1, preserved_count=None, tick_count=None, decoy_alive=True, healthy_workers=None,
                  healthy_preserved=True, culprit_restored=True):
         self.case = case
+        self.dbname = "testdb"
+        self.user = "postgres"
         self.target_count = target_count
         self.secondary_count = secondary_count
         self.healthy_slot = healthy_slot
@@ -110,11 +136,6 @@ class AlertCausalityFakeEnv:
         elif getattr(self.case, "decoy_waiter_prefix", "") and f"application_name like '{self.case.decoy_waiter_prefix}%'" in normalized:
             # 受保护健康链 worker/retry 会话存活数（OP 健康业务不变量）。
             result = [[self.healthy_workers]]
-        elif "pg_db_role_setting" in normalized:
-            if ">=" in normalized:
-                result = [[1]] if self.healthy_preserved else [[0]]
-            else:
-                result = [[0]] if self.culprit_restored else [[1]]
         elif "wait_event_type = 'lock'" in normalized or "application_name like" in normalized:
             result = [[self.secondary_count]]
         else:

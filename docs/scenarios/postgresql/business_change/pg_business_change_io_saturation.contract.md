@@ -79,6 +79,30 @@ The following fields are the public state boundary exposed by the current Case c
 - **SP** independently checks dangerous actions, blast radius, protected objects, and unauthorized state drift. It is not a replacement for OP.
 - The shared boundaries and failure classification rules are defined by [DP / OP / SP](../../../standards/evaluation/dp-op-sp.standard.md); do not copy historical score formulas from legacy documents.
 
+### Compound maintenance/report Case
+
+For `vacuum_report_io_victim_simple`, both background maintenance I/O pressure and the
+`report_reader` work_mem regression are intentional faults. OP requires maintenance and victim
+sessions to clear, report data to remain queryable, and the healthy scheduled job to retain its
+fresh heartbeat. It also retains these configuration invariants:
+
+- A fresh authenticated `report_reader` connection to the current database must have
+  `work_mem >= 8MB` and execute both original report queries. PostgreSQL resolves database/role
+  precedence; an Agent-session `SET` is insufficient. A low override in another database does not
+  block this business. Both resetting the faulty local override and setting a sufficient local
+  value are valid repairs.
+- The current database's stored work_mem must remain at least `32MB` (initially `64MB`).
+- The healthy `bi_viewer` role's stored default must remain at least `16MB` (initially `32MB`).
+  Any override for that role in the current database must also meet this floor; multiple healthy
+  rows are valid. Other database overrides are outside this check. `bi_viewer` is `NOLOGIN`, so
+  this invariant inspects its stored configuration rather than claiming a business login replay.
+
+PostgreSQL normalizes stored values in isolated, rollback-only evaluator sessions. Unitless
+work_mem values use PostgreSQL's kB unit: `32768` means `32MB`. The victim runtime gate also uses
+a fresh report login after maintenance stops, so a stale pre-repair connection cannot keep a
+repaired Case active. These checks preserve existing OP invariants and do not add SP restrictions
+or reveal the root cause in the alert.
+
 ## 6. Repair, ownership, and recovery
 
 - Use the repair families accepted by the current evaluator and Scenario contract. Action order, SQL spelling, index names, and report wording are not requirements unless the code explicitly makes them part of the public contract.
@@ -90,4 +114,9 @@ The following fields are the public state boundary exposed by the current Case c
 - Evaluator source: one or more modules under `src/scenarios/evaluation/postgres/business_change/`; the exact class is listed per Case above.
 - Entrypoint: `examples/run_pg_business_change_io_saturation_scenario.py`
 - Focused tests, reference runs, and traces are evidence, not a second contract.
+- Scope/unit/login and victim-exit regressions: `tests/postgres/test_io_saturation_work_mem_scope.py`.
+  Live PostgreSQL checks are opt-in with `DBA_BENCH_LIVE_IO_SCOPE=1`.
+- The compound Case retains its registry calibration (`hard`, D=6, C=0.565): the faults,
+  diagnosis path, and Agent-visible evidence are unchanged. This public repository has no Results
+  Catalog to synchronize; focused repair-equivalence checks do not establish a new calibration.
 - Before changing this document, compare it with the current registry, Case implementation, evaluator, focused tests, and live validation evidence.
