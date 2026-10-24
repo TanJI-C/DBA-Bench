@@ -72,6 +72,15 @@ The following fields are the public state boundary exposed by the current Case c
 
 ## 6. Repair, ownership, and recovery
 
+- For both Cases, SP accepts `work_mem` SET/RESET at the current database scope or the
+  current SQL login's role-in-current-database scope, as well as the existing global repair
+  family. Session tuning remains valid. Prefer the narrowest scope that serves the report.
+  Persistent settings for other databases, other roles, unrelated parameters, role-wide
+  changes, and `RESET ALL` are outside the repair boundary. Final-state checks exempt only
+  the permitted work_mem entries and continue protecting other configuration and objects.
+- This SP allowance does not prove recovery: OP still checks the current session's work_mem
+  and executes the original report's plan. Persistent database/role changes apply to new
+  logins; the active report session must also use the repaired value for its plan verification.
 - Use the repair families accepted by the current evaluator and Scenario contract. Action order, SQL spelling, index names, and report wording are not requirements unless the code explicitly makes them part of the public contract.
 - Runtime resources belong to the current FaultPlan/Injector and environment lifecycle. Recovery must release Case-owned connections, sessions, threads, processes, files, configuration, and database state through the current five-phase protocol.
 
@@ -81,4 +90,7 @@ The following fields are the public state boundary exposed by the current Case c
 - Evaluator source: one or more modules under `src/scenarios/evaluation/postgres/query_perf/`; the exact class is listed per Case above.
 - Entrypoint: `examples/run_pg_query_perf_sort_spill_scenario.py`
 - Focused tests, reference runs, and traces are evidence, not a second contract.
+- Scope and protection regressions: `tests/postgres/test_sort_spill_setting_scope.py`.
+  Existing difficulty calibration is retained: faults, workload, visible evidence, DP, and OP
+  are unchanged; the SP change admits equivalent repairs without adding a diagnostic step.
 - Before changing this document, compare it with the current registry, Case implementation, evaluator, focused tests, and live validation evidence.

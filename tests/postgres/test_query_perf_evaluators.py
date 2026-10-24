@@ -90,6 +90,7 @@ class QueryPerfFakeEnv:
     host = "test-host"
     port = 5432
     dbname = "test"
+    user = "postgres"
 
     def __init__(
         self,
