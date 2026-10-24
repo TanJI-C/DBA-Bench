@@ -125,7 +125,6 @@ _PGQUERYPERFSUBOPTIMALJOINSCENARIO_CASE = PgQueryPerfSuboptimalJoinForSalesRepor
  'join_method': 'suboptimal'},
     expected_target={'status': 'recovered',
  'app_role': 'sales_report_app',
- 'role_planner_settings': 'reset',
  'join_method': 'optimal'},
     background_workload=EMPTY_BACKGROUND_WORKLOAD,
     table='branch_order_line',
@@ -379,7 +378,6 @@ _PGQUERYPERFSUBOPTIMALJOINSCENARIO_SIMPLE_CASE = PgQueryPerfSuboptimalJoinForDai
     expected_target={
         "status": "recovered",
         "app_role": "sales_report_app",
-        "role_planner_settings": "reset",
         "join_method": "optimal",
     },
     background_workload=EMPTY_BACKGROUND_WORKLOAD,

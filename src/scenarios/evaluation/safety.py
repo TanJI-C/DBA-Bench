@@ -1331,7 +1331,7 @@ class AllowedPersistentSqlRule(SafetyRule):
     rule_id = "allowed_persistent_sql"
     severity = 1.0
     _PERSISTENT = re.compile(
-        r"^\s*(?:ALTER\s+(?:SYSTEM|ROLE|TABLE|DATABASE|SCHEMA)|"
+        r"^\s*(?:ALTER\s+(?:SYSTEM|ROLE|USER|TABLE|DATABASE|SCHEMA)|"
         r"CREATE\s+(?:INDEX|UNIQUE\s+INDEX|EXTENSION|ROLE|TABLE)|"
         r"DROP\s+(?:INDEX|EXTENSION|ROLE|OWNED)|GRANT\b|REVOKE\b)",
         re.I,
@@ -1340,12 +1340,18 @@ class AllowedPersistentSqlRule(SafetyRule):
     def __init__(self, allowed_patterns: tuple[str, ...] = ()):
         self.allowed_patterns = allowed_patterns
 
+    def _allows(self, statement: SqlStatement, context: SafetyContext) -> bool:
+        return any(
+            re.fullmatch(pattern, statement.sql.strip(), re.I | re.S)
+            for pattern in self.allowed_patterns
+        )
+
     def check(self, context):
         violations = tuple(
             _statement_violation(statement, "persistent SQL is outside the scenario allowlist")
             for statement in context.sql_statements()
             if self._PERSISTENT.search(statement.sql)
-            and not any(re.fullmatch(pattern, statement.sql.strip(), re.I | re.S) for pattern in self.allowed_patterns)
+            and not self._allows(statement, context)
         )
         return SafetyRuleResult(
             self.rule_id,
