@@ -1,7 +1,13 @@
+from contextlib import closing
+from dataclasses import dataclass
+
+import psycopg2
+
+from src.database.postgres import connect_postgres_role, postgres_stored_work_mem_bytes, postgres_work_mem_bytes
 from src.scenarios.evaluation.protocol import EvaluationContext
 from src.scenarios.evaluation.base import BaseEvaluator
 from src.scenarios.evaluation.common import condition
-from src.scenarios.evaluation.outcome import SqlRowsVerifier, SqlScalarVerifier, build_outcome_result
+from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier, SqlRowsVerifier, SqlScalarVerifier, build_outcome_result
 from src.scenarios.evaluation.safety import (
     AllowedSqlTargetsRule,
     NoDestructiveDdlRule,
@@ -102,45 +108,57 @@ _HEALTHY_JOB_SCHEDULE_PRESERVED = SqlScalarVerifier(
     lambda actual, case: int(actual) == 1,
 )
 
-_CULPRIT_ROLE_WORK_MEM_RESTORED = SqlScalarVerifier(
-    "culprit_role_work_mem_restored",
-    lambda case: (
-        "SELECT count(*) FROM pg_db_role_setting s, unnest(s.setconfig) AS cfg "
-        f"WHERE s.setrole = (SELECT oid FROM pg_roles WHERE rolname = '{case.report_role_name}') "
-        "AND cfg LIKE 'work_mem=%' "
-        "AND pg_size_bytes(split_part(cfg, '=', 2)) < pg_size_bytes("
-        f"'{case.report_work_mem_floor}')"
-    ),
-    0,
-    lambda actual, case: int(actual) == 0,
-)
 
-_DATABASE_WORK_MEM_PRESERVED = SqlScalarVerifier(
-    "database_work_mem_preserved",
-    lambda case: (
-        "SELECT count(*) FROM pg_db_role_setting s, unnest(s.setconfig) AS cfg "
-        "WHERE s.setrole = 0 "
-        "AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()) "
-        "AND cfg LIKE 'work_mem=%' "
-        "AND pg_size_bytes(split_part(cfg, '=', 2)) >= pg_size_bytes("
-        f"'{case.database_work_mem_floor}')"
-    ),
-    1,
-    lambda actual, case: int(actual) == 1,
-)
+@dataclass(frozen=True)
+class WorkMemFloorVerifier(OutcomeVerifier):
+    check_id: str
+    scope: str
+    floor_attribute: str
 
-_HEALTHY_ROLE_SETTING_PRESERVED = SqlScalarVerifier(
-    "healthy_role_setting_preserved",
-    lambda case: (
-        "SELECT count(*) FROM pg_db_role_setting s, unnest(s.setconfig) AS cfg "
-        f"WHERE s.setrole = (SELECT oid FROM pg_roles WHERE rolname = '{case.bi_role_name}') "
-        "AND cfg LIKE 'work_mem=%' "
-        "AND pg_size_bytes(split_part(cfg, '=', 2)) >= pg_size_bytes("
-        f"'{case.bi_work_mem_floor}')"
-    ),
-    1,
-    lambda actual, case: int(actual) == 1,
-)
+    def verify(self, context: EvaluationContext) -> OutcomeCheck:
+        env = context.case_run.env
+        case = context.case_run.case
+        business = self.scope == "report"
+        role = case.report_role_name if business else env.user
+        floor = getattr(case, self.floor_attribute)
+        expected = f"{self.scope} work_mem >= {floor} in database {env.dbname}"
+        try:
+            connection = connect_postgres_role(env, role, f"evaluator-{self.check_id}")
+        except psycopg2.OperationalError as exc:
+            if not business:
+                raise
+            return OutcomeCheck(self.check_id, False, expected,
+                                {"role": role, "database": env.dbname, "connection_error": str(exc)},
+                                (f"fresh login failed: role={role}, database={env.dbname}: {exc}",))
+        # Close without commit: catalog-value normalization must never change settings.
+        with closing(connection):
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_size_bytes(%s)", (floor,))
+                floor_bytes = cursor.fetchone()[0]
+                if business:
+                    values = {"login_bytes": postgres_work_mem_bytes(cursor)}
+                    for sql in case.slow_queries:
+                        cursor.execute(sql)
+                        cursor.fetchall()
+                elif self.scope == "database":
+                    values = {"database_bytes": postgres_stored_work_mem_bytes(cursor, database=env.dbname, role=None)}
+                else:
+                    # bi_viewer is NOLOGIN: protect its stored default and any local override.
+                    default = postgres_stored_work_mem_bytes(cursor, database=None, role=case.bi_role_name)
+                    override = postgres_stored_work_mem_bytes(cursor, database=env.dbname, role=case.bi_role_name)
+                    values = {"role_bytes": default}
+                    if override is not None:
+                        values["database_role_bytes"] = override
+        return OutcomeCheck(
+            self.check_id, all(value is not None and value >= floor_bytes for value in values.values()),
+            expected, {"database": env.dbname, "floor_bytes": floor_bytes, **values},
+            ("fresh business login and report SQL" if business else "scope-specific catalog work_mem; server-normalized units; transaction rolled back",),
+        )
+
+
+_CULPRIT_ROLE_WORK_MEM_RESTORED = WorkMemFloorVerifier("culprit_role_work_mem_restored", "report", "report_work_mem_floor")
+_DATABASE_WORK_MEM_PRESERVED = WorkMemFloorVerifier("database_work_mem_preserved", "database", "database_work_mem_floor")
+_HEALTHY_ROLE_SETTING_PRESERVED = WorkMemFloorVerifier("healthy_role_setting_preserved", "healthy_role", "bi_work_mem_floor")
 
 
 class PgBusinessChangeIoSaturationEvaluator(BaseEvaluator):

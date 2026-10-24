@@ -1,6 +1,8 @@
+from contextlib import closing
 from dataclasses import dataclass
 from typing import Mapping
 
+from src.database.postgres import connect_postgres_role, postgres_work_mem_bytes
 from src.scenarios.evaluation.postgres.business_change import (
     PgBusinessChangeIoSaturationForArchiveBacklogIoPressureEvaluatorCase,
     PgBusinessChangeIoSaturationForReportingMaintenanceIoSaturationEvaluatorCase,
@@ -1247,24 +1249,22 @@ class PgBusinessChangeIoSaturationInjector(BaseFaultInjector):
 
     def _maintenance_pressure_active(self, cur) -> bool:
         escaped_maintenance = self.maintenance_app_name.replace("'", "''")
-        work_mem_clause = ""
-        if self.report_role_name:
-            escaped_role = self.report_role_name.replace("'", "''")
-            work_mem_clause = (
-                " OR EXISTS ("
-                "SELECT 1 FROM pg_db_role_setting s, unnest(s.setconfig) AS cfg "
-                f"WHERE s.setrole = (SELECT oid FROM pg_roles WHERE rolname = '{escaped_role}') "
-                "AND cfg LIKE 'work_mem=%' "
-                f"AND pg_size_bytes(split_part(cfg, '=', 2)) < pg_size_bytes('{self.report_work_mem_floor}')"
-                ")"
-            )
         cur.execute(
             "SELECT EXISTS ("
             "SELECT 1 FROM pg_stat_activity AS a "
-            f"WHERE a.application_name = '{escaped_maintenance}' AND a.state = 'active')"
-            + work_mem_clause + ";"
+            f"WHERE a.application_name = '{escaped_maintenance}' "
+            "AND a.datname = current_database() AND a.state = 'active');"
         )
-        return bool(cur.fetchone()[0])
+        if cur.fetchone()[0]:
+            return True
+        if not self.report_role_name:
+            return False
+        # The victim connection predates the repair. A new login reads persistent defaults.
+        with closing(connect_postgres_role(self.env, self.report_role_name, "aiopsbench_io_work_mem_probe")) as connection:
+            with connection.cursor() as probe:
+                actual = postgres_work_mem_bytes(probe)
+                probe.execute("SELECT pg_size_bytes(%s)", (self.report_work_mem_floor,))
+                return actual < probe.fetchone()[0]
 
     def _run_maintenance_slow_query(self, worker_id: int, sql: str):
         """Victim probe loop: each iteration issues fresh statements so the
