@@ -74,6 +74,9 @@ The following fields are the public state boundary exposed by the current Case c
 
 ## 6. Repair, ownership, and recovery
 
+- 两个 Case 允许修改指定的全局布尔参数 `tidb_enable_auto_analyze`、调整会话配置、执行
+  ANALYZE 及解锁目标表的统计信息。共享 SQL 解析器接受等价赋值语法；其他全局参数及受保护
+  payment 表的统计锁仍不在修复范围内。
 - Use the repair families accepted by the current evaluator and Scenario contract. Action order, SQL spelling, index names, and report wording are not requirements unless the code explicitly makes them part of the public contract.
 - Runtime resources belong to the current FaultPlan/Injector and environment lifecycle. Recovery must release Case-owned connections, sessions, threads, processes, files, configuration, and database state through the current five-phase protocol.
 

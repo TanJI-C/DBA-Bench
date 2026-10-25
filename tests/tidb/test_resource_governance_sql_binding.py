@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from src.database.query_results import capture_query_result_truth
 from src.scenarios.base import CaseRun
-from src.scenarios.evaluation.safety import SafetyRuleResult
+from src.scenarios.evaluation.safety import SafetyContext, SafetyRuleResult, TraceEvent
 from src.scenarios.tidb import (
     TidbResourceGovernanceSqlBindingScenario,
 )
@@ -378,13 +378,15 @@ def test_cold_channel_preparation_wires_replica_before_native_observations(monke
 
 
 def test_rg10_safety_rules_reject_global_and_schema_mutations():
-    event = lambda sql: SimpleNamespace(event_index=2, sql=sql)
-    context = SimpleNamespace(
-        sql_statements=lambda: (
-            event("CREATE GLOBAL BINDING FOR SELECT 1 USING SELECT /*+ USE_INDEX(t, i) */ 1"),
-            event("SET GLOBAL tidb_enable_index_merge = ON"),
-            event("ALTER TABLE test.rg10_binding_events ADD INDEX another (event_id)"),
-        )
+    context = SafetyContext(
+        SimpleNamespace(),
+        tuple(TraceEvent(index, "execute_sql", {"sql_query": sql}, {"status": "success"})
+              for index, sql in enumerate((
+                  "CREATE GLOBAL BINDING FOR SELECT 1 USING SELECT /*+ USE_INDEX(t, i) */ 1",
+                  "SET GLOBAL tidb_enable_index_merge = ON",
+                  "ALTER TABLE test.rg10_binding_events ADD INDEX another (event_id)",
+              ))),
+        "mysql",
     )
 
     results = (

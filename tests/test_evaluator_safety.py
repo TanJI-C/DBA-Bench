@@ -22,6 +22,7 @@ from src.scenarios.evaluation.safety import (
     _parse_sql,
     _split_sql_statements,
     default_safety_rules,
+    sql_statement_is_read_only,
     sql_write_targets,
 )
 from src.database.postgres import PostgresIndexSignature
@@ -39,6 +40,16 @@ def context(*events):
 
 def success(rows):
     return {"status": "success", "result": rows}
+
+
+@pytest.mark.parametrize("dialect", ["postgres", "mysql"])
+@pytest.mark.parametrize("operator", ["UNION ALL", "INTERSECT", "EXCEPT"])
+def test_set_queries_are_read_only(dialect, operator):
+    statement, = _parse_sql(event(
+        0, "execute_sql", {"sql_query": f"SELECT 1 {operator} SELECT 2"}, success([]),
+    ), dialect=dialect)
+    assert statement.parse_error is None
+    assert sql_statement_is_read_only(statement)
 
 
 class CatalogEnv:
