@@ -59,9 +59,12 @@ class ConfigEnv(QueryPerfFakeEnv):
             [self.dbname, self.user, ["work_mem=4MB", "temp_file_limit=1GB"]],
         ]
         self.roles = [[self.user, None], ["other", ["work_mem=32MB"]]]
+        self.file_settings = [["postgresql.auto.conf", 1, "shared_buffers", "128MB", True, ""]]
 
     def execute_sql(self, sql):
-        if "COALESCE(d.datname" in sql:
+        if "FROM pg_file_settings" in sql:
+            rows = self.file_settings
+        elif "COALESCE(d.datname" in sql:
             rows = self.database_config
         elif "FROM pg_roles ORDER BY" in sql:
             rows = self.roles
@@ -86,6 +89,22 @@ def test_final_state_exempts_only_work_mem_in_allowed_scopes(case, database, rol
     env.database_config.append([database, role, [setting]])
     context = SimpleNamespace(case_run=SimpleNamespace(env=env, case=case))
     assert verifier.verify(context, baseline).passed is allowed
+
+
+def test_work_mem_reset_allows_renumbering_but_protects_other_configuration(case):
+    env = ConfigEnv(case)
+    env.file_settings = [
+        ["postgresql.auto.conf", 3, "work_mem", "4MB", True, ""],
+        ["postgresql.auto.conf", 4, "statement_timeout", "30s", True, ""],
+    ]
+    verifier = evaluation.WorkMemStateIntegrityVerifier()
+    baseline = verifier.capture(env, case)
+    context = SimpleNamespace(case_run=SimpleNamespace(env=env, case=case))
+    env.file_settings = [["postgresql.auto.conf", 3, "statement_timeout", "30s", True, ""]]
+    assert verifier.verify(context, baseline).passed
+
+    env.file_settings = [["postgresql.auto.conf", 3, "statement_timeout", "60s", True, ""]]
+    assert not verifier.verify(context, baseline).passed
 
 
 def test_scoped_reset_preserves_other_parameters_and_roles(case):

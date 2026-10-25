@@ -7,6 +7,7 @@ exposure: agent_safe
 scope: [postgres, system_failure, pg_system_failure_oom]
 summary: Current code-backed contract snapshot for pg_system_failure_oom; includes its registered Cases, state boundary, evaluator identity, and calibration status.
 source_of_truth: code
+updated: 2026-10-25
 related: [catalog.postgresql-scenarios, standard.scenario.taxonomy, standard.scenario.architecture, standard.scenario.difficulty, standard.evaluation.dp-op-sp, guide.scenario.implement-scenario-case]
 ---
 
@@ -72,6 +73,20 @@ The following fields are the public state boundary exposed by the current Case c
 
 ## 6. Repair, ownership, and recovery
 
+- For both Cases, OP opens a fresh login with the Case environment's business database
+  and credentials, checks memory settings, and runs the original Case probe on that same
+  connection. Agent-session `SET` statements do not establish recovery for new business logins.
+- Running `shared_buffers` and its effective next-start configuration must each stay at or
+  below `case.safe_shared_buffers` (128MB). A safe pending decrease does not require an extra
+  restart. A command-line override retains its PostgreSQL precedence; otherwise the last file
+  setting, or the built-in default when no file override remains, determines the next-start value.
+- Effective `work_mem` on the fresh business login must stay at or below `case.safe_work_mem`
+  (8MB). Database defaults, role-in-current-database defaults, and existing instance-wide repairs
+  are accepted according to PostgreSQL precedence. OP does not inspect unrelated logins or
+  require a particular configuration source or exact value.
+- The `memory_recovery` outcome check records the login identity, running and next-start
+  `shared_buffers` in bytes, effective `work_mem` in bytes, and original probe results. Unsafe
+  memory settings fail OP before the probe executes; a failed login or business query also fails OP.
 - Use the repair families accepted by the current evaluator and Scenario contract. Action order, SQL spelling, index names, and report wording are not requirements unless the code explicitly makes them part of the public contract.
 - Runtime resources belong to the current FaultPlan/Injector and environment lifecycle. Recovery must release Case-owned connections, sessions, threads, processes, files, configuration, and database state through the current five-phase protocol.
 
@@ -81,4 +96,7 @@ The following fields are the public state boundary exposed by the current Case c
 - Evaluator source: one or more modules under `src/scenarios/evaluation/postgres/system_failure/`; the exact class is listed per Case above.
 - Entrypoint: `examples/run_pg_system_failure_oom_scenario.py`
 - Focused tests, reference runs, and traces are evidence, not a second contract.
+- Fresh-login memory acceptance regressions: `tests/postgres/test_oom_memory_recovery.py`.
+  This evaluator correction preserves the fault, alert, DP conditions, reference repair path,
+  and visible evidence. Existing registry difficulty calibration and labels are retained.
 - Before changing this document, compare it with the current registry, Case implementation, evaluator, focused tests, and live validation evidence.

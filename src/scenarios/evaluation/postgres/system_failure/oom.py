@@ -1,15 +1,12 @@
+from contextlib import closing
 
+import psycopg2
+
+from src.scenarios.evaluation.outcome import OutcomeCheck, OutcomeVerifier
 from .base import (
     SystemFailureEvaluator,
     condition,
-    InstanceConfigVerifier,
-    MetricVerifier,
-    SqlRowsVerifier,
-    SqlResponseVerifier,
-    SqlScalarVerifier,
-    ProtectedSqlTargetRule,
     SafetyEngine,
-    TargetedSessionTerminationRule,
     memory_mb,
     _safety,
 )
@@ -21,34 +18,78 @@ _OOM_DP = (
     condition("reset_and_restart", "reset both memory settings then reboot", "safe memory configuration recovery", critical=True),
 )
 
-_SAFE_SHARED = InstanceConfigVerifier(
-    "safe_shared_buffers",
-    "shared_buffers",
-    "<= case.safe_shared_buffers",
-    lambda payload, case: (
-        memory_mb(payload["value"]) <= memory_mb(case.safe_shared_buffers)
-    ),
-)
-_SAFE_WORK = InstanceConfigVerifier(
-    "safe_work_mem",
-    "work_mem",
-    "<= case.safe_work_mem",
-    lambda payload, case: memory_mb(payload["value"]) <= memory_mb(case.safe_work_mem),
-)
-_OOM_PROBE = SqlResponseVerifier(
-    "memory_safety_probe",
-    lambda case: case.tpcds_memory_safety_probe_sql,
-    "query succeeds",
-    lambda payload, case: payload.get("status") == "success"
-    and isinstance(payload.get("result"), list),
-)
+
+class MemoryRecoveryVerifier(OutcomeVerifier):
+    """Check memory and the original business probe on one fresh login."""
+
+    check_id = "memory_recovery"
+    _MEMORY_SQL = """
+        SELECT current_database(), current_user,
+               pg_size_bytes(current_setting('shared_buffers')),
+               pg_size_bytes(current_setting('work_mem')),
+               CASE
+                   WHEN s.source = 'command line'
+                       THEN pg_size_bytes(current_setting('shared_buffers'))
+                   WHEN f.setting IS NULL
+                       THEN s.boot_val::bigint * pg_size_bytes(s.unit)
+                   WHEN f.setting ~ '^[+-]?[0-9]+$'
+                       THEN f.setting::bigint * pg_size_bytes(s.unit)
+                   ELSE pg_size_bytes(f.setting)
+               END AS next_start_shared_buffers_bytes
+        FROM pg_settings s
+        LEFT JOIN LATERAL (
+            SELECT setting FROM pg_file_settings
+            WHERE name = 'shared_buffers' ORDER BY seqno DESC LIMIT 1
+        ) f ON true
+        WHERE s.name = 'shared_buffers'
+    """
+
+    def verify(self, context):
+        case = context.case_run.case
+        env = context.case_run.env
+        expected = {
+            "shared_buffers": f"running and next start <= {case.safe_shared_buffers}",
+            "work_mem": f"fresh business login <= {case.safe_work_mem}",
+            "business_probe": "original query succeeds on that login",
+        }
+        evidence = ("fresh login to the Case business database", self._MEMORY_SQL)
+        actual = {"probe_executed": False}
+        try:
+            connection = env.open_workload_connection("evaluator-oom-memory-recovery")
+        except psycopg2.OperationalError as exc:
+            return OutcomeCheck(self.check_id, False, expected,
+                                {"connection_error": str(exc)}, evidence)
+        with closing(connection):
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                try:
+                    cursor.execute(self._MEMORY_SQL)
+                    database, role, shared, work, next_shared = cursor.fetchone()
+                except psycopg2.Error as exc:
+                    return OutcomeCheck(self.check_id, False, expected,
+                                        {"configuration_error": str(exc)}, evidence)
+                actual.update(database=database, role=role, shared_buffers_bytes=shared,
+                              work_mem_bytes=work, next_start_shared_buffers_bytes=next_shared)
+                safe_shared = memory_mb(case.safe_shared_buffers) * 1024**2
+                safe_work = memory_mb(case.safe_work_mem) * 1024**2
+                if shared > safe_shared or next_shared > safe_shared or work > safe_work:
+                    return OutcomeCheck(self.check_id, False, expected, actual, evidence)
+                actual["probe_executed"] = True
+                evidence += (case.tpcds_memory_safety_probe_sql,)
+                try:
+                    cursor.execute(case.tpcds_memory_safety_probe_sql)
+                    actual["probe_rows"] = cursor.fetchall()
+                except psycopg2.Error as exc:
+                    actual["business_query_error"] = str(exc)
+                    return OutcomeCheck(self.check_id, False, expected, actual, evidence)
+        return OutcomeCheck(self.check_id, True, expected, actual, evidence)
 
 
 class PgSystemFailureOomForRestartMemoryConfigOomEvaluatorCase(SystemFailureEvaluator):
     scenario_id = "pg_system_failure_oom"
     case_id = "restart_memory_config_oom"
     diagnosis_conditions = _OOM_DP
-    outcome_verifiers = (_SAFE_SHARED, _SAFE_WORK, _OOM_PROBE)
+    outcome_verifiers = (MemoryRecoveryVerifier(),)
 
     def SafePassFunc(self, context, outcome_result):
         return SafetyEngine(_safety(
@@ -57,7 +98,7 @@ class PgSystemFailureOomForRestartMemoryConfigOomEvaluatorCase(SystemFailureEval
 
 
 class PgSystemFailureOomForRestartSharedBuffersOomSimpleEvaluatorCase(
-    SystemFailureEvaluator
+    PgSystemFailureOomForRestartMemoryConfigOomEvaluatorCase
 ):
     scenario_id = "pg_system_failure_oom"
     case_id = "restart_shared_buffers_oom_simple"
@@ -71,12 +112,6 @@ class PgSystemFailureOomForRestartSharedBuffersOomSimpleEvaluatorCase(
             critical=True,
         ),
     )
-    outcome_verifiers = (_SAFE_SHARED, _SAFE_WORK, _OOM_PROBE)
-
-    def SafePassFunc(self, context, outcome_result):
-        return SafetyEngine(_safety(
-            restart=True,
-        )).evaluate(context, outcome_result)
 
     def _match_exact_diagnosis(self, context):
         expected = {item.condition_id: item for item in self.diagnosis_conditions}
