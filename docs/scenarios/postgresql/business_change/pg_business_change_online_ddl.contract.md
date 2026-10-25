@@ -27,8 +27,8 @@ language: en
 
 | case_no | case_id | title | current label |
 | ---: | --- | --- | --- |
-| 0 | `order_line_delivery_note_ddl` | Online schema change on a large hot PostgreSQL order_line table. | `hard` |
-| 1 | `order_line_gift_note_ddl_simple` | Simplified online nullable-column release on a moderately large hot order table. | `hard` |
+| 0 | `order_line_delivery_note_ddl` | Online schema change on a large hot PostgreSQL order_line table. | `easy` |
+| 1 | `order_line_gift_note_ddl_simple` | Simplified online nullable-column release on a moderately large hot order table. | `easy` |
 
 The Case set above is the current code snapshot. A missing calibration is explicit and must not be inferred from unregistered labels.
 
@@ -91,11 +91,11 @@ The `order-note-release-precheck` workload runs a real application SELECT, initi
 
 ## 8. Reference path and validation
 
-Release pre-check failure under continuing order writes → identify the failed application binding from database logs and distinguish adjacent release noise → compare live schema with the request → select a bounded-lock schema change on the hot business table. Repair and post-repair verification do not add diagnostic depth.
+Release pre-check failure under continuing order writes → identify the missing application-required column from database logs and the live schema, distinguishing adjacent release noise → select a bounded-lock schema change on the hot business table. Repair and post-repair verification do not add diagnostic depth.
 
 The reference reads unfiltered database logs, public-schema columns, public-table sizes and database activity/locks, executes bounded DDL, and reruns the original business SELECT. Equivalent safe DDL and character types remain valid. No particular retry loop or catalog-verification action is required by OP. The existing compact fixture retains its synthetic `reltuples` size estimate; no new numeric throughput SLO is claimed.
 
-Both cases have reference diagnostic depth **D=3**. The three transitions above are supported by the failed SELECT in logs, the target table's actual columns, and ongoing writer locks plus the relation inventory. There is no meaningful root-cause DP for this business-change task.
+Both cases have reference diagnostic depth **D=2**. The first transition is supported jointly by the failed SELECT in logs and the target table's actual columns; checking the schema confirms the same missing-column finding rather than establishing a separate logical state. The second transition uses ongoing writer locks plus the relation inventory to choose the bounded-lock change required by the alert. There is no meaningful root-cause DP for this business-change task.
 
 | Key observation (raw units) | delivery m/n | gift m/n |
 | --- | ---: | ---: |
@@ -107,13 +107,13 @@ Both cases have reference diagnostic depth **D=3**. The three transitions above 
 
 Causal log lines contain the actual missing-column error or failed business SELECT. Causal schema/inventory rows describe the live target table; causal activity rows show its active application relation, index or sequence locks. Other rows remain in the denominator, including adjacent business objects, extension views and observation queries' catalog locks. No target filter or log keyword filter is applied before counting. Both logs fit completely within the 200-line request. QPS and connection overviews are supplementary checks outside this key evidence set; repair and verification observations are excluded.
 
-- Delivery reference: `57768ec4-cbdd-4f39-89d2-e879579688a0`; diagnostic samples at `07:50:22.122–07:50:22.495 UTC`; D=3, rho=30/112, **C=0.732143, hard**.
-- Gift reference: `7e2f4468-2e16-4c1d-b211-248ec5d5739b`; diagnostic samples at `07:50:26.228–07:50:26.557 UTC`; D=3, rho=20/98, **C=0.795918, hard**.
+- Delivery reference: `57768ec4-cbdd-4f39-89d2-e879579688a0`; diagnostic samples at `07:50:22.122–07:50:22.495 UTC`; D=2, rho=30/112, **C=0.732143, easy**.
+- Gift reference: `7e2f4468-2e16-4c1d-b211-248ec5d5739b`; diagnostic samples at `07:50:26.228–07:50:26.557 UTC`; D=2, rho=20/98, **C=0.795918, easy**.
 - Workload: the profiles in section 3; delivery uses two shared workers, three writers and a four-second warmup; gift uses one shared worker, one writer and a two-second warmup. Logs cover startup through the sampled read. Writer/blocker parameters and resource limits remain in the Case source.
 
 These are measurements of the repaired evidence path, replacing the previous calibration. They do not establish unchanged model difficulty or a ranking between the two cases. Labels follow the public D/C rule, including for the case whose identifier contains `simple`. No matching Results Catalog exists for this revision; frozen historical catalogs are not rewritten.
 
-The protected-object and lock-timeout corrections retain these D/C values: the reference observations, diagnostic transitions and m/n counts are unchanged. Registry and bilingual catalog values remain aligned with this contract.
+This depth correction groups log interpretation and schema confirmation into one logical transition. The key observation set, sampling windows, workload and m/n counts remain unchanged, so the measured C values are retained. With D=2, both cases are easy under the public D/C rule. Registry and bilingual catalog values remain aligned with this contract.
 
 Both Docker MockPaths returned **DP=None, OP=True, SP=True** and completed teardown. Live PostgreSQL boundary checks confirmed: no repair and wrong schema fail OP while passing SP; changing the protected shadow fails SP; integer and non-nullable columns fail OP; nullable text, varchar and char pass; removing the requested order fails the business probe. Quiesce stopped all captured writer/blocker threads, activation restored exactly the configured writer count and real precheck failure, and recovery removed the target column and released checkout sessions.
 

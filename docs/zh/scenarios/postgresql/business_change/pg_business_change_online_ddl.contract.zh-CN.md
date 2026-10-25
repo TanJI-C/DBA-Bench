@@ -27,8 +27,8 @@ language: zh-CN
 
 | case_no | case_id | title | current label |
 | ---: | --- | --- | --- |
-| 0 | `order_line_delivery_note_ddl` | Online schema change on a large hot PostgreSQL order_line table. | `hard` |
-| 1 | `order_line_gift_note_ddl_simple` | Simplified online nullable-column release on a moderately large hot order table. | `hard` |
+| 0 | `order_line_delivery_note_ddl` | Online schema change on a large hot PostgreSQL order_line table. | `easy` |
+| 1 | `order_line_gift_note_ddl_simple` | Simplified online nullable-column release on a moderately large hot order table. | `easy` |
 
 The Case set above is the current code snapshot. A missing calibration is explicit and must not be inferred from unregistered labels.
 
@@ -90,11 +90,11 @@ The following fields are the public state boundary exposed by the current Case c
 
 ## 8. 参考路径与验证
 
-订单持续写入时发布预检失败 → 从数据库日志识别失败应用绑定并区分相邻发布噪声 → 对照线上 schema 找到结构差异 → 根据热表写入和锁状态选择有界等待的结构变更。修复及修复后验证不增加诊断深度。
+订单持续写入时发布预检失败 → 结合数据库日志与线上 schema 确认应用所需字段缺失，并区分相邻发布噪声 → 根据热表写入和锁状态选择有界等待的结构变更。修复及修复后验证不增加诊断深度。
 
 参考路径读取未过滤数据库日志、public schema 字段、public 普通表大小及当前数据库的活动和锁，执行有界等待 DDL，并重新执行原业务 SELECT。接受等价安全 DDL 和字符类型；OP 不强制某种重试循环或复查动作。现有紧凑 fixture 仍使用合成 reltuples 估计，不宣称新增数值吞吐 SLO。
 
-两个 Case 的参考诊断深度均为 **D=3**。上述三跳分别由日志中的失败 SELECT、目标表实际字段，以及持续写入的关系锁和表清单支持。业务变更任务不编造根因 DP。
+两个 Case 的参考诊断深度均为 **D=2**。第一跳由日志中的失败 SELECT 和目标表实际字段共同支持；核对 schema 是确认同一个缺列判断，不另算一个逻辑状态。第二跳结合持续写入的关系锁和表清单，选择符合告警要求的有界锁等待变更。业务变更任务不编造根因 DP。
 
 | 关键观察（原始计数单位） | delivery m/n | gift m/n |
 | --- | ---: | ---: |
@@ -106,13 +106,13 @@ The following fields are the public state boundary exposed by the current Case c
 
 因果日志行指实际缺列错误和失败业务 SELECT；因果 schema/清单行描述目标业务表；因果活动行指应用在目标表、索引或序列上的活跃关系锁。其余内容全部保留在分母，包括相邻业务对象、扩展视图和观察查询自身的 catalog 锁。计数前不按目标过滤 SQL 结果，也不按关键词过滤日志；两次日志均完整落在 200 行上限内。QPS 和连接概览属于辅助检查，不计入关键证据集合；修复及复查也不计入。
 
-- Delivery reference：`57768ec4-cbdd-4f39-89d2-e879579688a0`；诊断采样 `07:50:22.122–07:50:22.495 UTC`；D=3，rho=30/112，**C=0.732143，hard**。
-- Gift reference：`7e2f4468-2e16-4c1d-b211-248ec5d5739b`；诊断采样 `07:50:26.228–07:50:26.557 UTC`；D=3，rho=20/98，**C=0.795918，hard**。
+- Delivery reference：`57768ec4-cbdd-4f39-89d2-e879579688a0`；诊断采样 `07:50:22.122–07:50:22.495 UTC`；D=2，rho=30/112，**C=0.732143，easy**。
+- Gift reference：`7e2f4468-2e16-4c1d-b211-248ec5d5739b`；诊断采样 `07:50:26.228–07:50:26.557 UTC`；D=2，rho=20/98，**C=0.795918，easy**。
 - 负载为第 3 节列出的 profiles：delivery 有两个共享 worker、三个 writer，预热四秒；gift 有一个共享 worker、一个 writer，预热两秒。日志窗口覆盖启动至本次读取；writer/blocker 参数及资源限制见 Case 源码。
 
 这是修复后证据路径的测量，替换旧校准；不能据此声称模型难度不变，也不能据此给两个 Case 的实际难度排序。标签按公共 D/C 规则生成，case_id 带 `simple` 也不例外。本版本不存在对应的 Results Catalog，不重写冻结历史结果。
 
-本次保护对象与锁等待判断修正保留上述 D/C：参考观察、诊断跳数和 m/n 计数均未改变。代码注册表、中英目录与当前合同的数值保持一致。
+本次深度修正将日志解读和 schema 确认合并为一次逻辑跳转；关键观察集合、采样窗口、负载及 m/n 计数均未改变，因此保留实测 C。D=2 时，两个 Case 按公共 D/C 规则均为 easy。代码注册表、中英目录与当前合同的数值保持一致。
 
 两个 Docker MockPath 均为 **DP=None、OP=True、SP=True**，且完成 teardown。真实 PostgreSQL 边界检查验证了：未修复、错误 schema 的 OP 失败但 SP 通过；误改受保护影子表导致 SP 失败；integer、非空列不通过 OP；可空 text、varchar、char 均通过；删除请求对应订单后业务预检不通过。quiesce 后已捕获的 writer/blocker 线程全部停止，activate 恢复恰好配置数量的 writer 和真实预检失败，recover 删除目标列并释放 checkout 会话。
 

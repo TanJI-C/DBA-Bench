@@ -34,7 +34,7 @@ SCENARIOS = (
 )
 
 EXPECTED_DIFFICULTY = {
-    "order_line_gift_note_ddl_simple": (3, 20, 78, 0.795918, "hard"),
+    "order_line_gift_note_ddl_simple": (2, 20, 78, 0.795918, "easy"),
     "customer_loyalty_decade_backfill_simple": (
         2,
         8,
