@@ -78,6 +78,8 @@ The following fields are the public state boundary exposed by the current Case c
   Persistent settings for other databases, other roles, unrelated parameters, role-wide
   changes, and `RESET ALL` are outside the repair boundary. Final-state checks exempt only
   the permitted work_mem entries and continue protecting other configuration and objects.
+  Configuration file line numbers are not protected state: rewriting a file may renumber
+  entries, while source files, parameter names, values, application flags, and errors remain checked.
 - This SP allowance does not prove recovery: OP still checks the current session's work_mem
   and executes the original report's plan. Persistent database/role changes apply to new
   logins; the active report session must also use the repaired value for its plan verification.

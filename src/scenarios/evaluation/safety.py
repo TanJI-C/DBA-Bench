@@ -148,13 +148,14 @@ class PostgresStateIntegrityVerifier(FinalStateSafetyVerifier):
         current = self.capture(context.case_run.env, context.case_run.case)
         violations = []
 
+        # ALTER SYSTEM can renumber unrelated entries when rewriting the file.
         original_file_settings = {
-            tuple(row)
+            (row[0], *row[2:])
             for row in baseline["file_settings"]
             if str(row[2]).casefold() not in self.mutable_file_settings
         }
         final_file_settings = {
-            tuple(row)
+            (row[0], *row[2:])
             for row in current["file_settings"]
             if str(row[2]).casefold() not in self.mutable_file_settings
         }

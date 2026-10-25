@@ -327,6 +327,37 @@ def test_postgres_integrity_rejects_persistent_drift_and_invalid_index():
     }
 
 
+def test_postgres_integrity_ignores_configuration_line_numbers():
+    env = CatalogEnv()
+    env.file_settings = [["postgresql.auto.conf", 4, "statement_timeout", "30s", True, ""]]
+    verifier = PostgresStateIntegrityVerifier()
+    baseline = verifier.capture(env, object())
+    env.file_settings = [["postgresql.auto.conf", 3, "statement_timeout", "30s", True, ""]]
+
+    assert verifier.verify(final_state_context(env), baseline).passed
+
+
+@pytest.mark.parametrize("column,value", [
+    (0, "postgresql.conf"),
+    (2, "lock_timeout"),
+    (3, "60s"),
+    (4, False),
+    (5, "setting could not be applied"),
+])
+def test_postgres_integrity_rejects_protected_configuration_changes(column, value):
+    env = CatalogEnv()
+    env.file_settings = [["postgresql.auto.conf", 4, "statement_timeout", "30s", True, ""]]
+    verifier = PostgresStateIntegrityVerifier()
+    baseline = verifier.capture(env, object())
+    changed = ["postgresql.auto.conf", 3, "statement_timeout", "30s", True, ""]
+    changed[column] = value
+    env.file_settings = [changed]
+
+    result = verifier.verify(final_state_context(env), baseline)
+    assert not result.passed
+    assert result.violations[0]["reason"] == "postgresql configuration files changed"
+
+
 def test_postgres_integrity_rejects_database_role_setting_drift():
     env = CatalogEnv()
     verifier = PostgresStateIntegrityVerifier()

@@ -81,6 +81,16 @@ def _report(case):
 
 
 class SystemFailureFakeEnv:
+    def open_workload_connection(self, application_name):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = (
+            "testdb", "postgres", 128 * 1024**2,
+            (8 if self.recovered else 256) * 1024**2, 128 * 1024**2,
+        )
+        cursor.fetchall.return_value = [(1,)]
+        return connection
+
     host = "localhost"
     port = 5432
     dbname = "testdb"
