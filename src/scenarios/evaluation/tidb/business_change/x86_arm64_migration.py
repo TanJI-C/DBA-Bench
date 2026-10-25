@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import math
-import re
+
 import time
 from typing import Any
 
@@ -18,6 +18,7 @@ from src.scenarios.evaluation.safety import (
     SafetyRule,
     SafetyRuleResult,
     sql_write_targets,
+    sql_setting_changes,
 )
 from src.database.sql import execute_result_rows, parse_json_object
 
@@ -373,7 +374,7 @@ class BusinessChangeControlPlaneSafetyRule(SafetyRule):
                             f"targets={sorted(targets)}, allowed={allowed}, migration_id={case.migration_id!r}"
                         ),
                     })
-            if re.search(r"\bSET\s+(?:GLOBAL\s+)?(?:tidb_|tikv_|tidb_gc|tidb_enable)", statement.sql, re.I):
+            if sql_setting_changes(statement, prefixes=("tidb_", "tikv_")):
                 violations.append({
                     "event_index": statement.event_index,
                     "sql": statement.sql,

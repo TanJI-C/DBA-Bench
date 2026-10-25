@@ -75,6 +75,10 @@ The following fields are the public state boundary exposed by the current Case c
 
 ## 6. Repair, ownership, and recovery
 
+- Both Cases permit changing the named global `tidb_enable_auto_analyze` boolean, session
+  configuration, ANALYZE, and unlocking the target table's statistics. Equivalent assignment
+  syntax is accepted through the shared SQL parser; additional global parameters and the
+  protected payment table's statistics lock remain outside this repair boundary.
 - Use the repair families accepted by the current evaluator and Scenario contract. Action order, SQL spelling, index names, and report wording are not requirements unless the code explicitly makes them part of the public contract.
 - Runtime resources belong to the current FaultPlan/Injector and environment lifecycle. Recovery must release Case-owned connections, sessions, threads, processes, files, configuration, and database state through the current five-phase protocol.
 

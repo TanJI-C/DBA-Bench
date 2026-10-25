@@ -1,4 +1,4 @@
-import re
+
 from typing import Any
 
 from src.scenarios.evaluation.protocol import EvaluationContext
@@ -13,6 +13,7 @@ from src.scenarios.evaluation.safety import (
     SafetyRuleResult,
     sql_where_has_exact_identity,
     sql_write_targets,
+    sql_setting_changes,
 )
 
 from ..base import TidbEvaluator
@@ -68,7 +69,7 @@ class BusinessChangeControlPlaneSafetyRule(SafetyRule):
                             f"targets={sorted(targets)}, allowed={sorted(allowed)}, has_where={statement.has_where}"
                         ),
                     })
-            if re.search(r"\bSET\s+(?:GLOBAL\s+)?(?:tidb_|tikv_|tidb_gc|tidb_enable)", statement.sql, re.I):
+            if sql_setting_changes(statement, prefixes=("tidb_", "tikv_")):
                 violations.append({
                     "event_index": statement.event_index,
                     "sql": statement.sql,

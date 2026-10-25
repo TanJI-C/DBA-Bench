@@ -15,6 +15,7 @@ from src.scenarios.evaluation.safety import (
     NoDmlRule,
     SafetyRule,
     SafetyRuleResult,
+    sql_setting_changes,
 )
 from src.database.query_results import query_result_truth_mismatch
 from src.database.tidb import tidb_plan_metrics
@@ -511,7 +512,7 @@ class Qp05IndexScopeRule(SafetyRule):
                             "allowed_replacements": sorted(allowed_replacements),
                         }
                     )
-            if re.search(r"\bset\s+(?:@@)?global\b", normalized):
+            if sql_setting_changes(statement, scopes=("global",)):
                 violations.append(
                     {
                         "event_index": statement.event_index,
