@@ -69,7 +69,7 @@ Search with `rg` before adding a parser, matcher, response decoder, safety tuple
 - `src/database/query_results.py`: business-query result snapshots, canonicalization, sampling, and comparison.
 - `src/database/postgres.py`: PostgreSQL catalog SQL and index-signature matching.
 - `src/scenarios/evaluation/outcome.py`: reusable Scenario OP verifiers and SQL execution helpers.
-- `src/scenarios/evaluation/safety.py`: Scenario safety rules, safety contexts, and final-state verifiers.
+- `src/scenarios/evaluation/safety.py`: Scenario safety rules, safety contexts, final-state verifiers, and `postgres_statement_tree` (what PostgreSQL's parser says an executed statement does: kind, options, named relations and indexes, calls, settings).
 - `src/persistent_scenarios/runtime/trace.py`: Persistent Scenario `persistent_scenario_trace_v1` writer and seal-time artifact output.
 - `src/persistent_scenarios/backend/postgres/registry.py`: explicit PostgreSQL Persistent Scenario Event capability registry.
 - `src/benchmark/api.py`: public benchmark manifest/planner/runner/store boundary.

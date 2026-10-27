@@ -2,10 +2,11 @@ import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, NamedTuple
 
-from pglast import parse_plpgsql
-from pglast.parser import ParseError as PlpgsqlParseError
+from pglast import ast as pg_ast, parse_plpgsql, parse_sql as parse_postgres_sql
+from pglast.enums import A_Expr_Kind, ObjectType, ReindexObjectType, VariableSetKind
+from pglast.parser import ParseError as PostgresParseError
 from sqlglot import Dialect, exp, parse
 from sqlglot.dialects.mysql import MySQL
 from sqlglot.errors import ParseError, TokenError
@@ -35,6 +36,194 @@ class SqlStatement:
     targets: frozenset[str]
     has_where: bool
     parse_error: str | None = None
+
+
+class PostgresSetting(NamedTuple):
+    name: str
+    value: str | None  # None for DEFAULT and RESET
+    reset: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresStatementTree:
+    """PostgreSQL's own parse tree of one executed statement.
+
+    Rules read statement kind, options and named objects from here instead of
+    matching ``SqlStatement.sql`` text, so comments, string literals, quoted or
+    schema-qualified names and parenthesised option lists read the way the
+    server reads them. Names are the server's: unquoted identifiers folded to
+    lower case, quoted identifiers kept as written.
+    """
+
+    node: pg_ast.Node
+
+    def nodes(self, *types: type[pg_ast.Node]) -> tuple[pg_ast.Node, ...]:
+        """Every node of the given ``pglast.ast`` classes, the statement included."""
+        return tuple(node for node in _pg_walk(self.node) if isinstance(node, types))
+
+    @property
+    def options(self) -> frozenset[str]:
+        """Enabled statement options: ``concurrently`` for CREATE INDEX, DROP
+        and REINDEX, and the VACUUM/ANALYZE/REINDEX option list, either syntax."""
+        node = self.node
+        if isinstance(node, (pg_ast.IndexStmt, pg_ast.DropStmt)):
+            return frozenset({"concurrently"}) if node.concurrent else frozenset()
+        if isinstance(node, pg_ast.ReindexStmt):
+            elements = node.params
+        elif isinstance(node, pg_ast.VacuumStmt):
+            elements = node.options
+        else:
+            return frozenset()
+        return frozenset(
+            element.defname for element in elements or ()
+            if element.arg is None or not is_postgres_false(_pg_constant_text(element.arg))
+        )
+
+    @property
+    def relations(self) -> frozenset[tuple[str | None, str]]:
+        """``(schema, name)`` of every relation named by the statement."""
+        return frozenset((node.schemaname, node.relname) for node in self.nodes(pg_ast.RangeVar))
+
+    @property
+    def index_names(self) -> frozenset[str]:
+        """Indexes the statement creates, drops or rebuilds, without schema."""
+        node = self.node
+        if isinstance(node, pg_ast.IndexStmt) and node.idxname:
+            return frozenset({node.idxname})
+        if isinstance(node, pg_ast.DropStmt) and node.removeType == ObjectType.OBJECT_INDEX:
+            return frozenset(name[-1].sval for name in node.objects)
+        if isinstance(node, pg_ast.ReindexStmt) and node.kind == ReindexObjectType.REINDEX_OBJECT_INDEX:
+            return frozenset({node.relation.relname})
+        return frozenset()
+
+    @property
+    def function_names(self) -> frozenset[str]:
+        """Functions the statement calls, without schema."""
+        return frozenset(node.funcname[-1].sval for node in self.nodes(pg_ast.FuncCall))
+
+    @property
+    def settings(self) -> tuple["PostgresSetting", ...]:
+        """Every SET/RESET of a named parameter, standalone or inside ALTER
+        SYSTEM/DATABASE/ROLE."""
+        return tuple(
+            PostgresSetting(
+                node.name,
+                _pg_constant_text(node.args[0]) if node.args else None,
+                node.kind == VariableSetKind.VAR_RESET,
+            )
+            for node in self.nodes(pg_ast.VariableSetStmt)
+            if node.name is not None
+        )
+
+    @property
+    def parameters(self) -> tuple[tuple[str, str | None], ...]:
+        """``(name, value)`` of every ``name = value`` option element, such as
+        storage parameters and role options; a namespace prefixes the name."""
+        return tuple(
+            (
+                f"{node.defnamespace}.{node.defname}" if node.defnamespace else node.defname,
+                None if node.arg is None else _pg_constant_text(node.arg),
+            )
+            for node in self.nodes(pg_ast.DefElem)
+        )
+
+    @property
+    def string_constants(self) -> tuple[str, ...]:
+        return tuple(
+            node.val.sval for node in self.nodes(pg_ast.A_Const)
+            if isinstance(node.val, pg_ast.String)
+        )
+
+    @property
+    def where_clauses(self) -> tuple[pg_ast.Node, ...]:
+        """WHERE conditions of every SELECT, UPDATE and DELETE, subqueries included."""
+        return tuple(
+            node.whereClause
+            for node in self.nodes(pg_ast.SelectStmt, pg_ast.UpdateStmt, pg_ast.DeleteStmt)
+            if node.whereClause is not None
+        )
+
+    def compared_values(self, column: str) -> frozenset[str]:
+        """Constants compared with ``column = constant`` or ``column IN (...)``."""
+        values = set()
+        for node in self.nodes(pg_ast.A_Expr):
+            if node.kind == A_Expr_Kind.AEXPR_IN:
+                if _pg_column_name(node.lexpr) == column:
+                    values.update(_pg_constant_text(item) for item in node.rexpr)
+            elif node.kind == A_Expr_Kind.AEXPR_OP and node.name[-1].sval == "=":
+                for this, other in ((node.lexpr, node.rexpr), (node.rexpr, node.lexpr)):
+                    if _pg_column_name(this) == column:
+                        values.add(_pg_constant_text(other))
+        values.discard(None)
+        return frozenset(values)
+
+
+def postgres_statement_tree(statement: SqlStatement) -> PostgresStatementTree:
+    """Parse one executed statement with PostgreSQL's parser.
+
+    A statement the server executed is valid PostgreSQL, so a parse failure
+    means the trace or the statement splitter is wrong; it is raised instead
+    of being judged by text.
+    """
+    try:
+        raw_statements = parse_postgres_sql(statement.sql)
+    except PostgresParseError as error:
+        raise ValueError(
+            "PostgreSQL parser rejected an executed statement: "
+            f"event_index={statement.event_index}, sql={statement.sql!r}: {error}"
+        ) from error
+    if len(raw_statements) != 1:
+        raise ValueError(
+            "expected exactly one PostgreSQL statement: "
+            f"event_index={statement.event_index}, sql={statement.sql!r}, "
+            f"parsed={len(raw_statements)}"
+        )
+    return PostgresStatementTree(raw_statements[0].stmt)
+
+
+def _pg_walk(value):
+    if isinstance(value, pg_ast.Node):
+        yield value
+        for member in value:
+            yield from _pg_walk(getattr(value, member))
+    elif isinstance(value, tuple):
+        for item in value:
+            yield from _pg_walk(item)
+
+
+def _pg_constant_text(node) -> str | None:
+    """Text of a constant as PostgreSQL reads it, casts removed; None otherwise."""
+    while isinstance(node, pg_ast.TypeCast):
+        node = node.arg
+    if isinstance(node, pg_ast.A_Const):
+        node = node.val
+    if isinstance(node, pg_ast.String):
+        return node.sval
+    if isinstance(node, pg_ast.Integer):
+        return str(node.ival)
+    if isinstance(node, pg_ast.Float):
+        return node.fval
+    if isinstance(node, pg_ast.Boolean):
+        return "true" if node.boolval else "false"
+    if isinstance(node, pg_ast.TypeName):
+        # An option value written as a bare word, e.g. ``autovacuum_enabled = f``.
+        return ".".join(name.sval for name in node.names)
+    return None
+
+
+def _pg_column_name(node) -> str | None:
+    if isinstance(node, pg_ast.ColumnRef) and isinstance(node.fields[-1], pg_ast.String):
+        return node.fields[-1].sval
+    return None
+
+
+def is_postgres_false(text: str | None) -> bool:
+    """PostgreSQL's boolean input for false: a prefix of false/no, off (2+ letters) or 0."""
+    value = (text or "").strip().casefold()
+    return bool(value) and (
+        "false".startswith(value) or "no".startswith(value)
+        or (len(value) >= 2 and "off".startswith(value)) or value == "0"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -575,7 +764,7 @@ def _parse_sql(event: TraceEvent, dialect: str = "postgres") -> tuple[SqlStateme
                     dialect=dialect,
                 )
             )
-        except (PlpgsqlParseError, ParseError) as error:
+        except (PostgresParseError, ParseError) as error:
             return (SqlStatement(event.index, sql, None, "DO", frozenset(), False, str(error)),)
     if tokens and tokens[0].token_type in {TokenType.GRANT, TokenType.REVOKE}:
         operation = tokens[0].text.upper()

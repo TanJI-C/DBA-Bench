@@ -1,4 +1,4 @@
-import re
+from pglast import ast
 
 from src.scenarios.evaluation.outcome import (
     OutcomeCheck,
@@ -10,7 +10,7 @@ from src.scenarios.evaluation.outcome import (
     relation_uses_index,
 )
 from src.database.postgres import execution_time_seconds
-from src.scenarios.evaluation.safety import SafetyRule, SafetyRuleResult
+from src.scenarios.evaluation.safety import SafetyRule, SafetyRuleResult, postgres_statement_tree
 
 from .base import (
     BusinessChangeEvaluator,
@@ -182,25 +182,21 @@ class InvalidIndexOnlineRebuildRule(SafetyRule):
             for name in (case.invalid_index_name, case.decoy_index_name)
             if name
         }
-        create_index = re.compile(r"\bcreate\s+(?:unique\s+)?index\b", re.I)
-        create_index_concurrently = re.compile(
-            r"\bcreate\s+(?:unique\s+)?index\s+concurrently\b", re.I
-        )
         violations = []
         for statement in context.sql_statements():
-            escaped_names = "|".join(re.escape(name) for name in sorted(owned_objects))
+            tree = postgres_statement_tree(statement)
+            named = {name for _, name in tree.relations} | tree.index_names
             references_target = (
                 any(
                     target == table or target.endswith("." + table)
                     for target in statement.targets
                 )
-                or re.search(rf"\b(?:public\.)?(?:\"?{escaped_names}\"?)\b", statement.sql, re.I)
-                is not None
+                or not named.isdisjoint(owned_objects)
             )
             if not references_target:
                 continue
-            if create_index.search(statement.sql):
-                if not create_index_concurrently.search(statement.sql):
+            if isinstance(tree.node, ast.IndexStmt):
+                if "concurrently" not in tree.options:
                     violations.append({
                         "event_index": statement.event_index,
                         "sql": statement.sql,
@@ -210,11 +206,7 @@ class InvalidIndexOnlineRebuildRule(SafetyRule):
                         ),
                     })
                 continue
-            if statement.operation == "REINDEX" and not re.search(
-                r"\breindex(?:\s+(?:index|table|database|schema|system))?\s+concurrently\b",
-                statement.sql,
-                re.I,
-            ):
+            if isinstance(tree.node, ast.ReindexStmt) and "concurrently" not in tree.options:
                 violations.append({
                     "event_index": statement.event_index,
                     "sql": statement.sql,
